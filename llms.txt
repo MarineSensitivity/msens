@@ -1,0 +1,85 @@
+# msens
+
+R library of functions for mapping marine sensitivities, sponsored by
+BOEM
+
+## Install
+
+Install this R package by running the following command in your R
+Console:
+
+``` r
+remotes::install_github("MarineSensitivity/msens")
+```
+
+# Package index
+
+## Read
+
+Fetch data, spatial and non-spatial, especially from APIs
+
+- [`get_species_by_feature()`](http://marinesensitivity.org/msens/reference/get_species_by_feature.md)
+  : Get species by feature
+
+## Taxonomic
+
+Match taxa from APIs, especially World Register of Marine Species
+(WoRMS)
+
+- [`match_taxa()`](http://marinesensitivity.org/msens/reference/match_taxa.md)
+  : Match taxa to spp.duckdb via cascade
+- [`wm_rest()`](http://marinesensitivity.org/msens/reference/wm_rest.md)
+  : Query WoRMS REST API with multiple requests
+
+## Analyze
+
+Analyses
+
+## Visualize
+
+Plot and map Seascapes
+
+- [`ms_basemap()`](http://marinesensitivity.org/msens/reference/ms_basemap.md)
+  : Basemap
+
+## Data
+
+Lookups for easy reference
+
+- [`ply_boemrgns`](http://marinesensitivity.org/msens/reference/ply_boemrgns.md)
+  : Polygons of BOEM Regions
+- [`ply_boemrgns_s05`](http://marinesensitivity.org/msens/reference/ply_boemrgns_s05.md)
+  : Polygons of BOEM Regions, simplified to 5%
+- [`ply_ecoareas`](http://marinesensitivity.org/msens/reference/ply_ecoareas.md)
+  : Polygons of EcoAreas
+- [`ply_ecoareas_s05`](http://marinesensitivity.org/msens/reference/ply_ecoareas_s05.md)
+  : Polygons of EcoAreas
+- [`ply_ecorgns`](http://marinesensitivity.org/msens/reference/ply_ecorgns.md)
+  : Polygons of Ecoregions
+- [`ply_ecorgns_s05`](http://marinesensitivity.org/msens/reference/ply_ecorgns_s05.md)
+  : Polygons of Ecoregions
+- [`ply_planareas`](http://marinesensitivity.org/msens/reference/ply_planareas.md)
+  : Polygons of Planning Areas
+- [`ply_planareas_s05`](http://marinesensitivity.org/msens/reference/ply_planareas_s05.md)
+  : Polygons of Planning Areas, simplified to 5%
+
+## Other
+
+Other functions not defined by the concepts above
+
+- [`compute_er_score()`](http://marinesensitivity.org/msens/reference/compute_er_score.md)
+  : Compute extinction risk score from extrisk_code and flags
+- [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
+  : Parse NOAA protected_status field
+- [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
+  : Connect to SDM DuckDB
+- [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)
+  : Path to SDM DuckDB
+- [`spp_db_con()`](http://marinesensitivity.org/msens/reference/spp_db_con.md)
+  : Connect to species taxonomy DuckDB
+
+# Articles
+
+### All vignettes
+
+- [msens](http://marinesensitivity.org/msens/articles/msens.md):
