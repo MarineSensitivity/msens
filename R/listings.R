@@ -23,9 +23,9 @@ parse_noaa_status <- function(status_str) {
 
 #' Compute extinction risk score from extrisk_code and flags
 #'
-#' US-listed species get a base score from ESA status plus additive bonuses
-#' for MMPA (+20) and MBTA (+10), capped at 100. Non-US species fall back to
-#' IUCN Red List scale (CR=50, EN=25, VU=5, NT=2, other=1).
+#' US-listed species get the max score across ESA status (EN=100, TN=50, LC=1),
+#' MMPA (20), and MBTA (10). Non-US species fall back to IUCN Red List scale
+#' (CR=50, EN=25, VU=5, NT=2, other=1).
 #'
 #' @param extrisk_code character, e.g. "NMFS:EN", "FWS:TN", "IUCN:CR"
 #' @param is_mmpa logical; species protected under MMPA (default: FALSE)
@@ -46,7 +46,8 @@ compute_er_score <- function(extrisk_code, is_mmpa = FALSE, is_mbta = FALSE) {
     "TN" ~ 50L,
     "LC" ~ 1L,
     .default = 0L)
-  bonus <- ifelse(is_mmpa, 20L, 0L) + ifelse(is_mbta, 10L, 0L)
+  mmpa_score <- ifelse(is_mmpa, 20L, 0L)
+  mbta_score <- ifelse(is_mbta, 10L, 0L)
 
   score_iucn <- dplyr::case_match(
     code,
@@ -58,6 +59,6 @@ compute_er_score <- function(extrisk_code, is_mmpa = FALSE, is_mbta = FALSE) {
 
   dplyr::case_when(
     is.na(extrisk_code) ~ 1L,
-    is_us               ~ pmin(base_us + bonus, 100L),
+    is_us               ~ pmax(base_us, mmpa_score, mbta_score),
     TRUE                ~ score_iucn)
 }

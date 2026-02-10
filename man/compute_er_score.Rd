@@ -17,8 +17,8 @@ compute_er_score(extrisk_code, is_mmpa = FALSE, is_mbta = FALSE)
 integer score 0-100
 }
 \description{
-US-listed species get a base score from ESA status plus additive bonuses
-for MMPA (+20) and MBTA (+10), capped at 100. Non-US species fall back to
-IUCN Red List scale (CR=50, EN=25, VU=5, NT=2, other=1).
+US-listed species get the max score across ESA status (EN=100, TN=50, LC=1),
+MMPA (20), and MBTA (10). Non-US species fall back to IUCN Red List scale
+(CR=50, EN=25, VU=5, NT=2, other=1).
 }
 \concept{listings}
