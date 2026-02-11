@@ -4,10 +4,10 @@
 \alias{sdm_db_path}
 \title{Path to SDM DuckDB}
 \usage{
-sdm_db_path(version = "2026")
+sdm_db_path(version = "v3")
 }
 \arguments{
-\item{version}{version date suffix (default: "2026")}
+\item{version}{version suffix (default: "v3")}
 }
 \value{
 character path to the DuckDB file

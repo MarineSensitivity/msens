@@ -4,10 +4,10 @@
 \alias{sdm_db_con}
 \title{Connect to SDM DuckDB}
 \usage{
-sdm_db_con(version = "2026", read_only = FALSE)
+sdm_db_con(version = "v3", read_only = FALSE)
 }
 \arguments{
-\item{version}{version date suffix (default: "2026")}
+\item{version}{version suffix (default: "v3")}
 
 \item{read_only}{logical; open in read-only mode (default: FALSE)}
 }

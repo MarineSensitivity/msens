@@ -2,12 +2,12 @@
 #'
 #' Get the file path to the species distribution model DuckDB database.
 #'
-#' @param version version date suffix (default: "2026")
+#' @param version version suffix (default: "v3")
 #' @return character path to the DuckDB file
 #' @importFrom glue glue
 #' @export
 #' @concept db
-sdm_db_path <- function(version = "2026") {
+sdm_db_path <- function(version = "v3") {
   dir_data <- switch(
     Sys.info()[["sysname"]],
     "Darwin" = "~/My Drive/projects/msens/data",
@@ -19,14 +19,14 @@ sdm_db_path <- function(version = "2026") {
 #'
 #' Open a DBI connection to the species distribution model DuckDB database.
 #'
-#' @param version version date suffix (default: "2026")
+#' @param version version suffix (default: "v3")
 #' @param read_only logical; open in read-only mode (default: FALSE)
 #' @return DBI connection object
 #' @importFrom DBI dbConnect
 #' @importFrom duckdb duckdb
 #' @export
 #' @concept db
-sdm_db_con <- function(version = "2026", read_only = FALSE) {
+sdm_db_con <- function(version = "v3", read_only = FALSE) {
   DBI::dbConnect(duckdb::duckdb(
     dbdir     = sdm_db_path(version),
     read_only = read_only))
