@@ -5,14 +5,14 @@ Get the file path to the species distribution model DuckDB database.
 ## Usage
 
 ``` r
-sdm_db_path(version = "2026")
+sdm_db_path(version = "v3")
 ```
 
 ## Arguments
 
 - version:
 
-  version date suffix (default: "2026")
+  version suffix (default: "v3")
 
 ## Value
 

@@ -5,14 +5,14 @@ Open a DBI connection to the species distribution model DuckDB database.
 ## Usage
 
 ``` r
-sdm_db_con(version = "2026", read_only = FALSE)
+sdm_db_con(version = "v3", read_only = FALSE)
 ```
 
 ## Arguments
 
 - version:
 
-  version date suffix (default: "2026")
+  version suffix (default: "v3")
 
 - read_only:
 
