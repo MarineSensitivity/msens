@@ -39,6 +39,18 @@ Analyses
 
 Plot and map Seascapes
 
+- [`add_cells()`](http://marinesensitivity.org/msens/reference/add_cells.md)
+  : Add a raster cell layer to a map
+- [`add_pmfill()`](http://marinesensitivity.org/msens/reference/add_pmfill.md)
+  : Add a PMTile polygon fill layer to a map
+- [`add_pmlabel()`](http://marinesensitivity.org/msens/reference/add_pmlabel.md)
+  : Add symbol label layers from sf point data
+- [`add_pmline()`](http://marinesensitivity.org/msens/reference/add_pmline.md)
+  : Add PMTile outline line layers to a map
+- [`map_cells()`](http://marinesensitivity.org/msens/reference/map_cells.md)
+  : Map raster cells with outlines and labels
+- [`map_pmtiles()`](http://marinesensitivity.org/msens/reference/map_pmtiles.md)
+  : Map data on PMTile vector tiles
 - [`ms_basemap()`](http://marinesensitivity.org/msens/reference/ms_basemap.md)
   : Basemap
 

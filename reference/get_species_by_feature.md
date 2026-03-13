@@ -33,16 +33,6 @@ Use the `species_by_feature` endpoint of the API at
 get_species_by_feature(
   schema.table = "raw.mr_eez",
   where        = "mrgid = 8442")
-#> Warning: The `file` argument of `vroom()` must use `I()` for literal data as of vroom
-#> 1.5.0.
-#>   
-#>   # Bad:
-#>   vroom("X,Y\n1.5,2.3\n")
-#>   
-#>   # Good:
-#>   vroom(I("X,Y\n1.5,2.3\n"))
-#> ℹ The deprecated feature was likely used in the readr package.
-#>   Please report the issue at <https://github.com/tidyverse/readr/issues>.
 #> # A tibble: 4,797 × 12
 #>    sp_key n_cells avg_pct_cell area_km2 avg_suit   amt phylum class order family
 #>    <chr>    <dbl>        <dbl>    <dbl>    <dbl> <dbl> <chr>  <chr> <chr> <chr> 

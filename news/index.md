@@ -1,5 +1,18 @@
 # Changelog
 
+## msens 0.2.1
+
+- Added mapping functions for use in docs and map apps, including raster
+  cells
+  ([`add_cells()`](http://marinesensitivity.org/msens/reference/add_cells.md)),
+  and using PMtiles as vectors sources to add fills
+  ([`add_pmfill()`](http://marinesensitivity.org/msens/reference/add_pmfill.md),
+  eg for Program Area scores), outlines
+  ([`add_pmline()`](http://marinesensitivity.org/msens/reference/add_pmline.md),
+  eg for Ecoregion outlines), and labels
+  ([`add_pmlabel()`](http://marinesensitivity.org/msens/reference/add_pmlabel.md),
+  eg for Ecoregion names and Program Area acronymns).
+
 ## msens 0.2.0
 
 - Swapped polygons:

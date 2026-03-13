@@ -7,9 +7,15 @@
 <url><loc>http://marinesensitivity.org/msens/authors.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/index.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/news/index.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/add_cells.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/add_pmfill.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/add_pmlabel.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/add_pmline.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/compute_er_score.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/get_species_by_feature.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/index.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/map_cells.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/map_pmtiles.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/match_taxa.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_basemap.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_noaa_status.html</loc></url>
