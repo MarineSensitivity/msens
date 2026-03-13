@@ -1,3 +1,10 @@
+# msens 0.2.1
+
+* Added mapping functions for use in docs and map apps, including raster cells 
+  (`add_cells()`), and using PMtiles as vectors sources to add fills (`add_pmfill()`, 
+  eg for Program Area scores), outlines (`add_pmline()`, eg for Ecoregion outlines),
+  and labels (`add_pmlabel()`, eg for Ecoregion names and Program Area acronymns).
+
 # msens 0.2.0
 
 * Swapped polygons:
