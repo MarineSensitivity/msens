@@ -1,3 +1,11 @@
+# msens 0.3.1
+
+* Pin `mapgl (>= 0.4.5.9000)` and add `Remotes: walkerke/mapgl` so
+  `install_github()` pulls the dev build that exports `add_pmtiles_source()`
+  (needed by `add_pmfill()` / `add_pmline()`). Fixes a silent install
+  failure on fresh environments where the pinned CRAN snapshot still
+  served `mapgl 0.1.3`.
+
 # msens 0.3.0
 
 * Added score-calculation helpers migrated out of the mapgl app so they can be
