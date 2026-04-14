@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,21 +70,7 @@
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">get_species_by_feature</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  schema.table <span class="op">=</span> <span class="st">"raw.mr_eez"</span>,</span></span>
 <span class="r-in"><span>  where        <span class="op">=</span> <span class="st">"mrgid = 8442"</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4,797 × 12</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    sp_key n_cells avg_pct_cell area_km2 avg_suit   amt phylum class order family</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 1</span> Chn-0…       9        0.750   <span style="text-decoration: underline;">20</span>765.    0.703 4.75  Arthr… Mala… Deca… Galat…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 2</span> Chn-2…       1        0.999    <span style="text-decoration: underline;">3</span>073.    1     0.999 Arthr… Mala… Deca… Scyll…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 3</span> Chn-4…       1        0.999    <span style="text-decoration: underline;">3</span>073.    1     0.999 Arthr… Mala… Deca… Palae…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 4</span> Chn-4…       1        0.999    <span style="text-decoration: underline;">3</span>073.    0.99  0.989 Arthr… Maxi… Sess… Pyrgo…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 5</span> Chn-5…       1        0.999    <span style="text-decoration: underline;">3</span>073.    0.98  0.979 Arthr… Mala… Deca… Palae…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 6</span> Chn-a…       1        0.999    <span style="text-decoration: underline;">3</span>073.    0.97  0.969 Arthr… Mala… Deca… Coeno…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 7</span> Chn-e…       1        0.999    <span style="text-decoration: underline;">3</span>073.    1     0.999 Arthr… Mala… Deca… Albun…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 8</span> Chn-f…       1        0.999    <span style="text-decoration: underline;">3</span>073.    0.87  0.869 Arthr… Mala… Deca… Munid…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 9</span> Fis-1…       1        0.999    <span style="text-decoration: underline;">3</span>073.    1     0.999 Chord… Acti… Mugi… Mugil…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">10</span> Fis-1…       1        0.999    <span style="text-decoration: underline;">3</span>073.    1     0.999 Chord… Acti… Perc… Labri…</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 4,787 more rows</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 2 more variables: genus &lt;chr&gt;, species &lt;chr&gt;</span></span>
+<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in httr2::req_perform(httr2::req_url_query(httr2::req_url_path_append(httr2::request("https://api.marinesensitivity.org"),     "species_by_feature"), schema.table = schema.table, where = where)):</span> HTTP 502 Bad Gateway.</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -11,13 +11,13 @@ Source:
 [`DESCRIPTION`](https://github.com/MarineSensitivities/msens/blob/main/DESCRIPTION)
 
 Best B (2026). *msens: R library of functions for mapping marine
-sensitivities, sponsored by BOEM*. R package version 0.3.0,
+sensitivities, sponsored by BOEM*. R package version 0.3.1,
 <https://github.com/MarineSensitivities/msens>.
 
     @Manual{,
       title = {msens: R library of functions for mapping marine sensitivities, sponsored by BOEM},
       author = {Ben Best},
       year = {2026},
-      note = {R package version 0.3.0},
+      note = {R package version 0.3.1},
       url = {https://github.com/MarineSensitivities/msens},
     }

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,6 +33,10 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.1" id="msens-031">msens 0.3.1<a class="anchor" aria-label="anchor" href="#msens-031"></a></h2>
+<ul><li>Pin <code>mapgl (&gt;= 0.4.5.9000)</code> and add <code>Remotes: walkerke/mapgl</code> so <code>install_github()</code> pulls the dev build that exports <code>add_pmtiles_source()</code> (needed by <code><a href="../reference/add_pmfill.html">add_pmfill()</a></code> / <code><a href="../reference/add_pmline.html">add_pmline()</a></code>). Fixes a silent install failure on fresh environments where the pinned CRAN snapshot still served <code>mapgl 0.1.3</code>.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.0" id="msens-030">msens 0.3.0<a class="anchor" aria-label="anchor" href="#msens-030"></a></h2>
 <ul><li>Added score-calculation helpers migrated out of the mapgl app so they can be reused by the report and API: <code><a href="../reference/cells_in_polygon.html">cells_in_polygon()</a></code>, <code><a href="../reference/scores_for_cells.html">scores_for_cells()</a></code>, <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code>, <code><a href="../reference/mean_score.html">mean_score()</a></code> and <code><a href="../reference/cell_id_raster.html">cell_id_raster()</a></code> (new <code>R/calc.R</code>).</li>
