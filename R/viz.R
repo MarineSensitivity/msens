@@ -466,3 +466,292 @@ map_pmtiles <- function(
   m |>
     mapgl::add_scale_control(position = "bottom-right")
 }
+
+#' Build a flower-plot ggplot for component scores
+#'
+#' Polar bar chart of component scores with a center-label weighted
+#' score. Returns a plain ggplot object (no interactive wrapping), so
+#' it is usable in static outputs (pdf/docx). For an interactive
+#' version, use [plot_flower()] with `interactive = TRUE` (the
+#' default).
+#'
+#' @param data a tibble with one row per component
+#' @param fld_category bare column name for the category (fill)
+#' @param fld_height bare column name for the bar height (score)
+#' @param fld_width bare column name for the bar width
+#' @param tooltip_expr optional glue string for tooltip text
+#' @param score optional pre-computed weighted-mean score for the center
+#' @param title optional plot title
+#' @return a ggplot
+#' @importFrom ggplot2 ggplot aes scale_fill_manual coord_polar xlim
+#'   annotate theme_minimal theme unit ggtitle
+#' @importFrom ggiraph geom_rect_interactive
+#' @importFrom dplyr arrange mutate summarize pull across lag lead
+#'   where
+#' @importFrom rlang ensym `:=`
+#' @importFrom scales hue_pal
+#' @importFrom glue glue
+#' @export
+#' @concept viz
+ggplot_flower <- function(
+  data,
+  fld_category,
+  fld_height,
+  fld_width,
+  tooltip_expr = NULL,
+  score = NULL,
+  title = NULL
+) {
+  stopifnot(is.numeric(data |> dplyr::pull({{ fld_height }})))
+  stopifnot(is.numeric(data |> dplyr::pull({{ fld_width }})))
+
+  if (is.null(score)) {
+    score <- data |>
+      dplyr::mutate(
+        "{{fld_height}}" := as.double({{ fld_height }}),
+        "{{fld_width}}"  := as.double({{ fld_width }})) |>
+      dplyr::summarize(
+        score = stats::weighted.mean(
+          {{ fld_height }}, {{ fld_width }}, na.rm = TRUE)) |>
+      dplyr::pull(score)
+  }
+
+  d <- data |>
+    dplyr::arrange({{ fld_category }}) |>
+    dplyr::mutate(dplyr::across(!dplyr::where(is.character), as.double)) |>
+    dplyr::mutate(
+      ymax = cumsum({{ fld_width }}),
+      ymin = dplyr::lag(ymax, default = 0),
+      xmax = {{ fld_height }},
+      xmin = 0)
+
+  if (!is.null(tooltip_expr)) {
+    d <- d |> dplyr::mutate(tooltip = glue::glue(tooltip_expr))
+  } else {
+    d <- d |> dplyr::mutate(tooltip = as.character({{ fld_category }}))
+  }
+
+  components <- c(
+    "invertebrate", "mammal", "other", "primprod",
+    "turtle", "bird", "coral", "fish")
+  cols <- stats::setNames(
+    scales::hue_pal()(length(components)),
+    components)
+
+  g <- ggplot2::ggplot(d) +
+    ggiraph::geom_rect_interactive(
+      ggplot2::aes(
+        xmin    = xmin,
+        xmax    = xmax,
+        ymin    = ymin,
+        ymax    = ymax,
+        fill    = {{ fld_category }},
+        color   = "white",
+        data_id = {{ fld_category }},
+        tooltip = tooltip),
+      color = "white",
+      alpha = 0.5) +
+    ggplot2::scale_fill_manual(values = cols) +
+    ggplot2::coord_polar(theta = "y") +
+    ggplot2::xlim(c(-10, max(data |> dplyr::pull({{ fld_height }})))) +
+    ggplot2::annotate(
+      "text",
+      x        = -10,
+      y        = 0,
+      label    = round(score),
+      size     = 8,
+      fontface = "bold") +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      legend.position = "bottom",
+      plot.margin     = ggplot2::unit(c(20, 20, 20, 20), "pt"))
+
+  if (!is.null(title)) g <- g + ggplot2::ggtitle(title)
+  g
+}
+
+#' Flower plot of component scores (interactive or static)
+#'
+#' Builds a [`ggplot_flower()`] and optionally wraps it as an
+#' interactive [`ggiraph::girafe`] for HTML output. Pass
+#' `interactive = FALSE` for pdf/docx.
+#'
+#' @inheritParams ggplot_flower
+#' @param interactive logical; if TRUE (default) return a girafe
+#'   htmlwidget, otherwise return the plain ggplot
+#' @return a girafe htmlwidget or a ggplot
+#' @importFrom ggiraph girafe opts_sizing opts_tooltip
+#' @export
+#' @concept viz
+plot_flower <- function(
+  data,
+  fld_category,
+  fld_height,
+  fld_width,
+  tooltip_expr = NULL,
+  score = NULL,
+  title = NULL,
+  interactive = TRUE
+) {
+  g <- ggplot_flower(
+    data, {{ fld_category }}, {{ fld_height }}, {{ fld_width }},
+    tooltip_expr = tooltip_expr, score = score, title = title)
+  if (!interactive) return(g)
+  ggiraph::girafe(
+    ggobj = g,
+    options = list(
+      ggiraph::opts_sizing(rescale = TRUE, width = 1),
+      ggiraph::opts_tooltip(
+        css = "background-color:white;color:black;padding:5px;border-radius:3px;")))
+}
+
+#' Species table (interactive DT or static gt)
+#'
+#' Renders a species tibble — as returned by [species_for_cells()] —
+#' as either an interactive [`DT::datatable`] (html output) or a
+#' static [`gt::gt`] table (pdf/docx output). Taxon and model
+#' columns become clickable links in the interactive version.
+#'
+#' @param d_spp tibble with columns from [species_for_cells()]:
+#'   `mdl_seq`, `sp_cat`, `sp_common`, `sp_scientific`, `taxon_id`,
+#'   `taxon_authority`, `er_code`, `er_score`, `is_mmpa`, `is_mbta`,
+#'   `area_km2`, `avg_suit`, `pct_cat`
+#' @param interactive logical; if TRUE (default) return a DT
+#'   datatable, otherwise return a gt table
+#' @return a DT htmlwidget or a gt_tbl
+#' @importFrom dplyr mutate select rename arrange relocate if_else
+#' @importFrom glue glue
+#' @importFrom DT datatable formatPercentage formatSignif
+#' @importFrom gt gt fmt_percent fmt_number cols_label
+#' @export
+#' @concept viz
+tbl_species <- function(d_spp, interactive = TRUE) {
+  d <- d_spp |>
+    dplyr::mutate(
+      model_url = glue::glue("../mapsp/?mdl_seq={mdl_seq}"),
+      taxon_str = glue::glue("{taxon_authority}:{taxon_id}"),
+      taxon_url = dplyr::if_else(
+        taxon_authority == "botw",
+        "https://birdsoftheworld.org",
+        glue::glue(
+          "https://www.marinespecies.org/aphia.php?p=taxdetails&id={taxon_id}"))) |>
+    dplyr::select(
+      component     = sp_cat,
+      taxon_authority,
+      taxon_id,
+      taxon_str,
+      taxon_url,
+      scientific    = sp_scientific,
+      common        = sp_common,
+      er_code,
+      er_score,
+      is_mmpa,
+      is_mbta,
+      model_id      = mdl_seq,
+      model_url,
+      area_km2,
+      avg_suit,
+      pct_component = pct_cat) |>
+    dplyr::arrange(component, scientific)
+
+  if (interactive) {
+    d |>
+      dplyr::mutate(
+        taxon = glue::glue(
+          '<a href="{taxon_url}" target="_blank">{taxon_str}</a>'),
+        model = glue::glue(
+          '<a href="{model_url}" target="_blank">{model_id}</a>')) |>
+      dplyr::relocate(taxon, .after = component) |>
+      dplyr::relocate(model, .after = er_score) |>
+      dplyr::select(
+        -taxon_id, -taxon_authority, -taxon_str, -taxon_url,
+        -model_url, -model_id) |>
+      dplyr::rename(cat = component, pct_cat = pct_component) |>
+      DT::datatable(
+        escape        = FALSE,
+        rownames      = FALSE,
+        fillContainer = TRUE,
+        filter        = "top",
+        class         = "display compact",
+        extensions    = c("ColReorder", "KeyTable", "Responsive"),
+        options = list(
+          colReorder = TRUE,
+          keys       = TRUE,
+          pageLength = 5,
+          lengthMenu = c(5, 50, 100),
+          scrollX    = TRUE,
+          dom        = "lfrtip")) |>
+      DT::formatPercentage("er_score", 0) |>
+      DT::formatPercentage(c("avg_suit", "pct_cat"), 2) |>
+      DT::formatSignif("area_km2", 4)
+  } else {
+    d |>
+      dplyr::select(
+        cat      = component,
+        scientific, common, er_code, er_score,
+        area_km2, avg_suit,
+        pct_cat  = pct_component) |>
+      gt::gt() |>
+      gt::fmt_percent(
+        columns = c(er_score, avg_suit, pct_cat), decimals = 0) |>
+      gt::fmt_number(columns = area_km2, decimals = 0) |>
+      gt::cols_label(
+        cat        = "Component",
+        scientific = "Scientific name",
+        common     = "Common name",
+        er_code    = "Status",
+        er_score   = "Ext. risk",
+        area_km2   = "Area (km\u00b2)",
+        avg_suit   = "Avg suit.",
+        pct_cat    = "% cat.")
+  }
+}
+
+#' Static ggplot map of labeled areas
+#'
+#' Returns a [`ggplot2::ggplot`] map of labeled sf polygons overlaid
+#' on an [`rnaturalearth::ne_countries`] basemap, for embedding in
+#' pdf/docx Quarto output where interactive [`mapgl`] maps do not
+#' render.
+#'
+#' @param areas_sf an sf object with a `label` column
+#' @param fill_color fill color for area polygons (default "#3388ff")
+#' @param fill_alpha fill alpha (default 0.4)
+#' @return a ggplot
+#' @importFrom ggplot2 ggplot geom_sf aes coord_sf theme_minimal
+#'   labs element_blank theme
+#' @importFrom rnaturalearth ne_countries
+#' @importFrom sf st_bbox st_as_sfc
+#' @export
+#' @concept viz
+ggmap_areas <- function(areas_sf, fill_color = "#3388ff",
+                        fill_alpha = 0.4) {
+  world <- rnaturalearth::ne_countries(
+    scale = "medium", returnclass = "sf")
+  bb <- sf::st_bbox(areas_sf)
+  dx <- (bb["xmax"] - bb["xmin"]) * 0.1
+  dy <- (bb["ymax"] - bb["ymin"]) * 0.1
+  ggplot2::ggplot() +
+    ggplot2::geom_sf(data = world, fill = "#e8e4dc", color = "#b9b3a6",
+                     linewidth = 0.2) +
+    ggplot2::geom_sf(data = areas_sf, fill = fill_color,
+                     alpha = fill_alpha, color = "#1e5a9e",
+                     linewidth = 0.4) +
+    ggplot2::coord_sf(
+      xlim = c(bb["xmin"] - dx, bb["xmax"] + dx),
+      ylim = c(bb["ymin"] - dy, bb["ymax"] + dy),
+      expand = FALSE) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank()) +
+    ggplot2::labs(x = NULL, y = NULL)
+}
+
+utils::globalVariables(c(
+  "xmin", "xmax", "ymin", "ymax", "tooltip",
+  "sp_cat", "sp_common", "sp_scientific", "taxon_id", "taxon_authority",
+  "mdl_seq", "taxon_str", "taxon_url", "model_url", "model_id",
+  "component", "scientific", "common", "er_code", "er_score",
+  "is_mmpa", "is_mbta", "area_km2", "avg_suit", "pct_cat",
+  "pct_component", "taxon", "model", "cat"))

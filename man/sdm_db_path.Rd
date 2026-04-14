@@ -4,15 +4,17 @@
 \alias{sdm_db_path}
 \title{Path to SDM DuckDB}
 \usage{
-sdm_db_path(version = "v3")
+sdm_db_path(version = "v6")
 }
 \arguments{
-\item{version}{version suffix (default: "v3")}
+\item{version}{version suffix (default: "v6")}
 }
 \value{
 character path to the DuckDB file
 }
 \description{
 Get the file path to the species distribution model DuckDB database.
+v3 lives under \verb{<data>/derived/sdm_v3.duckdb}; v4+ lives under
+\verb{<big>/<version>/sdm.duckdb}.
 }
 \concept{db}

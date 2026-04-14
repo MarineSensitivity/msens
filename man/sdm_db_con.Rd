@@ -4,12 +4,12 @@
 \alias{sdm_db_con}
 \title{Connect to SDM DuckDB}
 \usage{
-sdm_db_con(version = "v3", read_only = FALSE)
+sdm_db_con(version = "v6", read_only = TRUE)
 }
 \arguments{
-\item{version}{version suffix (default: "v3")}
+\item{version}{version suffix (default: "v6")}
 
-\item{read_only}{logical; open in read-only mode (default: FALSE)}
+\item{read_only}{logical; open in read-only mode (default: TRUE)}
 }
 \value{
 DBI connection object

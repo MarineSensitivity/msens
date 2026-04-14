@@ -1,3 +1,15 @@
+# msens 0.3.0
+
+* Added score-calculation helpers migrated out of the mapgl app so they can be
+  reused by the report and API: `cells_in_polygon()`, `scores_for_cells()`,
+  `species_for_cells()`, `mean_score()` and `cell_id_raster()` (new `R/calc.R`).
+* Added visualization helpers for multi-format (html / pdf / docx) reports:
+  `ggplot_flower()` and `ggmap_areas()`. `plot_flower()` and `tbl_species()`
+  gained an `interactive=` argument so they can emit static output for
+  non-html Quarto formats.
+* `sdm_db_path()` / `sdm_db_con()` now default to the v6 species-distribution
+  database.
+
 # msens 0.2.1
 
 * Added mapping functions for use in docs and map apps, including raster cells 
