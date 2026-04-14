@@ -91,6 +91,8 @@ Other functions not defined by the concepts above
   : Cell-ID SpatRaster
 - [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
   : Cells intersecting a polygon
+- [`cells_in_pra()`](http://marinesensitivity.org/msens/reference/cells_in_pra.md)
+  : Cells belonging to a Program Area zone
 - [`compute_er_score()`](http://marinesensitivity.org/msens/reference/compute_er_score.md)
   : Compute extinction risk score from extrisk_code and flags
 - [`mean_score()`](http://marinesensitivity.org/msens/reference/mean_score.md)
@@ -99,6 +101,8 @@ Other functions not defined by the concepts above
   : Parse NOAA protected_status field
 - [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md)
   : Aggregate component scores across a set of cells
+- [`scores_for_pra()`](http://marinesensitivity.org/msens/reference/scores_for_pra.md)
+  : Precomputed component scores for a Program Area
 - [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
   : Connect to SDM DuckDB
 - [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)

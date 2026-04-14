@@ -1,5 +1,19 @@
 # Changelog
 
+## msens 0.3.2
+
+- Added
+  [`cells_in_pra()`](http://marinesensitivity.org/msens/reference/cells_in_pra.md)
+  and
+  [`scores_for_pra()`](http://marinesensitivity.org/msens/reference/scores_for_pra.md)
+  — fast Program Area lookups that read from `zone` / `zone_cell` /
+  `zone_metric` instead of rasterizing the polygon and aggregating
+  across cells. Same output shape as
+  [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
+  /
+  [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md)
+  so they’re drop-in replacements when the area is a Program Area.
+
 ## msens 0.3.1
 
 - Pin `mapgl (>= 0.4.5.9000)` and add `Remotes: walkerke/mapgl` so
