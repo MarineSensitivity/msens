@@ -33,12 +33,20 @@ Plot and map Seascapes
   : Add symbol label layers from sf point data
 - [`add_pmline()`](http://marinesensitivity.org/msens/reference/add_pmline.md)
   : Add PMTile outline line layers to a map
+- [`ggmap_areas()`](http://marinesensitivity.org/msens/reference/ggmap_areas.md)
+  : Static ggplot map of labeled areas
+- [`ggplot_flower()`](http://marinesensitivity.org/msens/reference/ggplot_flower.md)
+  : Build a flower-plot ggplot for component scores
 - [`map_cells()`](http://marinesensitivity.org/msens/reference/map_cells.md)
   : Map raster cells with outlines and labels
 - [`map_pmtiles()`](http://marinesensitivity.org/msens/reference/map_pmtiles.md)
   : Map data on PMTile vector tiles
 - [`ms_basemap()`](http://marinesensitivity.org/msens/reference/ms_basemap.md)
   : Basemap
+- [`plot_flower()`](http://marinesensitivity.org/msens/reference/plot_flower.md)
+  : Flower plot of component scores (interactive or static)
+- [`tbl_species()`](http://marinesensitivity.org/msens/reference/tbl_species.md)
+  : Species table (interactive DT or static gt)
 
 ## Data
 
@@ -65,13 +73,23 @@ Lookups for easy reference
 
 Other functions not defined by the concepts above
 
+- [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
+  : Cell-ID SpatRaster
+- [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
+  : Cells intersecting a polygon
 - [`compute_er_score()`](http://marinesensitivity.org/msens/reference/compute_er_score.md)
   : Compute extinction risk score from extrisk_code and flags
+- [`mean_score()`](http://marinesensitivity.org/msens/reference/mean_score.md)
+  : Weighted mean of component scores
 - [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
   : Parse NOAA protected_status field
+- [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md)
+  : Aggregate component scores across a set of cells
 - [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
   : Connect to SDM DuckDB
 - [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)
   : Path to SDM DuckDB
+- [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
+  : Species table aggregated across a set of cells
 - [`spp_db_con()`](http://marinesensitivity.org/msens/reference/spp_db_con.md)
   : Connect to species taxonomy DuckDB

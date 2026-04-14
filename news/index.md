@@ -1,5 +1,31 @@
 # Changelog
 
+## msens 0.3.0
+
+- Added score-calculation helpers migrated out of the mapgl app so they
+  can be reused by the report and API:
+  [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md),
+  [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md),
+  [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md),
+  [`mean_score()`](http://marinesensitivity.org/msens/reference/mean_score.md)
+  and
+  [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
+  (new `R/calc.R`).
+- Added visualization helpers for multi-format (html / pdf / docx)
+  reports:
+  [`ggplot_flower()`](http://marinesensitivity.org/msens/reference/ggplot_flower.md)
+  and
+  [`ggmap_areas()`](http://marinesensitivity.org/msens/reference/ggmap_areas.md).
+  [`plot_flower()`](http://marinesensitivity.org/msens/reference/plot_flower.md)
+  and
+  [`tbl_species()`](http://marinesensitivity.org/msens/reference/tbl_species.md)
+  gained an `interactive=` argument so they can emit static output for
+  non-html Quarto formats.
+- [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)
+  /
+  [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
+  now default to the v6 species-distribution database.
+
 ## msens 0.2.1
 
 - Added mapping functions for use in docs and map apps, including raster

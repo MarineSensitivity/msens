@@ -11,14 +11,20 @@
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmfill.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmlabel.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmline.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/cell_id_raster.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/cells_in_polygon.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/compute_er_score.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/get_species_by_feature.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ggmap_areas.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ggplot_flower.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/index.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/map_cells.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/map_pmtiles.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/match_taxa.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/mean_score.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_basemap.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_noaa_status.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/plot_flower.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ply_boemrgns.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ply_boemrgns_s05.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ply_ecoareas.html</loc></url>
@@ -27,9 +33,12 @@
 <url><loc>http://marinesensitivity.org/msens/reference/ply_ecorgns_s05.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ply_planareas.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ply_planareas_s05.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/scores_for_cells.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/sdm_db_con.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/sdm_db_path.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/species_for_cells.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/spp_db_con.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/tbl_species.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/wm_rest.html</loc></url>
 </urlset>
 

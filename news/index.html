@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,6 +33,13 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.0" id="msens-030">msens 0.3.0<a class="anchor" aria-label="anchor" href="#msens-030"></a></h2>
+<ul><li>Added score-calculation helpers migrated out of the mapgl app so they can be reused by the report and API: <code><a href="../reference/cells_in_polygon.html">cells_in_polygon()</a></code>, <code><a href="../reference/scores_for_cells.html">scores_for_cells()</a></code>, <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code>, <code><a href="../reference/mean_score.html">mean_score()</a></code> and <code><a href="../reference/cell_id_raster.html">cell_id_raster()</a></code> (new <code>R/calc.R</code>).</li>
+<li>Added visualization helpers for multi-format (html / pdf / docx) reports: <code><a href="../reference/ggplot_flower.html">ggplot_flower()</a></code> and <code><a href="../reference/ggmap_areas.html">ggmap_areas()</a></code>. <code><a href="../reference/plot_flower.html">plot_flower()</a></code> and <code><a href="../reference/tbl_species.html">tbl_species()</a></code> gained an <code>interactive=</code> argument so they can emit static output for non-html Quarto formats.</li>
+<li>
+<code><a href="../reference/sdm_db_path.html">sdm_db_path()</a></code> / <code><a href="../reference/sdm_db_con.html">sdm_db_con()</a></code> now default to the v6 species-distribution database.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.1" id="msens-021">msens 0.2.1<a class="anchor" aria-label="anchor" href="#msens-021"></a></h2>
 <ul><li>Added mapping functions for use in docs and map apps, including raster cells (<code><a href="../reference/add_cells.html">add_cells()</a></code>), and using PMtiles as vectors sources to add fills (<code><a href="../reference/add_pmfill.html">add_pmfill()</a></code>, eg for Program Area scores), outlines (<code><a href="../reference/add_pmline.html">add_pmline()</a></code>, eg for Ecoregion outlines), and labels (<code><a href="../reference/add_pmlabel.html">add_pmlabel()</a></code>, eg for Ecoregion names and Program Area acronymns).</li>
