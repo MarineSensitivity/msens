@@ -1,3 +1,11 @@
+# msens 0.3.2
+
+* Added `cells_in_pra()` and `scores_for_pra()` — fast Program Area
+  lookups that read from `zone` / `zone_cell` / `zone_metric` instead
+  of rasterizing the polygon and aggregating across cells. Same
+  output shape as `cells_in_polygon()` / `scores_for_cells()` so
+  they're drop-in replacements when the area is a Program Area.
+
 # msens 0.3.1
 
 * Pin `mapgl (>= 0.4.5.9000)` and add `Remotes: walkerke/mapgl` so

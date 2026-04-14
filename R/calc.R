@@ -48,6 +48,73 @@ cells_in_polygon <- function(poly, r_cell_id) {
     pct_covered = round(as.numeric(r_cov_vals[keep]) * 100))
 }
 
+#' Cells belonging to a Program Area zone
+#'
+#' Fast lookup of the cells making up a Program Area by reading
+#' directly from the `zone` / `zone_cell` tables, avoiding the
+#' `terra::rasterize()` cost paid by [cells_in_polygon()]. Returns
+#' the same shape (`cell_id`, `pct_covered`) so downstream helpers
+#' can consume it interchangeably; `pct_covered` is always 100
+#' because `zone_cell` membership is binary.
+#'
+#' @param con a DBI connection (e.g. from [sdm_db_con()])
+#' @param pra_key Program Area key (e.g. "CGM")
+#' @return tibble(cell_id integer, pct_covered integer = 100L)
+#' @importFrom dplyr tbl filter select inner_join collect mutate join_by
+#' @export
+#' @concept calc
+cells_in_pra <- function(con, pra_key) {
+  dplyr::tbl(con, "zone") |>
+    dplyr::filter(fld == "programarea_key", value == !!pra_key) |>
+    dplyr::select(zone_seq) |>
+    dplyr::inner_join(
+      dplyr::tbl(con, "zone_cell") |> dplyr::select(zone_seq, cell_id),
+      by = dplyr::join_by(zone_seq)) |>
+    dplyr::select(cell_id) |>
+    dplyr::collect() |>
+    dplyr::mutate(pct_covered = 100L)
+}
+
+#' Precomputed component scores for a Program Area
+#'
+#' Reads the precomputed Program Area metrics from the `zone_metric`
+#' table instead of aggregating across cells. Returns the same shape
+#' as [scores_for_cells()] so it's a drop-in replacement for the
+#' score / flower-plot pipeline when the area is a Program Area.
+#'
+#' @param con a DBI connection (e.g. from [sdm_db_con()])
+#' @param pra_key Program Area key (e.g. "CGM")
+#' @param metric_pattern regex to filter `metric.metric_key`
+#'   (default: `"_ecoregion_rescaled$"`)
+#' @return tibble(metric_key, score, component, even)
+#' @importFrom dplyr tbl filter select inner_join collect mutate join_by
+#' @importFrom stringr str_detect str_replace
+#' @export
+#' @concept calc
+scores_for_pra <- function(con, pra_key,
+                           metric_pattern = "_ecoregion_rescaled$") {
+  dplyr::tbl(con, "zone") |>
+    dplyr::filter(fld == "programarea_key", value == !!pra_key) |>
+    dplyr::select(zone_seq) |>
+    dplyr::inner_join(
+      dplyr::tbl(con, "zone_metric") |>
+        dplyr::select(zone_seq, metric_seq, score = value),
+      by = dplyr::join_by(zone_seq)) |>
+    dplyr::inner_join(
+      dplyr::tbl(con, "metric") |>
+        dplyr::filter(stringr::str_detect(metric_key, metric_pattern)),
+      by = dplyr::join_by(metric_seq)) |>
+    dplyr::select(metric_key, score) |>
+    dplyr::collect() |>
+    dplyr::mutate(
+      component = metric_key |>
+        stringr::str_replace("extrisk_", "") |>
+        stringr::str_replace("_ecoregion_rescaled", "") |>
+        stringr::str_replace("_", " "),
+      even = 1) |>
+    dplyr::filter(component != "all")
+}
+
 #' Aggregate component scores across a set of cells
 #'
 #' Weighted-mean aggregation of `cell_metric` across a set of cells;
@@ -161,4 +228,5 @@ utils::globalVariables(c(
   "taxon_id", "taxon_authority", "extrisk_code", "er_score",
   "is_mmpa", "is_mbta", "mdl_seq", "area_km2", "sp_cat",
   "sp_common", "sp_scientific", "er_code", "avg_suit",
-  "suit_er_area", "cat_suit_er_area"))
+  "suit_er_area", "cat_suit_er_area",
+  "fld", "zone_seq"))
