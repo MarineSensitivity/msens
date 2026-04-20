@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,6 +33,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.4" id="msens-034">msens 0.3.4<a class="anchor" aria-label="anchor" href="#msens-034"></a></h2>
+<ul><li>
+<code><a href="../reference/cell_tile_url.html">cell_tile_url()</a></code> gains a <code>color</code> argument for single-color mask tiles: when set to a hex string (e.g. <code>"#222222"</code>), the URL uses the msens TiTiler factory’s <code>color=</code> query param, which renders every valid pixel in that flat RGBA color and ignores <code>colormap</code> / <code>rescale</code>. Used by the mapgl app’s “Cells outside Program Areas” overlay — replaces the old <code>msens::add_cells(r_outside_pra, colors = c("#222222","#222222"), ...)</code> pattern that shipped a terra raster as a base64 image source.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.3" id="msens-033">msens 0.3.3<a class="anchor" aria-label="anchor" href="#msens-033"></a></h2>
 <ul><li>Added <code><a href="../reference/add_cell_tiles.html">add_cell_tiles()</a></code>, <code><a href="../reference/cell_tile_url.html">cell_tile_url()</a></code>, <code><a href="../reference/cell_stats.html">cell_stats()</a></code> for TiTiler endpoint to support mapgl app.</li>

@@ -13,7 +13,7 @@ with equivalent SQL produce identical URLs — Varnish keys on the full URL."></
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -53,7 +53,8 @@ with equivalent SQL produce identical URLs — Varnish keys on the full URL.</p>
 <span>  <span class="va">sql</span>,</span>
 <span>  colormap <span class="op">=</span> <span class="st">"spectral_r"</span>,</span>
 <span>  rescale <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  v <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  color <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  mtime <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  base <span class="op">=</span> <span class="st">"https://titilecache.marinesensitivity.org"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -76,8 +77,17 @@ the server auto-compute from the SQL result on each tile request (prefer
 a client-side value from <code><a href="cell_stats.html">cell_stats()</a></code> for cache stability)</p></dd>
 
 
-<dt id="arg-v">v<a class="anchor" aria-label="anchor" href="#arg-v"></a></dt>
-<dd><p>character; optional cache-bust tag (e.g. DB build date)</p></dd>
+<dt id="arg-color">color<a class="anchor" aria-label="anchor" href="#arg-color"></a></dt>
+<dd><p>character(1); hex <code>#rrggbb</code> or <code>#rrggbbaa</code> for a single-color
+mask. When set, the server renders every valid pixel in this flat color
+(ignoring <code>colormap</code> + <code>rescale</code>) — useful for binary "cell is present /
+cell is outside X" overlays.</p></dd>
+
+
+<dt id="arg-mtime">mtime<a class="anchor" aria-label="anchor" href="#arg-mtime"></a></dt>
+<dd><p>character; optional cache-bust tag, typically the mtime of the
+source DuckDB file (e.g. from <code>file.info(sdm_db)$mtime</code>). Distinct from
+the data version tag (<code>v6</code>, <code>v7</code>, ...) used in paths.</p></dd>
 
 
 <dt id="arg-base">base<a class="anchor" aria-label="anchor" href="#arg-base"></a></dt>

@@ -1,5 +1,16 @@
 # Changelog
 
+## msens 0.3.4
+
+- [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
+  gains a `color` argument for single-color mask tiles: when set to a
+  hex string (e.g. `"#222222"`), the URL uses the msens TiTiler
+  factory’s `color=` query param, which renders every valid pixel in
+  that flat RGBA color and ignores `colormap` / `rescale`. Used by the
+  mapgl app’s “Cells outside Program Areas” overlay — replaces the old
+  `msens::add_cells(r_outside_pra, colors = c("#222222","#222222"), ...)`
+  pattern that shipped a terra raster as a base64 image source.
+
 ## msens 0.3.3
 
 - Added

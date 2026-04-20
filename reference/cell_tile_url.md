@@ -13,7 +13,8 @@ cell_tile_url(
   sql,
   colormap = "spectral_r",
   rescale = NULL,
-  v = NULL,
+  color = NULL,
+  mtime = NULL,
   base = "https://titilecache.marinesensitivity.org"
 )
 ```
@@ -36,9 +37,18 @@ cell_tile_url(
   [`cell_stats()`](http://marinesensitivity.org/msens/reference/cell_stats.md)
   for cache stability)
 
-- v:
+- color:
 
-  character; optional cache-bust tag (e.g. DB build date)
+  character(1); hex `#rrggbb` or `#rrggbbaa` for a single-color mask.
+  When set, the server renders every valid pixel in this flat color
+  (ignoring `colormap` + `rescale`) — useful for binary "cell is present
+  / cell is outside X" overlays.
+
+- mtime:
+
+  character; optional cache-bust tag, typically the mtime of the source
+  DuckDB file (e.g. from `file.info(sdm_db)$mtime`). Distinct from the
+  data version tag (`v6`, `v7`, ...) used in paths.
 
 - base:
 

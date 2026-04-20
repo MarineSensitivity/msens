@@ -7,7 +7,11 @@ set a stable legend rescale that doesn't depend on per-tile computation.
 ## Usage
 
 ``` r
-cell_stats(sql, base = "https://titilecache.marinesensitivity.org")
+cell_stats(
+  sql,
+  mtime = NULL,
+  base = "https://titilecache.marinesensitivity.org"
+)
 ```
 
 ## Arguments
@@ -15,6 +19,11 @@ cell_stats(sql, base = "https://titilecache.marinesensitivity.org")
 - sql:
 
   character(1); same SELECT passed to
+  [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
+
+- mtime:
+
+  character; optional cache-bust tag, see
   [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
 
 - base:
