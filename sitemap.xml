@@ -7,11 +7,14 @@
 <url><loc>http://marinesensitivity.org/msens/authors.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/index.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/news/index.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/add_cell_tiles.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_cells.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmfill.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmlabel.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/add_pmline.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/cell_id_raster.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/cell_stats.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/cell_tile_url.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/cells_in_polygon.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/cells_in_pra.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/compute_er_score.html</loc></url>

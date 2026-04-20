@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,6 +33,10 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.3" id="msens-033">msens 0.3.3<a class="anchor" aria-label="anchor" href="#msens-033"></a></h2>
+<ul><li>Added <code><a href="../reference/add_cell_tiles.html">add_cell_tiles()</a></code>, <code><a href="../reference/cell_tile_url.html">cell_tile_url()</a></code>, <code><a href="../reference/cell_stats.html">cell_stats()</a></code> for TiTiler endpoint to support mapgl app.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.2" id="msens-032">msens 0.3.2<a class="anchor" aria-label="anchor" href="#msens-032"></a></h2>
 <ul><li>Added <code><a href="../reference/cells_in_pra.html">cells_in_pra()</a></code> and <code><a href="../reference/scores_for_pra.html">scores_for_pra()</a></code> — fast Program Area lookups that read from <code>zone</code> / <code>zone_cell</code> / <code>zone_metric</code> instead of rasterizing the polygon and aggregating across cells. Same output shape as <code><a href="../reference/cells_in_polygon.html">cells_in_polygon()</a></code> / <code><a href="../reference/scores_for_cells.html">scores_for_cells()</a></code> so they’re drop-in replacements when the area is a Program Area.</li>

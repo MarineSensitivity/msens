@@ -39,6 +39,8 @@ Analyses
 
 Plot and map Seascapes
 
+- [`add_cell_tiles()`](http://marinesensitivity.org/msens/reference/add_cell_tiles.md)
+  : Add an msens cell tile layer to a mapgl map
 - [`add_cells()`](http://marinesensitivity.org/msens/reference/add_cells.md)
   : Add a raster cell layer to a map
 - [`add_pmfill()`](http://marinesensitivity.org/msens/reference/add_pmfill.md)
@@ -47,6 +49,10 @@ Plot and map Seascapes
   : Add symbol label layers from sf point data
 - [`add_pmline()`](http://marinesensitivity.org/msens/reference/add_pmline.md)
   : Add PMTile outline line layers to a map
+- [`cell_stats()`](http://marinesensitivity.org/msens/reference/cell_stats.md)
+  : Fetch msens cell value statistics for a SQL query
+- [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
+  : Build an msens cell tile URL template
 - [`ggmap_areas()`](http://marinesensitivity.org/msens/reference/ggmap_areas.md)
   : Static ggplot map of labeled areas
 - [`ggplot_flower()`](http://marinesensitivity.org/msens/reference/ggplot_flower.md)

@@ -1,5 +1,13 @@
 # Changelog
 
+## msens 0.3.3
+
+- Added
+  [`add_cell_tiles()`](http://marinesensitivity.org/msens/reference/add_cell_tiles.md),
+  [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md),
+  [`cell_stats()`](http://marinesensitivity.org/msens/reference/cell_stats.md)
+  for TiTiler endpoint to support mapgl app.
+
 ## msens 0.3.2
 
 - Added
