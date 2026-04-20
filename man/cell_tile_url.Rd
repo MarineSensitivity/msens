@@ -8,7 +8,8 @@ cell_tile_url(
   sql,
   colormap = "spectral_r",
   rescale = NULL,
-  v = NULL,
+  color = NULL,
+  mtime = NULL,
   base = "https://titilecache.marinesensitivity.org"
 )
 }
@@ -21,7 +22,14 @@ cell_tile_url(
 the server auto-compute from the SQL result on each tile request (prefer
 a client-side value from \code{\link[=cell_stats]{cell_stats()}} for cache stability)}
 
-\item{v}{character; optional cache-bust tag (e.g. DB build date)}
+\item{color}{character(1); hex \verb{#rrggbb} or \verb{#rrggbbaa} for a single-color
+mask. When set, the server renders every valid pixel in this flat color
+(ignoring \code{colormap} + \code{rescale}) — useful for binary "cell is present /
+cell is outside X" overlays.}
+
+\item{mtime}{character; optional cache-bust tag, typically the mtime of the
+source DuckDB file (e.g. from \code{file.info(sdm_db)$mtime}). Distinct from
+the data version tag (\code{v6}, \code{v7}, ...) used in paths.}
 
 \item{base}{character; base URL of the titilecache service}
 }

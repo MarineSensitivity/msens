@@ -323,24 +323,39 @@ add_cell_tiles <- function(
 #' @param rescale numeric length-2 `c(min, max)` for normalization; `NULL` lets
 #'   the server auto-compute from the SQL result on each tile request (prefer
 #'   a client-side value from [cell_stats()] for cache stability)
-#' @param v character; optional cache-bust tag (e.g. DB build date)
+#' @param color character(1); hex `#rrggbb` or `#rrggbbaa` for a single-color
+#'   mask. When set, the server renders every valid pixel in this flat color
+#'   (ignoring `colormap` + `rescale`) — useful for binary "cell is present /
+#'   cell is outside X" overlays.
+#' @param mtime character; optional cache-bust tag, typically the mtime of the
+#'   source DuckDB file (e.g. from `file.info(sdm_db)$mtime`). Distinct from
+#'   the data version tag (`v6`, `v7`, ...) used in paths.
 #' @param base character; base URL of the titilecache service
 #' @return character(1) tile URL template
 #' @export
 #' @concept viz
 cell_tile_url <- function(
     sql,
-    colormap = "spectral_r", rescale = NULL, v = NULL,
+    colormap = "spectral_r", rescale = NULL, color = NULL, mtime = NULL,
     base = "https://titilecache.marinesensitivity.org") {
   stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
   sql_b64 <- base64url_encode(canonicalize_sql(sql))
-  params  <- c(sql = sql_b64, colormap = colormap)
-  if (!is.null(rescale)) {
-    stopifnot(is.numeric(rescale), length(rescale) == 2)
-    params <- c(params, rescale = paste(rescale, collapse = ","))
+
+  if (!is.null(color)) {
+    stopifnot(is.character(color), length(color) == 1,
+              grepl("^#?[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", color))
+    # strip the `#` (safe in URLs, but URL-encoding it makes no difference here)
+    color_q <- sub("^#", "", color)
+    params  <- c(sql = sql_b64, color = color_q)
+  } else {
+    params  <- c(sql = sql_b64, colormap = colormap)
+    if (!is.null(rescale)) {
+      stopifnot(is.numeric(rescale), length(rescale) == 2)
+      params <- c(params, rescale = paste(rescale, collapse = ","))
+    }
   }
-  if (!is.null(v))
-    params <- c(params, v = as.character(v))
+  if (!is.null(mtime))
+    params <- c(params, mtime = format_mtime(mtime))
   qs <- paste0(names(params), "=", unname(params), collapse = "&")
   sprintf("%s/msens/tiles/{z}/{x}/{y}.png?%s", sub("/$", "", base), qs)
 }
@@ -353,6 +368,7 @@ cell_tile_url <- function(
 #' stable legend rescale that doesn't depend on per-tile computation.
 #'
 #' @param sql character(1); same SELECT passed to [cell_tile_url()]
+#' @param mtime character; optional cache-bust tag, see [cell_tile_url()]
 #' @param base character; base URL of the titilecache service
 #' @return named list of numeric statistics
 #' @importFrom httr2 request req_url_query req_perform resp_body_json
@@ -360,11 +376,14 @@ cell_tile_url <- function(
 #' @concept viz
 cell_stats <- function(
     sql,
+    mtime = NULL,
     base = "https://titilecache.marinesensitivity.org") {
   stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
   sql_b64 <- base64url_encode(canonicalize_sql(sql))
-  httr2::request(sprintf("%s/msens/statistics", sub("/$", "", base))) |>
-    httr2::req_url_query(sql = sql_b64) |>
+  q <- list(sql = sql_b64)
+  if (!is.null(mtime)) q$mtime <- format_mtime(mtime)
+  req <- httr2::request(sprintf("%s/msens/statistics", sub("/$", "", base)))
+  do.call(httr2::req_url_query, c(list(.req = req), q)) |>
     httr2::req_perform() |>
     httr2::resp_body_json()
 }
@@ -385,6 +404,15 @@ base64url_encode <- function(x) {
   b64 <- gsub("+", "-", b64, fixed = TRUE)
   b64 <- gsub("/", "_", b64, fixed = TRUE)
   sub("=+$", "", b64)
+}
+
+#' format an mtime (POSIXct, Date, or character) to a compact URL-safe tag
+#' @noRd
+format_mtime <- function(x) {
+  if (inherits(x, c("POSIXct", "POSIXlt", "Date")))
+    format(x, "%Y%m%dT%H%M%SZ", tz = "UTC")
+  else
+    as.character(x)
 }
 
 

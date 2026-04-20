@@ -4,10 +4,16 @@
 \alias{cell_stats}
 \title{Fetch msens cell value statistics for a SQL query}
 \usage{
-cell_stats(sql, base = "https://titilecache.marinesensitivity.org")
+cell_stats(
+  sql,
+  mtime = NULL,
+  base = "https://titilecache.marinesensitivity.org"
+)
 }
 \arguments{
 \item{sql}{character(1); same SELECT passed to \code{\link[=cell_tile_url]{cell_tile_url()}}}
+
+\item{mtime}{character; optional cache-bust tag, see \code{\link[=cell_tile_url]{cell_tile_url()}}}
 
 \item{base}{character; base URL of the titilecache service}
 }
