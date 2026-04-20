@@ -270,6 +270,124 @@ add_cells <- function(
 }
 
 
+#' Add an msens cell tile layer to a mapgl map
+#'
+#' Viewport-driven XYZ tile alternative to [add_cells()]: the browser only
+#' fetches the tiles visible in the current viewport from the msens TiTiler
+#' factory, rather than shipping the whole raster as a base64-encoded image.
+#'
+#' @param m map or map_proxy
+#' @param tile_url character(1) XYZ tile URL template, typically from
+#'   [cell_tile_url()] (must contain `{z}/{x}/{y}` placeholders)
+#' @param id layer id (default: "r_lyr")
+#' @param source_id source id (default: "r_src")
+#' @param tile_size numeric (default: 256)
+#' @param raster_opacity numeric (default: 0.8)
+#' @param raster_resampling character (default: "nearest")
+#' @param before_id layer to insert before
+#' @param ... additional args to [mapgl::add_raster_layer()]
+#' @return map (pipeable)
+#' @importFrom mapgl add_raster_source add_raster_layer
+#' @export
+#' @concept viz
+add_cell_tiles <- function(
+    m, tile_url,
+    id = "r_lyr", source_id = "r_src",
+    tile_size = 256,
+    raster_opacity = 0.8, raster_resampling = "nearest",
+    before_id = NULL, ...) {
+  stopifnot(is.character(tile_url), length(tile_url) == 1)
+  m |>
+    mapgl::add_raster_source(
+      id       = source_id,
+      tiles    = tile_url,
+      tileSize = tile_size) |>
+    mapgl::add_raster_layer(
+      id                = id,
+      source            = source_id,
+      raster_opacity    = raster_opacity,
+      raster_resampling = raster_resampling,
+      before_id         = before_id, ...)
+}
+
+
+#' Build an msens cell tile URL template
+#'
+#' Returns an XYZ tile URL template (with `{z}/{x}/{y}` placeholders) for the
+#' msens TiTiler factory. The SQL is canonicalized (whitespace collapsed) then
+#' base64url-encoded. Consistent canonicalization is critical so repeated calls
+#' with equivalent SQL produce identical URLs — Varnish keys on the full URL.
+#'
+#' @param sql character(1); SELECT returning `cell_id` and `value` columns
+#' @param colormap character; rio-tiler colormap name (default: "spectral_r")
+#' @param rescale numeric length-2 `c(min, max)` for normalization; `NULL` lets
+#'   the server auto-compute from the SQL result on each tile request (prefer
+#'   a client-side value from [cell_stats()] for cache stability)
+#' @param v character; optional cache-bust tag (e.g. DB build date)
+#' @param base character; base URL of the titilecache service
+#' @return character(1) tile URL template
+#' @export
+#' @concept viz
+cell_tile_url <- function(
+    sql,
+    colormap = "spectral_r", rescale = NULL, v = NULL,
+    base = "https://titilecache.marinesensitivity.org") {
+  stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
+  sql_b64 <- base64url_encode(canonicalize_sql(sql))
+  params  <- c(sql = sql_b64, colormap = colormap)
+  if (!is.null(rescale)) {
+    stopifnot(is.numeric(rescale), length(rescale) == 2)
+    params <- c(params, rescale = paste(rescale, collapse = ","))
+  }
+  if (!is.null(v))
+    params <- c(params, v = as.character(v))
+  qs <- paste0(names(params), "=", unname(params), collapse = "&")
+  sprintf("%s/msens/tiles/{z}/{x}/{y}.png?%s", sub("/$", "", base), qs)
+}
+
+
+#' Fetch msens cell value statistics for a SQL query
+#'
+#' Calls the msens TiTiler factory `/statistics` endpoint. Returns a named list
+#' with `n`, `min`, `max`, `mean`, `std`, `p2`, `p50`, `p98`. Use to set a
+#' stable legend rescale that doesn't depend on per-tile computation.
+#'
+#' @param sql character(1); same SELECT passed to [cell_tile_url()]
+#' @param base character; base URL of the titilecache service
+#' @return named list of numeric statistics
+#' @importFrom httr2 request req_url_query req_perform resp_body_json
+#' @export
+#' @concept viz
+cell_stats <- function(
+    sql,
+    base = "https://titilecache.marinesensitivity.org") {
+  stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
+  sql_b64 <- base64url_encode(canonicalize_sql(sql))
+  httr2::request(sprintf("%s/msens/statistics", sub("/$", "", base))) |>
+    httr2::req_url_query(sql = sql_b64) |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+}
+
+
+# internal helpers ----
+
+#' @noRd
+canonicalize_sql <- function(sql) {
+  sql <- trimws(sql)
+  gsub("[[:space:]]+", " ", sql)
+}
+
+#' @noRd
+#' @importFrom base64enc base64encode
+base64url_encode <- function(x) {
+  b64 <- base64enc::base64encode(charToRaw(x))
+  b64 <- gsub("+", "-", b64, fixed = TRUE)
+  b64 <- gsub("/", "_", b64, fixed = TRUE)
+  sub("=+$", "", b64)
+}
+
+
 #' Map raster cells with outlines and labels
 #'
 #' Convenience constructor that composes add_cells(), add_pmline(), and
