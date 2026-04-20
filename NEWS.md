@@ -1,3 +1,8 @@
+# msens 0.3.3
+
+* Added `add_cell_tiles()`, `cell_tile_url()`, `cell_stats()` for TiTiler 
+  endpoint to support mapgl app.
+
 # msens 0.3.2
 
 * Added `cells_in_pra()` and `scores_for_pra()` — fast Program Area
