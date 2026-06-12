@@ -36,6 +36,21 @@ parse_noaa_status <- function(status_str) {
 #' @export
 #' @concept listings
 compute_er_score <- function(extrisk_code, is_mmpa = FALSE, is_mbta = FALSE) {
+  # validate the authority:code vocabulary; error on anything unrecognized rather
+  # than silently scoring it via a default (e.g. "IUCN:TN" — "TN" (Threatened) is an
+  # ESA/NMFS|FWS status, not an IUCN Red List code; IUCN uses "NT", Near Threatened).
+  valid_codes <- c(
+    paste0("NMFS:", c("EN", "TN", "LC")),
+    paste0("FWS:",  c("EN", "TN", "LC")),
+    paste0("IUCN:", c("CR", "EN", "VU", "NT", "LC", "DD")))
+  bad <- unique(extrisk_code[!is.na(extrisk_code) & !extrisk_code %in% valid_codes])
+  if (length(bad) > 0)
+    stop(
+      "compute_er_score(): unrecognized extrisk_code(s): ", paste(bad, collapse = ", "),
+      ". Expected '<authority>:<code>' with authority NMFS or FWS (code EN, TN, LC) ",
+      "or IUCN (code CR, EN, VU, NT, LC, DD).",
+      call. = FALSE)
+
   authority <- stringr::str_split_i(extrisk_code, ":", 1)
   code      <- stringr::str_split_i(extrisk_code, ":", 2)
   is_us     <- authority %in% c("NMFS", "FWS")
