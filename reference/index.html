@@ -317,14 +317,14 @@
           <code><a href="hex_add_membership.html">hex_add_membership()</a></code>
 
         </dt>
-        <dd>Flag hexes whose centroid falls inside a polygon (DuckDB spatial)</dd>
+        <dd>Flag hexes inside a polygon (H3 polyfill membership)</dd>
 
         <dt>
 
           <code><a href="hex_centroids.html">hex_centroids()</a></code>
 
         </dt>
-        <dd>Centroids (lon/lat) for H3 string ids</dd>
+        <dd>Centroids (lon/lat) for BIGINT H3 ids</dd>
 
         <dt>
 
@@ -338,7 +338,14 @@
           <code><a href="hex_id_from_lonlat.html">hex_id_from_lonlat()</a></code>
 
         </dt>
-        <dd>H3 cell ids for lon/lat points (as H3 strings)</dd>
+        <dd>H3 cell ids for lon/lat points</dd>
+
+        <dt>
+
+          <code><a href="hex_id_to_string.html">hex_id_to_string()</a></code>
+
+        </dt>
+        <dd>Hex-string form of BIGINT H3 ids (for display)</dd>
 
         <dt>
 
