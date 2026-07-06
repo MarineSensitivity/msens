@@ -61,7 +61,7 @@ same whether the grid is a region or the whole globe.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">hex_add_membership</span><span class="op">(</span><span class="va">con</span>, <span class="va">hex_tbl</span>, <span class="va">poly</span>, <span class="va">col</span>, res <span class="op">=</span> <span class="va">HEX_RES</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">hex_add_membership</span><span class="op">(</span><span class="va">con</span>, <span class="va">hex_tbl</span>, <span class="va">poly</span>, <span class="va">col</span>, res <span class="op">=</span> <span class="va">HEX_RES</span>, buffer <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -86,6 +86,13 @@ same whether the grid is a region or the whole globe.</p>
 
 <dt id="arg-res">res<a class="anchor" aria-label="anchor" href="#arg-res"></a></dt>
 <dd><p>H3 resolution the hex grid was built at (default <a href="HEX_RES.html">HEX_RES</a>)</p></dd>
+
+
+<dt id="arg-buffer">buffer<a class="anchor" aria-label="anchor" href="#arg-buffer"></a></dt>
+<dd><p>if <code>TRUE</code> (default) buffer the polygon outward by one hex
+circumradius before polyfilling, so hexes that <em>overlap</em> the boundary (not
+only those centred inside) are captured — polyfill is centroid-inclusion, so
+without the buffer up to a half-hex-wide fringe along the boundary is missed</p></dd>
 
 </dl></div>
     <div class="section level2">
