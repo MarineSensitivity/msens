@@ -22,25 +22,30 @@ HEX_RES <- 7L
   invisible(con)
 }
 
-# run a temp-registered lon/lat query on a (maybe-borrowed) connection ----
+# run a temp-registered query on a (maybe-borrowed) connection ----
+# temp connections use bigint="integer64" so H3 ids (stored as BIGINT) return
+# to R exactly as bit64::integer64 rather than a lossy double.
 .with_con <- function(con, f) {
   own <- is.null(con)
   if (own) {
-    con <- DBI::dbConnect(duckdb::duckdb())
+    con <- DBI::dbConnect(duckdb::duckdb(), bigint = "integer64")
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
   f(con)
 }
 
-#' H3 cell ids for lon/lat points (as H3 strings)
+#' H3 cell ids for lon/lat points
 #'
-#' Indexes points to H3 cells at `res` via the DuckDB `h3` extension. Returns
-#' the H3 string form so ids are exact in R.
+#' Indexes points to H3 cells at `res` via the DuckDB `h3` extension. Ids are
+#' returned as **BIGINT** (`bit64::integer64` in R) — every valid H3 index
+#' reserves bit 63, so it fits in signed 64-bit, and BIGINT matches the OBIS
+#' `h3t` store (`idx_h3.cell_id`) for cast-free joins. Use [hex_id_to_string()]
+#' for the hex-string form.
 #'
 #' @param lon,lat numeric vectors of longitude / latitude (EPSG:4326)
 #' @param res H3 resolution (default [HEX_RES])
-#' @param con optional DuckDB connection (a temporary one is used if `NULL`)
-#' @return character vector of H3 string ids, aligned to the inputs
+#' @param con optional DuckDB connection (a temporary integer64 one if `NULL`)
+#' @return an `integer64` vector of H3 ids, aligned to the inputs
 #' @export
 #' @concept hex
 #' @importFrom glue glue
@@ -52,15 +57,33 @@ hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
     duckdb::duckdb_register(con, "hid_tmp", d)
     on.exit(duckdb::duckdb_unregister(con, "hid_tmp"), add = TRUE)
     DBI::dbGetQuery(con, glue::glue(
-      "SELECT h3_h3_to_string(h3_latlng_to_cell(lat, lon, {res})) AS hex_id
+      "SELECT CAST(h3_latlng_to_cell(lat, lon, {res}) AS BIGINT) AS hex_id
        FROM hid_tmp ORDER BY .i"))$hex_id
   })
 }
 
-#' Centroids (lon/lat) for H3 string ids
+#' Hex-string form of BIGINT H3 ids (for display)
 #'
-#' @param hex_id character vector of H3 string ids
+#' @param hex_id integer64/numeric vector of BIGINT H3 ids
 #' @param con optional DuckDB connection (a temporary one is used if `NULL`)
+#' @return character vector of H3 strings (e.g. "8729a411cffffff")
+#' @export
+#' @concept hex
+hex_id_to_string <- function(hex_id, con = NULL) {
+  .with_con(con, function(con) {
+    .load_hex_ext(con)
+    d <- data.frame(.i = seq_along(hex_id), hex_id = hex_id)
+    duckdb::duckdb_register(con, "hs_tmp", d)
+    on.exit(duckdb::duckdb_unregister(con, "hs_tmp"), add = TRUE)
+    DBI::dbGetQuery(con,
+      "SELECT h3_h3_to_string(CAST(hex_id AS UBIGINT)) AS s FROM hs_tmp ORDER BY .i")$s
+  })
+}
+
+#' Centroids (lon/lat) for BIGINT H3 ids
+#'
+#' @param hex_id integer64/numeric vector of BIGINT H3 ids
+#' @param con optional DuckDB connection (a temporary integer64 one if `NULL`)
 #' @return tibble(hex_id, lon, lat)
 #' @export
 #' @concept hex
@@ -68,13 +91,13 @@ hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
 hex_centroids <- function(hex_id, con = NULL) {
   .with_con(con, function(con) {
     .load_hex_ext(con)
-    d <- data.frame(.i = seq_along(hex_id), hex_id = as.character(hex_id))
+    d <- data.frame(.i = seq_along(hex_id), hex_id = hex_id)
     duckdb::duckdb_register(con, "hc_tmp", d)
     on.exit(duckdb::duckdb_unregister(con, "hc_tmp"), add = TRUE)
     DBI::dbGetQuery(con,
-      "SELECT hex_id,
-              h3_cell_to_lng(h3_string_to_h3(hex_id)) AS lon,
-              h3_cell_to_lat(h3_string_to_h3(hex_id)) AS lat
+      "SELECT CAST(hex_id AS BIGINT) AS hex_id,
+              h3_cell_to_lng(hex_id) AS lon,
+              h3_cell_to_lat(hex_id) AS lat
        FROM hc_tmp ORDER BY .i") |> tibble::as_tibble()
   })
 }
@@ -96,8 +119,8 @@ hex_centroids <- function(hex_id, con = NULL) {
 #' @param res H3 resolution (default [HEX_RES])
 #' @param mask_layer name of the layer whose non-NA pixels define coverage
 #'   (default `names(r)[1]`)
-#' @param out_tbl optional DuckDB table to (over)write with `hex_id` as UBIGINT;
-#'   if `NULL`, a tibble is returned with `hex_id` as the H3 string
+#' @param out_tbl optional DuckDB table to (over)write with `hex_id` as BIGINT;
+#'   if `NULL`, a tibble is returned with `hex_id` as `bit64::integer64`
 #' @return the `out_tbl` name (invisibly) or a tibble
 #' @export
 #' @concept hex
@@ -129,53 +152,58 @@ hex_grid_from_raster <- function(r, con, res = HEX_RES,
     " (lon-{hx}) || ' ' || (lat+{hy}) || ', ' ||",
     " (lon-{hx}) || ' ' || (lat-{hy}) || '))'")
 
+  # hex_id stored as BIGINT (h3 index fits in signed 64-bit; matches OBIS h3t)
   core <- glue::glue("
     WITH ex AS (
       SELECT unnest(h3_polygon_wkt_to_cells({wkt}, {res})) AS hex_id, {lyr_cols}
       FROM hex_pts_tmp)
     SELECT DISTINCT ON (hex_id)
-           hex_id, {lyr_cols},
+           CAST(hex_id AS BIGINT) AS hex_id, {lyr_cols},
            h3_cell_area(hex_id, 'km^2') AS area_km2
     FROM ex")
 
   if (is.null(out_tbl)) {
-    DBI::dbGetQuery(con, glue::glue(
-      "SELECT h3_h3_to_string(hex_id) AS hex_id, * EXCLUDE (hex_id)
-       FROM ({core})")) |> tibble::as_tibble()
+    DBI::dbGetQuery(con, core) |> tibble::as_tibble()
   } else {
     DBI::dbExecute(con, glue::glue("CREATE OR REPLACE TABLE {out_tbl} AS {core}"))
     invisible(out_tbl)
   }
 }
 
-#' Flag hexes whose centroid falls inside a polygon (DuckDB spatial)
+#' Flag hexes inside a polygon (H3 polyfill membership)
 #'
-#' Adds a BOOLEAN column `col` to a DuckDB hex table (which must have a `hex_id`
-#' UBIGINT column), TRUE where the hex centroid is inside `poly`. Used for the
-#' `in_usa` / `in_pra` membership flags on the grid, and as the basis for
-#' vector-source SDM interpolation.
+#' Adds a BOOLEAN column `col` to a DuckDB hex table (with a `hex_id` BIGINT
+#' column), TRUE where the hex is inside `poly`. Rather than a point-in-polygon
+#' test over every hex (which scales with the grid — prohibitive at ~79M global
+#' hexes), this **polyfills** the polygon at `res` to enumerate the in-polygon
+#' hexes directly (center containment), then semi-joins. The multipolygon is
+#' exploded with `ST_Dump` because `h3_polygon_wkb_to_cells` takes single
+#' polygons. Cost is polygon-driven (fixed) rather than grid-driven, so it is the
+#' same whether the grid is a region or the whole globe.
 #'
-#' @param con a DuckDB connection
-#' @param hex_tbl name of the DuckDB hex table (with `hex_id` UBIGINT)
-#' @param poly path to a polygon file readable by DuckDB `ST_Read`
-#'   (e.g. a `.gpkg`)
+#' @param con a DuckDB connection (h3 + spatial loaded on demand)
+#' @param hex_tbl name of the DuckDB hex table (with `hex_id` BIGINT)
+#' @param poly path to a polygon file readable by DuckDB `ST_Read` (e.g. `.gpkg`)
 #' @param col name of the boolean membership column to add
+#' @param res H3 resolution the hex grid was built at (default [HEX_RES])
 #' @return invisibly, `hex_tbl`
 #' @export
 #' @concept hex
 #' @importFrom glue glue
-hex_add_membership <- function(con, hex_tbl, poly, col) {
+hex_add_membership <- function(con, hex_tbl, poly, col, res = HEX_RES) {
   stopifnot(file.exists(poly))
   .load_hex_ext(con, spatial = TRUE)
-  # dissolve the polygon once, then point-in-polygon per hex centroid
+  # enumerate the in-polygon hexes (BIGINT, matching hex_tbl.hex_id)
+  DBI::dbExecute(con, glue::glue("
+    CREATE OR REPLACE TEMP TABLE _in_poly AS
+    WITH parts AS (
+      SELECT UNNEST(ST_Dump(ST_Union_Agg(geom))).geom AS g FROM ST_Read('{poly}'))
+    SELECT DISTINCT CAST(hex_id AS BIGINT) AS hex_id FROM (
+      SELECT unnest(h3_polygon_wkb_to_cells(ST_AsWKB(g), {res})) AS hex_id FROM parts)"))
   DBI::dbExecute(con, glue::glue(
-    "CREATE OR REPLACE TEMP TABLE _poly_tmp AS
-       SELECT ST_Union_Agg(geom) AS g FROM ST_Read('{poly}')"))
+    "ALTER TABLE {hex_tbl} ADD COLUMN IF NOT EXISTS {col} BOOLEAN DEFAULT FALSE"))
   DBI::dbExecute(con, glue::glue(
-    "ALTER TABLE {hex_tbl} ADD COLUMN IF NOT EXISTS {col} BOOLEAN"))
-  DBI::dbExecute(con, glue::glue(
-    "UPDATE {hex_tbl} SET {col} = ST_Contains(
-       (SELECT g FROM _poly_tmp),
-       ST_Point(h3_cell_to_lng(hex_id), h3_cell_to_lat(hex_id)))"))
+    "UPDATE {hex_tbl} SET {col} = TRUE
+       WHERE hex_id IN (SELECT hex_id FROM _in_poly)"))
   invisible(hex_tbl)
 }

@@ -19,6 +19,7 @@ Depends:
     R (>= 2.10)
 Imports:
     base64enc,
+    bit64,
     DBI,
     dbplyr,
     dplyr,

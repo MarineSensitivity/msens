@@ -23,8 +23,8 @@ as the per-hex value columns)}
 \item{mask_layer}{name of the layer whose non-NA pixels define coverage
 (default \code{names(r)[1]})}
 
-\item{out_tbl}{optional DuckDB table to (over)write with \code{hex_id} as UBIGINT;
-if \code{NULL}, a tibble is returned with \code{hex_id} as the H3 string}
+\item{out_tbl}{optional DuckDB table to (over)write with \code{hex_id} as BIGINT;
+if \code{NULL}, a tibble is returned with \code{hex_id} as \code{bit64::integer64}}
 }
 \value{
 the \code{out_tbl} name (invisibly) or a tibble

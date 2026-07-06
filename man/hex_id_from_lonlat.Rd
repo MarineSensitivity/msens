@@ -2,7 +2,7 @@
 % Please edit documentation in R/hex.R
 \name{hex_id_from_lonlat}
 \alias{hex_id_from_lonlat}
-\title{H3 cell ids for lon/lat points (as H3 strings)}
+\title{H3 cell ids for lon/lat points}
 \usage{
 hex_id_from_lonlat(lon, lat, res = HEX_RES, con = NULL)
 }
@@ -11,13 +11,16 @@ hex_id_from_lonlat(lon, lat, res = HEX_RES, con = NULL)
 
 \item{res}{H3 resolution (default \link{HEX_RES})}
 
-\item{con}{optional DuckDB connection (a temporary one is used if \code{NULL})}
+\item{con}{optional DuckDB connection (a temporary integer64 one if \code{NULL})}
 }
 \value{
-character vector of H3 string ids, aligned to the inputs
+an \code{integer64} vector of H3 ids, aligned to the inputs
 }
 \description{
-Indexes points to H3 cells at \code{res} via the DuckDB \code{h3} extension. Returns
-the H3 string form so ids are exact in R.
+Indexes points to H3 cells at \code{res} via the DuckDB \code{h3} extension. Ids are
+returned as \strong{BIGINT} (\code{bit64::integer64} in R) — every valid H3 index
+reserves bit 63, so it fits in signed 64-bit, and BIGINT matches the OBIS
+\code{h3t} store (\code{idx_h3.cell_id}) for cast-free joins. Use \code{\link[=hex_id_to_string]{hex_id_to_string()}}
+for the hex-string form.
 }
 \concept{hex}

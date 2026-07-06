@@ -2,27 +2,32 @@
 % Please edit documentation in R/hex.R
 \name{hex_add_membership}
 \alias{hex_add_membership}
-\title{Flag hexes whose centroid falls inside a polygon (DuckDB spatial)}
+\title{Flag hexes inside a polygon (H3 polyfill membership)}
 \usage{
-hex_add_membership(con, hex_tbl, poly, col)
+hex_add_membership(con, hex_tbl, poly, col, res = HEX_RES)
 }
 \arguments{
-\item{con}{a DuckDB connection}
+\item{con}{a DuckDB connection (h3 + spatial loaded on demand)}
 
-\item{hex_tbl}{name of the DuckDB hex table (with \code{hex_id} UBIGINT)}
+\item{hex_tbl}{name of the DuckDB hex table (with \code{hex_id} BIGINT)}
 
-\item{poly}{path to a polygon file readable by DuckDB \code{ST_Read}
-(e.g. a \code{.gpkg})}
+\item{poly}{path to a polygon file readable by DuckDB \code{ST_Read} (e.g. \code{.gpkg})}
 
 \item{col}{name of the boolean membership column to add}
+
+\item{res}{H3 resolution the hex grid was built at (default \link{HEX_RES})}
 }
 \value{
 invisibly, \code{hex_tbl}
 }
 \description{
-Adds a BOOLEAN column \code{col} to a DuckDB hex table (which must have a \code{hex_id}
-UBIGINT column), TRUE where the hex centroid is inside \code{poly}. Used for the
-\code{in_usa} / \code{in_pra} membership flags on the grid, and as the basis for
-vector-source SDM interpolation.
+Adds a BOOLEAN column \code{col} to a DuckDB hex table (with a \code{hex_id} BIGINT
+column), TRUE where the hex is inside \code{poly}. Rather than a point-in-polygon
+test over every hex (which scales with the grid — prohibitive at ~79M global
+hexes), this \strong{polyfills} the polygon at \code{res} to enumerate the in-polygon
+hexes directly (center containment), then semi-joins. The multipolygon is
+exploded with \code{ST_Dump} because \code{h3_polygon_wkb_to_cells} takes single
+polygons. Cost is polygon-driven (fixed) rather than grid-driven, so it is the
+same whether the grid is a region or the whole globe.
 }
 \concept{hex}

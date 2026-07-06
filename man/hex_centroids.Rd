@@ -2,19 +2,19 @@
 % Please edit documentation in R/hex.R
 \name{hex_centroids}
 \alias{hex_centroids}
-\title{Centroids (lon/lat) for H3 string ids}
+\title{Centroids (lon/lat) for BIGINT H3 ids}
 \usage{
 hex_centroids(hex_id, con = NULL)
 }
 \arguments{
-\item{hex_id}{character vector of H3 string ids}
+\item{hex_id}{integer64/numeric vector of BIGINT H3 ids}
 
-\item{con}{optional DuckDB connection (a temporary one is used if \code{NULL})}
+\item{con}{optional DuckDB connection (a temporary integer64 one if \code{NULL})}
 }
 \value{
 tibble(hex_id, lon, lat)
 }
 \description{
-Centroids (lon/lat) for H3 string ids
+Centroids (lon/lat) for BIGINT H3 ids
 }
 \concept{hex}
