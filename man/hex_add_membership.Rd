@@ -4,7 +4,7 @@
 \alias{hex_add_membership}
 \title{Flag hexes inside a polygon (H3 polyfill membership)}
 \usage{
-hex_add_membership(con, hex_tbl, poly, col, res = HEX_RES)
+hex_add_membership(con, hex_tbl, poly, col, res = HEX_RES, buffer = TRUE)
 }
 \arguments{
 \item{con}{a DuckDB connection (h3 + spatial loaded on demand)}
@@ -16,6 +16,11 @@ hex_add_membership(con, hex_tbl, poly, col, res = HEX_RES)
 \item{col}{name of the boolean membership column to add}
 
 \item{res}{H3 resolution the hex grid was built at (default \link{HEX_RES})}
+
+\item{buffer}{if \code{TRUE} (default) buffer the polygon outward by one hex
+circumradius before polyfilling, so hexes that \emph{overlap} the boundary (not
+only those centred inside) are captured — polyfill is centroid-inclusion, so
+without the buffer up to a half-hex-wide fringe along the boundary is missed}
 }
 \value{
 invisibly, \code{hex_tbl}

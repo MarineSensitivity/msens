@@ -1,13 +1,26 @@
 # hex.R — H3 hexagon grid helpers (v8 spatial sampling unit, res 7) ----
 #
 # v8 replaces the 0.05 degree raster cell with the H3 resolution-7 hexagon
-# (~5.16 km^2) as the core sampling/scoring/serving unit. H3 res-7 ids are
-# 64-bit and exceed R's exact-double range (2^53 ~= 9e15 < ~6e17), so a hex id
-# must NEVER round-trip through an R double. These helpers keep ids inside
-# DuckDB as UBIGINT and hand them to R only as the H3 *string* form
-# (h3_h3_to_string). All indexing / area / membership uses the DuckDB `h3`
-# community extension (plus `spatial` for polygon membership) so results match
-# the OBIS h3t tile store byte-for-byte.
+# (~5.16 km^2) as the core sampling/scoring/serving unit.
+#
+# hex_id is stored as BIGINT (every valid H3 index reserves bit 63, so it fits in
+# signed 64-bit) to match the OBIS h3t store (`idx_h3.cell_id`) for cast-free
+# joins; R sees it as bit64::integer64 (connections opened bigint="integer64").
+# All indexing / area / membership uses the DuckDB `h3` community extension (plus
+# `spatial` for polygon membership) so results match the OBIS h3t store exactly.
+#
+# INTERPOLATION PRINCIPLE — do not regress ------------------------------------
+# A value is assigned to a hexagon by INTERPOLATING from the source's centroids
+# to the hexagon centroid with a distance-weighted method: hex_interp_idw()
+# (inverse-distance weighting over the k nearest source points; for a regular
+# grid this is ~bilinear). Two things you must NOT do, because they are
+# nearest-neighbour assignment, not interpolation:
+#   1. Do NOT give a hex the value of the single source pixel/polygon that merely
+#      contains its centre ("inherit").
+#   2. Do NOT use h3_polygon_wkt_to_cells to DISTRIBUTE values. That function is
+#      used ONLY to ENUMERATE which hexes tile the ocean (hex_ocean); never to
+#      interpolate. (Decision logged 2026-07-06 after review — see the
+#      feedback_hex_interpolation memory.)
 
 #' H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
 #' @export
@@ -102,72 +115,128 @@ hex_centroids <- function(hex_id, con = NULL) {
   })
 }
 
-#' Build an H3 hex grid from a raster by exploding pixels into child hexes
+#' Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)
 #'
-#' A res-7 hexagon (~5.16 km^2) is *smaller* than a 0.05 degree ocean pixel
-#' (~23 km^2 at 40N), so indexing each pixel centroid to a hex would under-sample
-#' the grid (leaving gaps). Instead this explodes each non-NA pixel (per
-#' `mask_layer`) into the res-`res` hexes whose *center* falls inside the pixel
-#' (DuckDB `h3_polygon_wkt_to_cells`), and each hex inherits that pixel's layer
-#' values plus `area_km2` (`h3_cell_area`). Because polyfill uses center
-#' containment, adjacent pixels partition the hexes with no overlap. Intended for
-#' sources at or coarser than the hex resolution (Bio-Oracle, AquaMaps, NCCOS).
+#' Defines *which* res-`res` hexagons tile the ocean and their `area_km2` — it
+#' does **not** interpolate any values (see the module INTERPOLATION PRINCIPLE).
+#' A res-7 hex (~5.16 km^2) is smaller than a 0.05 degree pixel (~23 km^2), so
+#' each ocean pixel (non-NA in `mask_layer`) is polyfilled into the hexes whose
+#' *centre* falls inside it (`h3_polygon_wkt_to_cells`, center-containment → a
+#' gap-free, overlap-free tiling). Values are attached afterwards with
+#' [hex_interp_idw()] from the source centroids.
 #'
-#' @param r a [terra::SpatRaster] in EPSG:4326 (layer names are carried through
-#'   as the per-hex value columns)
+#' @param r a [terra::SpatRaster] in EPSG:4326
 #' @param con a DuckDB connection
 #' @param res H3 resolution (default [HEX_RES])
-#' @param mask_layer name of the layer whose non-NA pixels define coverage
+#' @param mask_layer layer whose non-NA pixels define ocean coverage
 #'   (default `names(r)[1]`)
-#' @param out_tbl optional DuckDB table to (over)write with `hex_id` as BIGINT;
-#'   if `NULL`, a tibble is returned with `hex_id` as `bit64::integer64`
-#' @return the `out_tbl` name (invisibly) or a tibble
+#' @param out_tbl DuckDB table to (over)write with columns `hex_id` (BIGINT) and
+#'   `area_km2` (default `"hex"`)
+#' @return invisibly, `out_tbl`
 #' @export
 #' @concept hex
 #' @importFrom glue glue
-#' @importFrom tibble as_tibble
-hex_grid_from_raster <- function(r, con, res = HEX_RES,
-                                 mask_layer = names(r)[1], out_tbl = NULL) {
+hex_ocean <- function(r, con, res = HEX_RES, mask_layer = names(r)[1],
+                      out_tbl = "hex") {
   stopifnot(inherits(r, "SpatRaster"), mask_layer %in% names(r))
   .load_hex_ext(con)
-  lyrs <- names(r)
+  # ocean pixel centres (mask layer only, drop NA = land)
+  df <- terra::as.data.frame(r[[mask_layer]], xy = TRUE, na.rm = TRUE)[, 1:2]
+  names(df) <- c("lon", "lat")
+  duckdb::duckdb_register(con, "ocean_pts_tmp", df)
+  on.exit(duckdb::duckdb_unregister(con, "ocean_pts_tmp"), add = TRUE)
 
-  # raster -> points (x=lon, y=lat), keep ocean (mask_layer non-NA)
-  df <- terra::as.data.frame(r, xy = TRUE, na.rm = FALSE)
-  df <- df[!is.na(df[[mask_layer]]), , drop = FALSE]
-  names(df)[match(c("x", "y"), names(df))] <- c("lon", "lat")
-
-  duckdb::duckdb_register(con, "hex_pts_tmp", df)
-  on.exit(duckdb::duckdb_unregister(con, "hex_pts_tmp"), add = TRUE)
-
-  hx <- terra::res(r)[1] / 2  # half pixel width  (lon)
-  hy <- terra::res(r)[2] / 2  # half pixel height (lat)
-  lyr_cols <- paste(lyrs, collapse = ", ")
-
-  # each pixel's bbox as a WKT polygon (SQL string arithmetic on lon/lat)
+  hx <- terra::res(r)[1] / 2
+  hy <- terra::res(r)[2] / 2
   wkt <- glue::glue(
     "'POLYGON((' || (lon-{hx}) || ' ' || (lat-{hy}) || ', ' ||",
     " (lon+{hx}) || ' ' || (lat-{hy}) || ', ' ||",
     " (lon+{hx}) || ' ' || (lat+{hy}) || ', ' ||",
     " (lon-{hx}) || ' ' || (lat+{hy}) || ', ' ||",
     " (lon-{hx}) || ' ' || (lat-{hy}) || '))'")
-
-  # hex_id stored as BIGINT (h3 index fits in signed 64-bit; matches OBIS h3t)
-  core <- glue::glue("
+  DBI::dbExecute(con, glue::glue("
+    CREATE OR REPLACE TABLE {out_tbl} AS
     WITH ex AS (
-      SELECT unnest(h3_polygon_wkt_to_cells({wkt}, {res})) AS hex_id, {lyr_cols}
-      FROM hex_pts_tmp)
+      SELECT unnest(h3_polygon_wkt_to_cells({wkt}, {res})) AS hex_id
+      FROM ocean_pts_tmp)
     SELECT DISTINCT ON (hex_id)
-           CAST(hex_id AS BIGINT) AS hex_id, {lyr_cols},
+           CAST(hex_id AS BIGINT) AS hex_id,
            h3_cell_area(hex_id, 'km^2') AS area_km2
-    FROM ex")
+    FROM ex"))
+  invisible(out_tbl)
+}
 
-  if (is.null(out_tbl)) {
-    DBI::dbGetQuery(con, core) |> tibble::as_tibble()
-  } else {
-    DBI::dbExecute(con, glue::glue("CREATE OR REPLACE TABLE {out_tbl} AS {core}"))
-    invisible(out_tbl)
+#' Interpolate source values onto hex centroids (inverse-distance weighting)
+#'
+#' The canonical hex interpolation: for every hexagon in `hex_tbl`, take the `k`
+#' nearest source points (by great-circle distance, via a unit-sphere kd-tree so
+#' it is correct at the poles and antimeridian) and compute the inverse-distance
+#' weighted mean (`weight = 1 / d^power`) of each `val_cols` column, skipping NA
+#' source values per column. The interpolated columns are appended to `hex_tbl`.
+#' For a regular-grid source this reproduces a bilinear-style interpolation; for
+#' scattered sources it is classic IDW. This is the ONLY sanctioned way to move
+#' values onto hexes — never inherit a containing pixel's value.
+#'
+#' @param con a DuckDB connection (opened `bigint = "integer64"`)
+#' @param src a data.frame of source points with `lon`, `lat`, and `val_cols`
+#' @param hex_tbl name of the DuckDB hex table (must have `hex_id` BIGINT)
+#' @param val_cols character vector of value columns in `src` to interpolate
+#' @param k number of nearest source points (default 8)
+#' @param power IDW power (default 2)
+#' @param lon,lat coordinate column names in `src` (default "lon","lat")
+#' @param chunk hex rows processed per kd-tree query batch (default 5e6)
+#' @return invisibly, `hex_tbl`
+#' @export
+#' @concept hex
+#' @importFrom glue glue
+hex_interp_idw <- function(con, src, hex_tbl, val_cols, k = 8L, power = 2,
+                           lon = "lon", lat = "lat", chunk = 5e6L) {
+  stopifnot(is.data.frame(src), all(c(lon, lat, val_cols) %in% names(src)),
+            requireNamespace("FNN", quietly = TRUE))
+  .load_hex_ext(con)
+  rad <- pi / 180
+  to_xyz <- function(lo, la) cbind(
+    cos(la * rad) * cos(lo * rad),
+    cos(la * rad) * sin(lo * rad),
+    sin(la * rad))
+  src_xyz  <- to_xyz(src[[lon]], src[[lat]])
+  src_vals <- as.matrix(src[, val_cols, drop = FALSE])
+
+  # hex centroids (id + lon/lat)
+  ids <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT hex_id, h3_cell_to_lng(hex_id) AS lon, h3_cell_to_lat(hex_id) AS lat
+     FROM {hex_tbl}"))
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS _idw_vals")
+
+  n <- nrow(ids)
+  first <- TRUE
+  for (s in seq(1L, n, by = chunk)) {
+    e   <- min(s + chunk - 1L, n)
+    knn <- FNN::get.knnx(src_xyz, to_xyz(ids$lon[s:e], ids$lat[s:e]),
+                         k = k, algorithm = "kd_tree")
+    idx <- knn$nn.index                         # FNN field is nn.index, not nn.idx
+    w   <- 1 / (knn$nn.dist ^ power)
+    w[!is.finite(w)] <- 1e12                    # exact hit → that neighbour wins
+    res <- data.frame(hex_id = ids$hex_id[s:e])
+    for (vc in val_cols) {
+      vmat <- matrix(src_vals[, vc][idx], nrow = nrow(idx))  # (nq x k) neighbour vals
+      wv <- w; na <- is.na(vmat); wv[na] <- 0; vmat[na] <- 0
+      den <- rowSums(wv)
+      res[[vc]] <- ifelse(den > 0, rowSums(wv * vmat) / den, NA_real_)
+    }
+    if (first) { DBI::dbWriteTable(con, "_idw_vals", res); first <- FALSE }
+    else       { DBI::dbAppendTable(con, "_idw_vals", res) }
   }
+
+  # append interpolated columns to hex_tbl (join on hex_id)
+  DBI::dbExecute(con, glue::glue("
+    CREATE TABLE {hex_tbl}__i AS
+    SELECT h.*, v.* EXCLUDE (hex_id)
+    FROM {hex_tbl} h JOIN _idw_vals v USING (hex_id)"))
+  DBI::dbExecute(con, glue::glue("DROP TABLE {hex_tbl}"))
+  DBI::dbExecute(con, glue::glue("ALTER TABLE {hex_tbl}__i RENAME TO {hex_tbl}"))
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS _idw_vals")
+  invisible(hex_tbl)
 }
 
 #' Flag hexes inside a polygon (H3 polyfill membership)
@@ -186,18 +255,31 @@ hex_grid_from_raster <- function(r, con, res = HEX_RES,
 #' @param poly path to a polygon file readable by DuckDB `ST_Read` (e.g. `.gpkg`)
 #' @param col name of the boolean membership column to add
 #' @param res H3 resolution the hex grid was built at (default [HEX_RES])
+#' @param buffer if `TRUE` (default) buffer the polygon outward by one hex
+#'   circumradius before polyfilling, so hexes that *overlap* the boundary (not
+#'   only those centred inside) are captured — polyfill is centroid-inclusion, so
+#'   without the buffer up to a half-hex-wide fringe along the boundary is missed
 #' @return invisibly, `hex_tbl`
 #' @export
 #' @concept hex
 #' @importFrom glue glue
-hex_add_membership <- function(con, hex_tbl, poly, col, res = HEX_RES) {
+hex_add_membership <- function(con, hex_tbl, poly, col, res = HEX_RES,
+                               buffer = TRUE) {
   stopifnot(file.exists(poly))
   .load_hex_ext(con, spatial = TRUE)
-  # enumerate the in-polygon hexes (BIGINT, matching hex_tbl.hex_id)
+  # polyfill includes a hex only if its CENTRE is inside the polygon, so a hex
+  # straddling the boundary is dropped. Buffer the polygon outward by one hex
+  # circumradius (= half the longest diameter = the avg edge length) so every
+  # overlapping hex is captured. Buffer in degrees (km / 111.32); slight
+  # over-inclusion at high latitude is harmless (intersected with the ocean grid).
+  geom <- if (buffer)
+    glue::glue("ST_Buffer(ST_Union_Agg(geom), ",
+               "h3_get_hexagon_edge_length_avg({res}, 'km') / 111.32)")
+  else "ST_Union_Agg(geom)"
   DBI::dbExecute(con, glue::glue("
     CREATE OR REPLACE TEMP TABLE _in_poly AS
     WITH parts AS (
-      SELECT UNNEST(ST_Dump(ST_Union_Agg(geom))).geom AS g FROM ST_Read('{poly}'))
+      SELECT UNNEST(ST_Dump({geom})).geom AS g FROM ST_Read('{poly}'))
     SELECT DISTINCT CAST(hex_id AS BIGINT) AS hex_id FROM (
       SELECT unnest(h3_polygon_wkb_to_cells(ST_AsWKB(g), {res})) AS hex_id FROM parts)"))
   DBI::dbExecute(con, glue::glue(
