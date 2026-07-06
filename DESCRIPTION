@@ -29,6 +29,7 @@ Imports:
     glue,
     grDevices,
     gt (>= 0.10.0),
+    here,
     httr2,
     janitor,
     jsonlite,
@@ -46,9 +47,17 @@ Imports:
     terra,
     stringr,
     tibble,
-    tidyr
+    tidyr,
+    yaml
+Suggests:
+    pkgload,
+    quarto,
+    targets,
+    testthat (>= 3.0.0),
+    withr
 Remotes:
     walkerke/mapgl
+Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Config/Needs/website: rmarkdown
