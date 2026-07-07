@@ -59,6 +59,7 @@ constant per hex regardless of model).</p>
 <span>  k <span class="op">=</span> <span class="fl">8L</span>,</span>
 <span>  power <span class="op">=</span> <span class="fl">2</span>,</span>
 <span>  where <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  radius_km <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  out_tbl <span class="op">=</span> <span class="st">"hex_src_w"</span>,</span>
 <span>  chunk <span class="op">=</span> <span class="fl">5000000L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -87,6 +88,14 @@ constant per hex regardless of model).</p>
 <dt id="arg-where">where<a class="anchor" aria-label="anchor" href="#arg-where"></a></dt>
 <dd><p>optional SQL predicate on <code>hex_tbl</code> (e.g. <code>"in_usa"</code>) to limit
 the hexes weighted (a US-only score layer needs only US hexes)</p></dd>
+
+
+<dt id="arg-radius-km">radius_km<a class="anchor" aria-label="anchor" href="#arg-radius-km"></a></dt>
+<dd><p>optional great-circle cap (km): drop source neighbours beyond
+this distance so distant points cannot extrapolate. Paired with a full source
+grid (ocean + absent cells), this reproduces the zero-surround IDW fade — a
+hex beyond ~1 cell of any present value has only absent (0) neighbours in
+range and decays to 0. <code>NULL</code> = keep all k neighbours (default).</p></dd>
 
 
 <dt id="arg-out-tbl">out_tbl<a class="anchor" aria-label="anchor" href="#arg-out-tbl"></a></dt>
