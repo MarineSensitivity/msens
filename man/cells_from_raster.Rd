@@ -30,9 +30,10 @@ a tibble \verb{(cell_id integer, value double)}
 \description{
 For native raster SDMs on a \emph{different} grid than the v8 0.05° (e.g. NCCOS
 density COGs). Zero-fills absent cells within the source extent then bilinear-
-resamples onto the cell grid (the same fade as AquaMaps), masks to ocean, drops
-\verb{< min_value}, and returns \verb{(cell_id, value)}. A source already on the v8
-topology (AquaX, Bio-Oracle) needs no resample — read it against \code{cellid_tif}
-directly.
+resamples onto the cell grid (the same fade as AquaMaps) and returns
+\verb{(cell_id, value)} for cells at/above \code{min_value} — the source's own values
+define coverage (no land mask; a marine SDM simply has no land values). A source
+already on the v8 topology (AquaX, Bio-Oracle) needs no resample — read it
+against \code{cellid_tif} directly.
 }
 \concept{ingest}

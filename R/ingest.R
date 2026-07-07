@@ -1,70 +1,94 @@
-# ingest.R — interpolate/rasterize source models onto the global 0.05° cell grid ----
+# ingest.R — rasterize/resample source models onto the global 0.05° cell grid ----
 #
 # Reusable helpers that turn a source distribution into `model_cell`-shaped
-# (cell_id, value) rows on the v8 global 0.05° grid, masked to ocean via the
-# cell-id COG (build_cell_grid.qmd's `cellid_tif`: cell_id where ocean, NA on land;
-# it also hands `cell_id` back directly). One helper per native format:
-#   - vector ranges  -> cells_from_ranges()  (rasterize polygons; here)
+# (cell_id, value) rows on the v8 GLOBAL 0.05° grid. The grid (build_cell_grid.qmd's
+# `cellid_tif`) carries `cell_id = 1:ncell` for EVERY cell (ocean AND land): v8
+# captures the **whole** distribution and does NOT mask land — a species' global
+# home range matters (birds are largely terrestrial). How marine a range is becomes
+# a derived metric (cells_pct_marine()), not a filter. One helper per native format:
+#   - vector ranges  -> cells_from_ranges()  (exactextractr coverage; here)
 #   - raster SDMs     -> cells_from_raster()  (resample; here)
 #   - AquaMaps 0.5°   -> a bilinear-weight JOIN in DuckDB (ingest_aquamaps.qmd),
-#     kept in that notebook because it is SQL over am.duckdb + a precomputed w05.
+#     kept there because it is SQL over am.duckdb + a precomputed w05 (ocean cells).
 
-#' Rasterize range/coverage polygons onto the global 0.05° cell grid
+#' Rasterize range polygons onto the global 0.05° cell grid (whole range)
 #'
 #' Turns presence polygons (an IUCN/BOTW/NMFS range, a critical-habitat polygon)
-#' into `(cell_id, value)` on the v8 grid, masked to ocean. By default this is v7's
-#' behaviour — a cell whose centre falls in the polygon gets `value` (100 =
-#' presence). Set `cover = TRUE` for coverage-weighted values (the fraction of each
-#' cell covered by the polygon, × `value`), which softens range edges.
+#' into `(cell_id, value)` on the v8 grid, capturing the **whole** distribution —
+#' land AND ocean (v8 does not mask land). Uses `exactextractr`, which is fast and
+#' robust to messy geometry (self-intersections, MULTISURFACE — the usual range-map
+#' "funk"). By default every cell the polygon overlaps gets `value` (100 =
+#' presence); `cover = TRUE` weights by the fraction of each cell covered. Marine
+#' share is separate — see [cells_pct_marine()].
 #'
-#' @param x an `sf` or `SpatVector` of (multi)polygons in EPSG:4326 [-180,180]
-#' @param cellid_tif path to the global cell-id COG (`cell_id` where ocean, NA land)
-#' @param value presence value for a covered cell (default 100, matching v7 ranges)
+#' @param x an `sf`/`SpatVector` of (multi)polygons in EPSG:4326 [-180,180]
+#' @param cellid_tif path to the GLOBAL cell-id COG (`cell_id` for every cell)
+#' @param value presence value for a covered cell (default 100)
 #' @param cover logical; `TRUE` = coverage fraction × `value`, `FALSE` (default) =
-#'   binary presence by cell-centre (v7-consistent)
-#' @param min_value drop cells at or below this (default 0)
-#' @return a tibble `(cell_id integer, value double)` for ocean cells the polygons
-#'   cover; empty tibble if none
+#'   flat `value` for any overlap
+#' @param min_coverage keep cells whose covered fraction exceeds this (default 0 =
+#'   any overlap; use 0.5 for a majority/centre-like rule)
+#' @return a tibble `(cell_id integer, value double)`; empty if no overlap
 #' @examples
 #' \dontrun{
-#' r <- msens::cells_from_ranges(ply_sp, cellid_tif)          # binary presence = 100
-#' r <- msens::cells_from_ranges(ply_sp, cellid_tif, cover = TRUE)  # coverage-weighted
+#' r <- msens::cells_from_ranges(ply_sp, cellid_tif)               # presence = 100, whole range
+#' r <- msens::cells_from_ranges(ply_sp, cellid_tif, cover = TRUE) # coverage-weighted
 #' }
 #' @export
 #' @concept ingest
 #' @importFrom tibble tibble
 cells_from_ranges <- function(x, cellid_tif, value = 100, cover = FALSE,
-                              min_value = 0) {
-  stopifnot(file.exists(cellid_tif))
-  v <- if (inherits(x, "SpatVector")) x else terra::vect(x)
-  stopifnot(terra::geomtype(v) == "polygons", terra::nrow(v) > 0)
+                              min_coverage = 0) {
+  stopifnot(file.exists(cellid_tif),
+            requireNamespace("exactextractr", quietly = TRUE),
+            requireNamespace("sf", quietly = TRUE))
+  # range polygons are often invalid under s2 (duplicate vertices, self-touch);
+  # make-valid + union with the planar GEOS engine, which tolerates that "funk"
+  op <- sf::sf_use_s2(FALSE); on.exit(sf::sf_use_s2(op), add = TRUE)
+  x    <- sf::st_make_valid(sf::st_as_sf(x))
+  poly <- sf::st_sf(geometry = sf::st_union(sf::st_geometry(x)))
 
-  # cell_id where ocean, NA land; empty if the range is outside the grid extent
-  r_cell <- tryCatch(terra::crop(terra::rast(cellid_tif), terra::ext(v)),
-                     error = function(e) NULL)
-  if (is.null(r_cell) || terra::ncell(r_cell) == 0)
-    return(tibble::tibble(cell_id = integer(), value = double()))
+  # exact_extract returns, per covered cell, the raster value (= cell_id) + the
+  # fraction of the cell the polygon covers; only the polygon window is read
+  df <- exactextractr::exact_extract(
+    terra::rast(cellid_tif), poly, progress = FALSE)[[1]]
+  df <- df[!is.na(df$value) & df$coverage_fraction > min_coverage, , drop = FALSE]
+  if (nrow(df) == 0) return(tibble::tibble(cell_id = integer(), value = double()))
 
-  r_val <- if (cover) {
-    terra::rasterize(v, r_cell, cover = TRUE) * value             # fraction of cell covered
-  } else {
-    terra::rasterize(v, r_cell, field = 1) * value                # centre-in-polygon presence
-  }
-  r_val[r_val <= min_value] <- NA
+  val  <- if (cover) round(df$coverage_fraction * value, 2) else as.double(value)
+  keep <- val > 0                                          # drop negligible (fp-sliver) cover cells
+  tibble::tibble(cell_id = as.integer(df$value[keep]), value = val[keep])
+}
 
-  s <- c(r_val, r_cell); names(s) <- c("value", "cell_id")
-  d <- terra::as.data.frame(s, na.rm = TRUE)                      # ocean-masked (r_cell NA on land)
-  tibble::tibble(cell_id = as.integer(d$cell_id), value = round(d$value, 2))
+#' Percent of a model's cells that are marine (ocean)
+#'
+#' A derived metric for a range that spans land + ocean: the share of its cells
+#' that are ocean. v8 keeps the whole range ([cells_from_ranges()]); this reports
+#' how marine it is (e.g. a seabird ~30% marine, a whale ~100%).
+#'
+#' @param cell_ids integer cell ids of a model's cells
+#' @param ocean_cell_ids integer cell ids that are ocean (e.g. the `cell` table's)
+#' @param area_km2 optional per-cell areas aligned to `cell_ids` for an
+#'   area-weighted percent; `NULL` (default) = cell-count percent
+#' @return numeric percent in [0,100], or `NA` if `cell_ids` is empty
+#' @export
+#' @concept ingest
+cells_pct_marine <- function(cell_ids, ocean_cell_ids, area_km2 = NULL) {
+  if (length(cell_ids) == 0) return(NA_real_)
+  is_ocean <- cell_ids %in% ocean_cell_ids
+  if (is.null(area_km2)) round(100 * mean(is_ocean), 1)
+  else                   round(100 * sum(area_km2[is_ocean]) / sum(area_km2), 1)
 }
 
 #' Resample a raster SDM onto the global 0.05° cell grid
 #'
 #' For native raster SDMs on a *different* grid than the v8 0.05° (e.g. NCCOS
 #' density COGs). Zero-fills absent cells within the source extent then bilinear-
-#' resamples onto the cell grid (the same fade as AquaMaps), masks to ocean, drops
-#' `< min_value`, and returns `(cell_id, value)`. A source already on the v8
-#' topology (AquaX, Bio-Oracle) needs no resample — read it against `cellid_tif`
-#' directly.
+#' resamples onto the cell grid (the same fade as AquaMaps) and returns
+#' `(cell_id, value)` for cells at/above `min_value` — the source's own values
+#' define coverage (no land mask; a marine SDM simply has no land values). A source
+#' already on the v8 topology (AquaX, Bio-Oracle) needs no resample — read it
+#' against `cellid_tif` directly.
 #'
 #' @param r a `SpatRaster` (single layer) in EPSG:4326
 #' @param cellid_tif path to the global cell-id COG

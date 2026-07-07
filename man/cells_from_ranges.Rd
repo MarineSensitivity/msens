@@ -2,37 +2,39 @@
 % Please edit documentation in R/ingest.R
 \name{cells_from_ranges}
 \alias{cells_from_ranges}
-\title{Rasterize range/coverage polygons onto the global 0.05° cell grid}
+\title{Rasterize range polygons onto the global 0.05° cell grid (whole range)}
 \usage{
-cells_from_ranges(x, cellid_tif, value = 100, cover = FALSE, min_value = 0)
+cells_from_ranges(x, cellid_tif, value = 100, cover = FALSE, min_coverage = 0)
 }
 \arguments{
-\item{x}{an \code{sf} or \code{SpatVector} of (multi)polygons in EPSG:4326 \link{-180,180}}
+\item{x}{an \code{sf}/\code{SpatVector} of (multi)polygons in EPSG:4326 \link{-180,180}}
 
-\item{cellid_tif}{path to the global cell-id COG (\code{cell_id} where ocean, NA land)}
+\item{cellid_tif}{path to the GLOBAL cell-id COG (\code{cell_id} for every cell)}
 
-\item{value}{presence value for a covered cell (default 100, matching v7 ranges)}
+\item{value}{presence value for a covered cell (default 100)}
 
 \item{cover}{logical; \code{TRUE} = coverage fraction × \code{value}, \code{FALSE} (default) =
-binary presence by cell-centre (v7-consistent)}
+flat \code{value} for any overlap}
 
-\item{min_value}{drop cells at or below this (default 0)}
+\item{min_coverage}{keep cells whose covered fraction exceeds this (default 0 =
+any overlap; use 0.5 for a majority/centre-like rule)}
 }
 \value{
-a tibble \verb{(cell_id integer, value double)} for ocean cells the polygons
-cover; empty tibble if none
+a tibble \verb{(cell_id integer, value double)}; empty if no overlap
 }
 \description{
 Turns presence polygons (an IUCN/BOTW/NMFS range, a critical-habitat polygon)
-into \verb{(cell_id, value)} on the v8 grid, masked to ocean. By default this is v7's
-behaviour — a cell whose centre falls in the polygon gets \code{value} (100 =
-presence). Set \code{cover = TRUE} for coverage-weighted values (the fraction of each
-cell covered by the polygon, × \code{value}), which softens range edges.
+into \verb{(cell_id, value)} on the v8 grid, capturing the \strong{whole} distribution —
+land AND ocean (v8 does not mask land). Uses \code{exactextractr}, which is fast and
+robust to messy geometry (self-intersections, MULTISURFACE — the usual range-map
+"funk"). By default every cell the polygon overlaps gets \code{value} (100 =
+presence); \code{cover = TRUE} weights by the fraction of each cell covered. Marine
+share is separate — see \code{\link[=cells_pct_marine]{cells_pct_marine()}}.
 }
 \examples{
 \dontrun{
-r <- msens::cells_from_ranges(ply_sp, cellid_tif)          # binary presence = 100
-r <- msens::cells_from_ranges(ply_sp, cellid_tif, cover = TRUE)  # coverage-weighted
+r <- msens::cells_from_ranges(ply_sp, cellid_tif)               # presence = 100, whole range
+r <- msens::cells_from_ranges(ply_sp, cellid_tif, cover = TRUE) # coverage-weighted
 }
 }
 \concept{ingest}
