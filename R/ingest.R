@@ -39,7 +39,9 @@ cells_from_ranges <- function(x, cellid_tif, value = 100, cover = FALSE,
   v <- if (inherits(x, "SpatVector")) x else terra::vect(x)
   stopifnot(terra::geomtype(v) == "polygons", terra::nrow(v) > 0)
 
-  r_cell <- terra::crop(terra::rast(cellid_tif), terra::ext(v))   # cell_id where ocean, NA land
+  # cell_id where ocean, NA land; empty if the range is outside the grid extent
+  r_cell <- tryCatch(terra::crop(terra::rast(cellid_tif), terra::ext(v)),
+                     error = function(e) NULL)
   if (is.null(r_cell) || terra::ncell(r_cell) == 0)
     return(tibble::tibble(cell_id = integer(), value = double()))
 
