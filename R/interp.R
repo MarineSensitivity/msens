@@ -10,6 +10,19 @@
 # models, so precompute them ONCE with hex_grid_weights() and apply them to each
 # model with model_hex_from_weights() (one kNN, then a sparse weighted sum per
 # model — far cheaper than a per-model kNN).
+#
+# ZERO-SURROUND — do not regress ----------------------------------------------
+# IDW extrapolates: past the data edge it just holds the nearest values, giving
+# bleed and speckled drop-out holes. To make a distribution fade cleanly to 0
+# just beyond its footprint, the source `src` passed to hex_grid_weights() MUST
+# be the FULL grid (ocean AND land / absent cells), NOT only the cells a model
+# occupies — the absent cells act as the surrounding zeros. Pair that with
+# `radius_km` ~= one source-cell width so distant present cells cannot reach a
+# hex. A model then supplies values only for its present cells; absent neighbours
+# contribute 0 to the numerator but stay in `w_total`, so the surface decays over
+# ~1 cell. This reproduces the v7 "buffer the range by one cell, add zero points,
+# IDW with radius = cell width" method (explore_interpolation.qmd `resample_smooth`).
+# Verified vs source on the Hawaii edge 2026-07-07. See feedback_hex_interpolation.
 
 #' Canonical global 0.5-degree cell index for lon/lat
 #'
@@ -43,6 +56,11 @@ cell_i_grid <- function(lon, lat, res = 0.5) {
 #' @param k,power IDW parameters (default k=8, power=2)
 #' @param where optional SQL predicate on `hex_tbl` (e.g. `"in_usa"`) to limit
 #'   the hexes weighted (a US-only score layer needs only US hexes)
+#' @param radius_km optional great-circle cap (km): drop source neighbours beyond
+#'   this distance so distant points cannot extrapolate. Paired with a full source
+#'   grid (ocean + absent cells), this reproduces the zero-surround IDW fade — a
+#'   hex beyond ~1 cell of any present value has only absent (0) neighbours in
+#'   range and decays to 0. `NULL` = keep all k neighbours (default).
 #' @param out_tbl base name for the weight tables (default "hex_src_w")
 #' @param chunk hex rows per kd-tree batch (default 5e6)
 #' @return invisibly, `out_tbl`
@@ -50,8 +68,8 @@ cell_i_grid <- function(lon, lat, res = 0.5) {
 #' @concept interp
 #' @importFrom glue glue
 hex_grid_weights <- function(con, hex_tbl, src, k = 8L, power = 2,
-                             where = NULL, out_tbl = "hex_src_w",
-                             chunk = 5e6L) {
+                             where = NULL, radius_km = NULL,
+                             out_tbl = "hex_src_w", chunk = 5e6L) {
   stopifnot(all(c("src_i", "lon", "lat") %in% names(src)),
             requireNamespace("FNN", quietly = TRUE))
   DBI::dbExecute(con, "INSTALL h3 FROM community; LOAD h3;")
@@ -59,6 +77,8 @@ hex_grid_weights <- function(con, hex_tbl, src, k = 8L, power = 2,
   to_xyz <- function(lo, la) cbind(
     cos(la * rad) * cos(lo * rad), cos(la * rad) * sin(lo * rad), sin(la * rad))
   src_xyz <- to_xyz(src$lon, src$lat)
+  # unit-sphere chord distance corresponding to radius_km (great-circle)
+  chord_max <- if (is.null(radius_km)) Inf else 2 * sin((radius_km / 6371) / 2)
 
   ids <- DBI::dbGetQuery(con, glue::glue(
     "SELECT hex_id, h3_cell_to_lng(hex_id) AS lon, h3_cell_to_lat(hex_id) AS lat
@@ -71,11 +91,13 @@ hex_grid_weights <- function(con, hex_tbl, src, k = 8L, power = 2,
     e   <- min(s + chunk - 1L, n)
     knn <- FNN::get.knnx(src_xyz, to_xyz(ids$lon[s:e], ids$lat[s:e]),
                          k = k, algorithm = "kd_tree")
-    w <- 1 / (knn$nn.dist ^ power); w[!is.finite(w)] <- 1e12
+    d <- as.vector(knn$nn.dist)
+    w <- 1 / (d ^ power); w[!is.finite(w)] <- 1e12
+    keep <- d <= chord_max
     long <- data.frame(
-      hex_id = rep(ids$hex_id[s:e], times = k),
-      src_i  = as.integer(src$src_i[as.vector(knn$nn.index)]),
-      w      = as.vector(w))
+      hex_id = rep(ids$hex_id[s:e], times = k)[keep],
+      src_i  = as.integer(src$src_i[as.vector(knn$nn.index)])[keep],
+      w      = w[keep])
     if (first) { DBI::dbWriteTable(con, out_tbl, long); first <- FALSE }
     else       { DBI::dbAppendTable(con, out_tbl, long) }
   }

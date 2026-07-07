@@ -66,12 +66,12 @@ hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
   stopifnot(length(lon) == length(lat))
   .with_con(con, function(con) {
     .load_hex_ext(con)
-    d <- data.frame(.i = seq_along(lon), lon = lon, lat = lat)
+    d <- data.frame(ord = seq_along(lon), lon = lon, lat = lat)
     duckdb::duckdb_register(con, "hid_tmp", d)
     on.exit(duckdb::duckdb_unregister(con, "hid_tmp"), add = TRUE)
     DBI::dbGetQuery(con, glue::glue(
       "SELECT CAST(h3_latlng_to_cell(lat, lon, {res}) AS BIGINT) AS hex_id
-       FROM hid_tmp ORDER BY .i"))$hex_id
+       FROM hid_tmp ORDER BY ord"))$hex_id
   })
 }
 
@@ -85,11 +85,11 @@ hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
 hex_id_to_string <- function(hex_id, con = NULL) {
   .with_con(con, function(con) {
     .load_hex_ext(con)
-    d <- data.frame(.i = seq_along(hex_id), hex_id = hex_id)
+    d <- data.frame(ord = seq_along(hex_id), hex_id = hex_id)
     duckdb::duckdb_register(con, "hs_tmp", d)
     on.exit(duckdb::duckdb_unregister(con, "hs_tmp"), add = TRUE)
     DBI::dbGetQuery(con,
-      "SELECT h3_h3_to_string(CAST(hex_id AS UBIGINT)) AS s FROM hs_tmp ORDER BY .i")$s
+      "SELECT h3_h3_to_string(CAST(hex_id AS UBIGINT)) AS s FROM hs_tmp ORDER BY ord")$s
   })
 }
 
@@ -104,14 +104,14 @@ hex_id_to_string <- function(hex_id, con = NULL) {
 hex_centroids <- function(hex_id, con = NULL) {
   .with_con(con, function(con) {
     .load_hex_ext(con)
-    d <- data.frame(.i = seq_along(hex_id), hex_id = hex_id)
+    d <- data.frame(ord = seq_along(hex_id), hex_id = hex_id)
     duckdb::duckdb_register(con, "hc_tmp", d)
     on.exit(duckdb::duckdb_unregister(con, "hc_tmp"), add = TRUE)
     DBI::dbGetQuery(con,
       "SELECT CAST(hex_id AS BIGINT) AS hex_id,
               h3_cell_to_lng(hex_id) AS lon,
               h3_cell_to_lat(hex_id) AS lat
-       FROM hc_tmp ORDER BY .i") |> tibble::as_tibble()
+       FROM hc_tmp ORDER BY ord") |> tibble::as_tibble()
   })
 }
 

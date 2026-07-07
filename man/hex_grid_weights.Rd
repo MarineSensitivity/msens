@@ -11,6 +11,7 @@ hex_grid_weights(
   k = 8L,
   power = 2,
   where = NULL,
+  radius_km = NULL,
   out_tbl = "hex_src_w",
   chunk = 5000000L
 )
@@ -26,6 +27,12 @@ hex_grid_weights(
 
 \item{where}{optional SQL predicate on \code{hex_tbl} (e.g. \code{"in_usa"}) to limit
 the hexes weighted (a US-only score layer needs only US hexes)}
+
+\item{radius_km}{optional great-circle cap (km): drop source neighbours beyond
+this distance so distant points cannot extrapolate. Paired with a full source
+grid (ocean + absent cells), this reproduces the zero-surround IDW fade — a
+hex beyond ~1 cell of any present value has only absent (0) neighbours in
+range and decays to 0. \code{NULL} = keep all k neighbours (default).}
 
 \item{out_tbl}{base name for the weight tables (default "hex_src_w")}
 
