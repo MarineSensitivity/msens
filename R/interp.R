@@ -1,5 +1,9 @@
 # interp.R — interpolate source model surfaces onto the H3 hex grid ----
 #
+# NOTE: DORMANT. v8 rolled back to a global 0.05 degree raster cell grid, where
+# AquaMaps interpolation is a terra bilinear resample (see ingest_aquamaps.qmd),
+# not this hex-weight machinery. Retained, documented, and tested for future H3 use.
+#
 # The v8 SDM ingest pattern: interpolate each source model onto hex centroids by
 # inverse-distance weighting (see the hex.R INTERPOLATION PRINCIPLE — never
 # inherit a containing pixel), producing (mdl_seq, hex_id, value) rows written to

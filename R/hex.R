@@ -1,7 +1,10 @@
-# hex.R — H3 hexagon grid helpers (v8 spatial sampling unit, res 7) ----
+# hex.R — H3 hexagon grid helpers (DORMANT — retained for future use) ----
 #
-# v8 replaces the 0.05 degree raster cell with the H3 resolution-7 hexagon
-# (~5.16 km^2) as the core sampling/scoring/serving unit.
+# NOTE: v8 rolled BACK from H3 hexagons to a global 0.05 degree raster cell grid
+# (see build_cell_grid.qmd / paths.R). These H3 helpers are NOT used by the v8
+# pipeline; they are kept, documented, and tested for a future H3-based effort.
+# The 0.05 degree cell equivalents live in msens/R/calc.R + interp.R uses
+# cell_i_grid()/hex_grid_weights are hex-oriented (also dormant).
 #
 # hex_id is stored as BIGINT (every valid H3 index reserves bit 63, so it fits in
 # signed 64-bit) to match the OBIS h3t store (`idx_h3.cell_id`) for cast-free
