@@ -4,7 +4,14 @@
 \alias{cells_from_ranges}
 \title{Rasterize range polygons onto the global 0.05° cell grid (whole range)}
 \usage{
-cells_from_ranges(x, cellid_tif, value = 100, cover = FALSE, min_coverage = 0)
+cells_from_ranges(
+  x,
+  cellid_tif,
+  value = 100,
+  cover = FALSE,
+  min_coverage = 0,
+  max_vertices = 1000
+)
 }
 \arguments{
 \item{x}{an \code{sf}/\code{SpatVector} of (multi)polygons in EPSG:4326 \link{-180,180}}
@@ -21,6 +28,14 @@ flat \code{value} for any overlap}
 
 \item{min_coverage}{keep cells whose covered fraction exceeds this (default 0 =
 any overlap; use 0.5 for a majority/centre-like rule)}
+
+\item{max_vertices}{subdivide the range into chunks of at most this many
+vertices before rasterizing (default 1000). A globe-spanning range (a
+wide-ranging seabird) is one massive multipolygon that hangs \code{st_union} /
+\code{exact_extract}; subdividing bounds each chunk's raster window so it never
+touches the whole-globe polygon. Cells are de-duplicated afterward, so
+chunking is equivalent to a union here. Needs the \code{lwgeom} package; without
+it, falls back to the single-union path.}
 }
 \value{
 a tibble \verb{(cell_id integer, value double)}; empty if no overlap

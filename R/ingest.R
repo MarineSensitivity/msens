@@ -31,6 +31,13 @@
 #'   flat `value` for any overlap
 #' @param min_coverage keep cells whose covered fraction exceeds this (default 0 =
 #'   any overlap; use 0.5 for a majority/centre-like rule)
+#' @param max_vertices subdivide the range into chunks of at most this many
+#'   vertices before rasterizing (default 1000). A globe-spanning range (a
+#'   wide-ranging seabird) is one massive multipolygon that hangs `st_union` /
+#'   `exact_extract`; subdividing bounds each chunk's raster window so it never
+#'   touches the whole-globe polygon. Cells are de-duplicated afterward, so
+#'   chunking is equivalent to a union here. Needs the `lwgeom` package; without
+#'   it, falls back to the single-union path.
 #' @return a tibble `(cell_id integer, value double)`; empty if no overlap
 #' @examples
 #' \dontrun{
@@ -41,22 +48,32 @@
 #' @concept ingest
 #' @importFrom tibble tibble
 cells_from_ranges <- function(x, cellid_tif, value = 100, cover = FALSE,
-                              min_coverage = 0) {
+                              min_coverage = 0, max_vertices = 1000) {
   stopifnot(file.exists(cellid_tif),
             requireNamespace("exactextractr", quietly = TRUE),
             requireNamespace("sf", quietly = TRUE))
   # range polygons are often invalid under s2 (duplicate vertices, self-touch);
-  # make-valid + union with the planar GEOS engine, which tolerates that "funk"
+  # make-valid with the planar GEOS engine, which tolerates that "funk"
   op <- sf::sf_use_s2(FALSE); on.exit(sf::sf_use_s2(op), add = TRUE)
   x    <- sf::st_make_valid(sf::st_as_sf(x))
-  poly <- sf::st_sf(geometry = sf::st_union(sf::st_geometry(x)))
+  geom <- sf::st_combine(sf::st_geometry(x))               # cheap merge, no dissolve
+
+  # subdivide into vertex-bounded chunks so a huge global range doesn't hang the
+  # union / whole-globe exact_extract; each chunk reads only its own small window
+  chunks <- tryCatch(
+    sf::st_sf(geometry = sf::st_collection_extract(
+      lwgeom::st_subdivide(geom, max_vertices), "POLYGON")),
+    error = function(e) sf::st_sf(geometry = sf::st_union(geom)))
 
   # exact_extract returns, per covered cell, the raster value (= cell_id) + the
-  # fraction of the cell the polygon covers; only the polygon window is read
-  df <- exactextractr::exact_extract(
-    terra::rast(cellid_tif), poly, progress = FALSE)[[1]]
+  # fraction of the cell the chunk covers; combine chunks then de-dup cells
+  df <- do.call(rbind, exactextractr::exact_extract(
+    terra::rast(cellid_tif), chunks, progress = FALSE))
   df <- df[!is.na(df$value) & df$coverage_fraction > min_coverage, , drop = FALSE]
   if (nrow(df) == 0) return(tibble::tibble(cell_id = integer(), value = double()))
+  # a cell may fall in >1 chunk -> keep its greatest coverage
+  df <- df[order(df$value, -df$coverage_fraction), , drop = FALSE]
+  df <- df[!duplicated(df$value), , drop = FALSE]
 
   val  <- if (cover) round(df$coverage_fraction * value, 2) else as.double(value)
   keep <- val > 0                                          # drop negligible (fp-sliver) cover cells
