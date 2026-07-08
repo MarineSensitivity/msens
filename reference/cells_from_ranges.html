@@ -74,7 +74,10 @@ share is separate — see <code><a href="cells_pct_marine.html">cells_pct_marine
 
 
 <dt id="arg-value">value<a class="anchor" aria-label="anchor" href="#arg-value"></a></dt>
-<dd><p>presence value for a covered cell (default 100)</p></dd>
+<dd><p>value for a covered cell. For range datasets this is the species'
+<strong>extinction-risk score from <code><a href="compute_er_score.html">compute_er_score()</a></code></strong> (e.g.
+<code>compute_er_score("NMFS:EN")</code> = 100, <code>"NMFS:TN"</code> = 50, <code>"IUCN:CR"</code> = 50) —
+NEVER a hard-coded number. Default 100 is only a convenience.</p></dd>
 
 
 <dt id="arg-cover">cover<a class="anchor" aria-label="anchor" href="#arg-cover"></a></dt>
@@ -109,7 +112,7 @@ any overlap; use 0.5 for a majority/centre-like rule)</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>
