@@ -58,7 +58,14 @@ share is separate — see <code><a href="cells_pct_marine.html">cells_pct_marine
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cells_from_ranges</span><span class="op">(</span><span class="va">x</span>, <span class="va">cellid_tif</span>, value <span class="op">=</span> <span class="fl">100</span>, cover <span class="op">=</span> <span class="cn">FALSE</span>, min_coverage <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cells_from_ranges</span><span class="op">(</span></span>
+<span>  <span class="va">x</span>,</span>
+<span>  <span class="va">cellid_tif</span>,</span>
+<span>  value <span class="op">=</span> <span class="fl">100</span>,</span>
+<span>  cover <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  min_coverage <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  max_vertices <span class="op">=</span> <span class="fl">1000</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -88,6 +95,16 @@ flat <code>value</code> for any overlap</p></dd>
 <dt id="arg-min-coverage">min_coverage<a class="anchor" aria-label="anchor" href="#arg-min-coverage"></a></dt>
 <dd><p>keep cells whose covered fraction exceeds this (default 0 =
 any overlap; use 0.5 for a majority/centre-like rule)</p></dd>
+
+
+<dt id="arg-max-vertices">max_vertices<a class="anchor" aria-label="anchor" href="#arg-max-vertices"></a></dt>
+<dd><p>subdivide the range into chunks of at most this many
+vertices before rasterizing (default 1000). A globe-spanning range (a
+wide-ranging seabird) is one massive multipolygon that hangs <code>st_union</code> /
+<code>exact_extract</code>; subdividing bounds each chunk's raster window so it never
+touches the whole-globe polygon. Cells are de-duplicated afterward, so
+chunking is equivalent to a union here. Needs the <code>lwgeom</code> package; without
+it, falls back to the single-union path.</p></dd>
 
 </dl></div>
     <div class="section level2">
