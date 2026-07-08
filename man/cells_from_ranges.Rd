@@ -11,7 +11,10 @@ cells_from_ranges(x, cellid_tif, value = 100, cover = FALSE, min_coverage = 0)
 
 \item{cellid_tif}{path to the GLOBAL cell-id COG (\code{cell_id} for every cell)}
 
-\item{value}{presence value for a covered cell (default 100)}
+\item{value}{value for a covered cell. For range datasets this is the species'
+\strong{extinction-risk score from \code{\link[=compute_er_score]{compute_er_score()}}} (e.g.
+\code{compute_er_score("NMFS:EN")} = 100, \code{"NMFS:TN"} = 50, \code{"IUCN:CR"} = 50) —
+NEVER a hard-coded number. Default 100 is only a convenience.}
 
 \item{cover}{logical; \code{TRUE} = coverage fraction × \code{value}, \code{FALSE} (default) =
 flat \code{value} for any overlap}

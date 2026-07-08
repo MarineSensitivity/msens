@@ -23,7 +23,10 @@
 #'
 #' @param x an `sf`/`SpatVector` of (multi)polygons in EPSG:4326 [-180,180]
 #' @param cellid_tif path to the GLOBAL cell-id COG (`cell_id` for every cell)
-#' @param value presence value for a covered cell (default 100)
+#' @param value value for a covered cell. For range datasets this is the species'
+#'   **extinction-risk score from [compute_er_score()]** (e.g.
+#'   `compute_er_score("NMFS:EN")` = 100, `"NMFS:TN"` = 50, `"IUCN:CR"` = 50) —
+#'   NEVER a hard-coded number. Default 100 is only a convenience.
 #' @param cover logical; `TRUE` = coverage fraction × `value`, `FALSE` (default) =
 #'   flat `value` for any overlap
 #' @param min_coverage keep cells whose covered fraction exceeds this (default 0 =
