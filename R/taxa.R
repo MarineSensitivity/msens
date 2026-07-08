@@ -1,3 +1,31 @@
+#' Clean a scientific name for taxonomic matching
+#'
+#' Normalizes messy source names (esp. USFWS) so they match WoRMS/BOTW: drops
+#' parenthetical synonym notation like `(=oxyrhynchus)`, an `spp.`/`ssp.` marker, and
+#' collapses whitespace. Use `binomial = TRUE` to also reduce a trinomial (subspecies)
+#' to its `Genus species` binomial — a useful fallback when WoRMS has the species but
+#' not the subspecies.
+#'
+#' @param x character vector of scientific names
+#' @param binomial logical; if `TRUE`, keep only the first two words (default `FALSE`)
+#' @return cleaned character vector
+#' @examples
+#' clean_sci_name("Acipenser oxyrinchus (=oxyrhynchus) desotoi")  # "Acipenser oxyrinchus desotoi"
+#' clean_sci_name("Acipenser oxyrinchus (=oxyrhynchus) desotoi", binomial = TRUE)  # "Acipenser oxyrinchus"
+#' @export
+#' @concept taxa
+#' @importFrom stringr str_replace_all str_squish str_split_fixed
+clean_sci_name <- function(x, binomial = FALSE) {
+  x <- stringr::str_replace_all(x, "\\s*\\(=[^)]*\\)", "")          # drop (=synonym)
+  x <- stringr::str_replace_all(x, "\\s+(ssp|spp|subsp|var)\\.?\\s+", " ")
+  x <- stringr::str_squish(x)
+  if (binomial) {
+    w <- stringr::str_split_fixed(x, " ", 3)
+    x <- ifelse(w[, 2] == "", x, paste(w[, 1], w[, 2]))
+  }
+  x
+}
+
 #' Match taxa to spp.duckdb via cascade
 #'
 #' Match species records to the canonical taxonomy in spp.duckdb using a
