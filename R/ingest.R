@@ -38,7 +38,7 @@
 #'   touches the whole-globe polygon. Cells are de-duplicated afterward, so
 #'   chunking is equivalent to a union here. Needs the `lwgeom` package; without
 #'   it, falls back to the single-union path.
-#' @return a tibble `(cell_id integer, value double)`; empty if no overlap
+#' @return a tibble `(cell_id integer, val double)`; empty if no overlap
 #' @examples
 #' \dontrun{
 #' r <- msens::cells_from_ranges(ply_sp, cellid_tif)               # presence = 100, whole range
@@ -75,9 +75,9 @@ cells_from_ranges <- function(x, cellid_tif, value = 100, cover = FALSE,
   df <- df[order(df$value, -df$coverage_fraction), , drop = FALSE]
   df <- df[!duplicated(df$value), , drop = FALSE]
 
-  val  <- if (cover) round(df$coverage_fraction * value, 2) else as.double(value)
-  keep <- val > 0                                          # drop negligible (fp-sliver) cover cells
-  tibble::tibble(cell_id = as.integer(df$value[keep]), value = val[keep])
+  v    <- if (cover) round(df$coverage_fraction * value, 2) else as.double(value)
+  keep <- v > 0                                            # drop negligible (fp-sliver) cover cells
+  tibble::tibble(cell_id = as.integer(df$value[keep]), val = v[keep])   # `val` not `value` (SQL reserved word)
 }
 
 #' Percent of a model's cells that are marine (ocean)
@@ -116,7 +116,7 @@ cells_pct_marine <- function(cell_ids, ocean_cell_ids, area_km2 = NULL) {
 #' @param min_value drop resampled cells below this (default 1)
 #' @param zero_fill zero-fill NA within the source extent before resampling so the
 #'   surface fades to 0 at its edge (default TRUE)
-#' @return a tibble `(cell_id integer, value double)`
+#' @return a tibble `(cell_id integer, val double)`
 #' @export
 #' @concept ingest
 #' @importFrom tibble tibble
@@ -128,7 +128,7 @@ cells_from_raster <- function(r, cellid_tif, method = "bilinear",
   r_val  <- terra::resample(r, r_cell, method = method)
   r_val[r_val < min_value] <- NA
 
-  s <- c(r_val, r_cell); names(s) <- c("value", "cell_id")
+  s <- c(r_val, r_cell); names(s) <- c("v", "cell_id")
   d <- terra::as.data.frame(s, na.rm = TRUE)
-  tibble::tibble(cell_id = as.integer(d$cell_id), value = round(d$value, 2))
+  tibble::tibble(cell_id = as.integer(d$cell_id), val = round(d$v, 2))   # `val` not `value`
 }

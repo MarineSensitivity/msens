@@ -25,7 +25,7 @@ cells_from_raster(
 surface fades to 0 at its edge (default TRUE)}
 }
 \value{
-a tibble \verb{(cell_id integer, value double)}
+a tibble \verb{(cell_id integer, val double)}
 }
 \description{
 For native raster SDMs on a \emph{different} grid than the v8 0.05° (e.g. NCCOS

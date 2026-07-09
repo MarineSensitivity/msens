@@ -38,7 +38,7 @@ chunking is equivalent to a union here. Needs the \code{lwgeom} package; without
 it, falls back to the single-union path.}
 }
 \value{
-a tibble \verb{(cell_id integer, value double)}; empty if no overlap
+a tibble \verb{(cell_id integer, val double)}; empty if no overlap
 }
 \description{
 Turns presence polygons (an IUCN/BOTW/NMFS range, a critical-habitat polygon)
