@@ -4,7 +4,7 @@
 \alias{stac_model_cell_item}
 \title{Model-surface Item for a (DuckDB-backed) dataset}
 \usage{
-stac_model_cell_item(ds, cfg, time_periods = NULL)
+stac_model_cell_item(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_)
 }
 \arguments{
 \item{ds}{one-row data.frame from \code{dataset}}

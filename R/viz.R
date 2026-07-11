@@ -361,6 +361,41 @@ cell_tile_url <- function(
 }
 
 
+#' Build a titiler `/cog` tile URL template for a native COG
+#'
+#' Returns an XYZ tile URL template (with `{z}/{x}/{y}`) for titiler's standard
+#' COG tiler, used to render a native per-model COG (e.g. a raw AquaMaps global
+#' range published by [publish_cog()]) as a raster overlay via [add_cell_tiles()].
+#' Unlike [cell_tile_url()] (dense per-cell SQL over a fixed cell-id COG, capped
+#' at ~1M cells), this serves a pyramided COG so a whole global range renders
+#' cheaply at any zoom.
+#'
+#' @param cog_url character(1); full HTTP(S) URL of the COG (e.g. a path-style
+#'   S3 URL to `native/am/{key}.tif`)
+#' @param colormap character; rio-tiler colormap name (default `"spectral_r"`)
+#' @param rescale numeric length-2 `c(min, max)` (default `c(1, 100)`)
+#' @param base character; base URL of the titiler service serving `/cog`
+#' @param tms character; TileMatrixSet id in the route (default `"WebMercatorQuad"`)
+#' @return character(1) tile URL template
+#' @export
+#' @concept viz
+cog_tile_url <- function(
+    cog_url,
+    colormap = "spectral_r", rescale = c(1, 100),
+    base = "https://titiler-v8.marinesensitivity.org",
+    tms  = "WebMercatorQuad") {
+  stopifnot(is.character(cog_url), length(cog_url) == 1, nchar(cog_url) > 0)
+  params <- c(url = utils::URLencode(cog_url, reserved = TRUE),
+              colormap_name = colormap)
+  if (!is.null(rescale)) {
+    stopifnot(is.numeric(rescale), length(rescale) == 2)
+    params <- c(params, rescale = paste(rescale, collapse = ","))
+  }
+  qs <- paste0(names(params), "=", unname(params), collapse = "&")
+  sprintf("%s/cog/tiles/%s/{z}/{x}/{y}.png?%s", sub("/$", "", base), tms, qs)
+}
+
+
 #' Fetch msens cell value statistics for a SQL query
 #'
 #' Calls the msens TiTiler factory `/statistics` endpoint. Returns a named list
