@@ -100,7 +100,7 @@ publish_cog <- function(cell_id, val, out_tif, grid,
 #' @export
 #' @concept publish
 publish_pmtiles <- function(x, out_pmtiles, layer,
-                            minzoom = 0, maxzoom = 6, simplification = 10,
+                            minzoom = 0, maxzoom = 6, simplification = 20,
                             tippecanoe = "tippecanoe", extra = character(0),
                             quiet = TRUE) {
   if (inherits(x, "sf")) {
@@ -114,13 +114,15 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
   } else {
     stopifnot(file.exists(x)); src <- x
   }
-  # simplify + coalesce to keep tiles small WITHOUT dropping whole species
-  # (--no-feature-limit); NOT --no-tile-size-limit, which makes huge global range
-  # polygons produce enormous tiles and run for many minutes each.
+  # the app filters this per-dataset archive to ONE mdl_key, so EVERY feature must
+  # survive at EVERY zoom — never --drop-densest / --coalesce (they drop or merge
+  # species, so a selected range vanishes at low zoom). Keep all features + tame
+  # size with aggressive geometry --simplification and a modest maxzoom (ranges are
+  # coarse; higher zooms overzoom cleanly). Only carry the id attributes.
   args <- c("-o", out_pmtiles, "-l", layer,
             "-Z", minzoom, "-z", maxzoom, "--simplification", simplification,
-            "--drop-densest-as-needed", "--coalesce-densest-as-needed",
-            "--extend-zooms-if-still-dropping", "--no-feature-limit", "--force",
+            "--no-tile-size-limit", "--no-feature-limit",
+            "-y", "mdl_key", "-y", "ds_key", "--force",
             extra, src)
   st <- system2(tippecanoe, as.character(args),
                 stdout = if (quiet) FALSE else "", stderr = if (quiet) FALSE else "")
