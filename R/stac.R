@@ -35,6 +35,8 @@ stac_cfg <- function(version = "v7") {
     titiler_base = "https://titiler.marinesensitivity.org/msens",
     # pg_tileserv vector tiles
     pg_base      = "https://tile.marinesensitivity.org",
+    # v8 partitioned-Parquet release (path-style; the dotted bucket breaks vhost TLS)
+    atlas_base   = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/marine-atlas",
     # full study-area bbox [W,S,E,N] (US EEZ incl. Pacific territories + Alaska)
     bbox         = c(-180, -18, 180, 75))
 }
@@ -72,7 +74,8 @@ sdm_sql_b64 <- function(sql) {
 # ds_key -> sdm:method (open vocab); fall back by source
 .sdm_method <- function(ds_key, source_broad = NA_character_) {
   m <- c(
-    am_0.05             = "env_envelope",
+    am                  = "env_envelope",
+    am_0.05             = "env_envelope",   # v7 alias
     bl                  = "expert_range_polygon",
     rng_iucn            = "expert_range_polygon",
     rng_fws             = "expert_range_polygon",
@@ -200,7 +203,7 @@ stac_dataset_collection <- function(ds, cfg, item_files = character()) {
 #' @return STAC Item as a list
 #' @export
 #' @concept stac
-stac_model_cell_item <- function(ds, cfg, time_periods = NULL) {
+stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_) {
   id     <- paste0("msens-", cfg$version, "-", ds$ds_key, "-model_cell")
   props  <- stac_sdm_props(ds)
   obs_beg<- .iso(ds$date_obs_beg); obs_end <- .iso(ds$date_obs_end)
@@ -234,17 +237,20 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL) {
     }
   }
 
-  # SQL that retrieves a per-taxon surface (literal {mdl_seq} placeholder, filled by clients)
-  sql_tmpl <- "SELECT cell_id, value FROM model_cell WHERE mdl_seq = {mdl_seq}"
-  # a representative baked URL (first mdl_seq) for the web-map link
-  sql_ex   <- "SELECT cell_id, value FROM model_cell WHERE mdl_seq = 1"
+  # SQL that retrieves a per-taxon surface (literal {mdl_key} placeholder, filled by
+  # clients). model_cell holds (mdl_key, cell_id, val); the factory expects a `value`
+  # column, so alias val -> value. The SQL validator blocks read_parquet/httpfs, so
+  # model_cell is a server-side table/view, not a remote parquet scan.
+  sql_tmpl <- "SELECT cell_id, val AS value FROM model_cell WHERE mdl_key = '{mdl_key}'"
+  # a representative baked URL (a real mdl_key from this dataset) for the web-map link
+  sql_ex   <- glue::glue("SELECT cell_id, val AS value FROM model_cell WHERE mdl_key = '{mdl_key_ex %or% \"ms_merge|WORMS:0\"}'")
   b64      <- sdm_sql_b64(sql_ex)
   rescale  <- if (.sdm_response_type(ds$response_type) == "suitability") "0,100" else NULL
   tj       <- glue::glue("{cfg$titiler_base}/tilejson.json?sql={b64}&colormap=spectral_r")
   xyz      <- glue::glue("{cfg$titiler_base}/tiles/{{z}}/{{x}}/{{y}}.png?sql={b64}&colormap=spectral_r")
   if (!is.null(rescale)) { tj <- paste0(tj, "&rescale=", rescale); xyz <- paste0(xyz, "&rescale=", rescale) }
 
-  pq_href <- glue::glue("{cfg$data_base}/{cfg$version}/sdm_parquet/model_cell.parquet/")
+  pq_href <- glue::glue("{cfg$atlas_base}/{cfg$version}/dist_merged/")
 
   list(
     type            = "Feature",
@@ -260,12 +266,12 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL) {
         href  = pq_href,
         type  = "application/vnd.apache.parquet",
         roles = I("data"),
-        title = "model_cell surfaces (partitioned GeoParquet; filter by mdl_seq)",
+        title = "model_cell surfaces (partitioned GeoParquet; filter by mdl_key)",
         `table:primary_geometry` = "cell_id",
         `table:columns` = list(
-          list(name = "mdl_seq", type = "int32",  description = "model id (FK model.mdl_seq)"),
+          list(name = "mdl_key", type = "string", description = "stable model id (FK model.mdl_key)"),
           list(name = "cell_id", type = "int32",  description = "grid cell id (FK cell.cell_id)"),
-          list(name = "value",   type = "double", description = "model value")),
+          list(name = "val",     type = "double", description = "model value")),
         alternate = list(duckdb_sql = list(
           href = cfg$titiler_base,
           `alternate:name` = "Live DuckDB-SQL surface",
@@ -277,7 +283,7 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL) {
       list(rel = "collection", href = "../collection.json"),
       # web-map-links extends Links (not Assets): the live TiTiler endpoints
       list(rel = "xyz",        href = xyz, type = "image/png",
-           title = "Rendered raster tiles via TiTiler (DuckDB SQL); re-bake sql= per mdl_seq"),
+           title = "Rendered raster tiles via TiTiler (DuckDB SQL); re-bake sql= per mdl_key"),
       list(rel = "tilejson",   href = tj,  type = "application/json",
            title = "TileJSON for the DuckDB-SQL surface"),
       list(rel = "self",       href = paste0(
@@ -451,12 +457,16 @@ stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
               file.path(dir_out, version, "collection.json"))
 
   # per DuckDB dataset: build item, then collection (with item link), then item
+  has_tp   <- "time_period" %in% DBI::dbListFields(con, "model")   # v8 registry may omit it
   for (i in seq_len(nrow(datasets))) {
     ds     <- datasets[i, ]
     dir_ds <- file.path(dir_out, version, ds$ds_key)
-    tps    <- DBI::dbGetQuery(con, glue::glue(
-      "SELECT DISTINCT time_period FROM model WHERE ds_key = '{ds$ds_key}'"))$time_period
-    item   <- stac_model_cell_item(ds, cfg, time_periods = tps)
+    tps    <- if (has_tp) DBI::dbGetQuery(con, glue::glue(
+      "SELECT DISTINCT time_period FROM model WHERE ds_key = '{ds$ds_key}'"))$time_period else NULL
+    mk_ex  <- DBI::dbGetQuery(con, glue::glue(
+      "SELECT mdl_key FROM model WHERE ds_key = '{ds$ds_key}' LIMIT 1"))$mdl_key
+    item   <- stac_model_cell_item(ds, cfg, time_periods = tps,
+                                   mdl_key_ex = if (length(mk_ex)) mk_ex[1] else NA_character_)
     item_f <- paste0(item$id, ".json")
     .stac_write(stac_dataset_collection(ds, cfg, item_files = item_f),
                 file.path(dir_ds, "collection.json"))
