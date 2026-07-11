@@ -252,6 +252,22 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
 
   pq_href <- glue::glue("{cfg$atlas_base}/{cfg$version}/dist_merged/")
 
+  # Phase 4b native input surfaces (pyramided): a per-model COG (AquaMaps) or one PMTiles per
+  # dataset (vector ranges), which the species app overlays for whole-range (global) extents.
+  native_stac <- if (identical(ds$ds_key, "am")) {
+    list(cog = list(
+      href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/am/"),
+      type  = "image/tiff; application=geotiff; profile=cloud-optimized",
+      roles = I(c("data", "visual")),
+      title = "Per-model global COGs (overviews); file native/am/{safe(mdl_key)}.tif, served via titiler /cog"))
+  } else if (ds$ds_key %in% c("rng_iucn","rng_fws","ca_nmfs","ch_fws","ch_nmfs","rng_turtle_swot_dps","bl")) {
+    list(pmtiles = list(
+      href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}.pmtiles"),
+      type  = "application/vnd.pmtiles",
+      roles = I(c("data", "visual")),
+      title = "Source range polygons as PMTiles; filter features by the mdl_key property"))
+  } else list()
+
   list(
     type            = "Feature",
     stac_version    = "1.0.0",
@@ -261,7 +277,7 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
     bbox            = I(cfg$bbox),
     geometry        = list(type = "Polygon", coordinates = .bbox_poly(cfg$bbox)),
     properties      = props,
-    assets          = list(
+    assets          = c(list(
       data = list(
         href  = pq_href,
         type  = "application/vnd.apache.parquet",
@@ -276,7 +292,7 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
           href = cfg$titiler_base,
           `alternate:name` = "Live DuckDB-SQL surface",
           roles = I("data"),
-          `sdm:sql_template` = sql_tmpl)))),
+          `sdm:sql_template` = sql_tmpl)))), native_stac),
     links = list(
       list(rel = "root",       href = "../../catalog.json"),
       list(rel = "parent",     href = "../collection.json"),
