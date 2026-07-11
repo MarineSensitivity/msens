@@ -9,7 +9,8 @@ publish_pmtiles(
   out_pmtiles,
   layer,
   minzoom = 0,
-  maxzoom = 7,
+  maxzoom = 6,
+  simplification = 10,
   tippecanoe = "tippecanoe",
   extra = character(0),
   quiet = TRUE
@@ -23,7 +24,11 @@ publish_pmtiles(
 
 \item{layer}{tile layer name (the \code{source_layer} the app references)}
 
-\item{minzoom, maxzoom}{zoom range (default 0..7)}
+\item{minzoom, maxzoom}{zoom range (default 0..6; coarse expert ranges don't
+need street-level detail, and high zoom on huge global polygons is very slow)}
+
+\item{simplification}{tippecanoe \code{--simplification} (default 10; aggressive,
+since ranges are coarse — keeps tiles small without dropping species)}
 
 \item{tippecanoe}{path to the tippecanoe binary (default \code{"tippecanoe"})}
 

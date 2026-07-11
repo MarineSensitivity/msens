@@ -88,7 +88,10 @@ publish_cog <- function(cell_id, val, out_tif, grid,
 #'   (FlatGeobuf / GeoJSON)
 #' @param out_pmtiles output path (`.pmtiles`)
 #' @param layer tile layer name (the `source_layer` the app references)
-#' @param minzoom,maxzoom zoom range (default 0..7)
+#' @param minzoom,maxzoom zoom range (default 0..6; coarse expert ranges don't
+#'   need street-level detail, and high zoom on huge global polygons is very slow)
+#' @param simplification tippecanoe `--simplification` (default 10; aggressive,
+#'   since ranges are coarse — keeps tiles small without dropping species)
 #' @param tippecanoe path to the tippecanoe binary (default `"tippecanoe"`)
 #' @param extra extra tippecanoe CLI args (character vector)
 #' @param quiet suppress tippecanoe stderr (default `TRUE`)
@@ -97,7 +100,7 @@ publish_cog <- function(cell_id, val, out_tif, grid,
 #' @export
 #' @concept publish
 publish_pmtiles <- function(x, out_pmtiles, layer,
-                            minzoom = 0, maxzoom = 7,
+                            minzoom = 0, maxzoom = 6, simplification = 10,
                             tippecanoe = "tippecanoe", extra = character(0),
                             quiet = TRUE) {
   if (inherits(x, "sf")) {
@@ -111,10 +114,13 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
   } else {
     stopifnot(file.exists(x)); src <- x
   }
+  # simplify + coalesce to keep tiles small WITHOUT dropping whole species
+  # (--no-feature-limit); NOT --no-tile-size-limit, which makes huge global range
+  # polygons produce enormous tiles and run for many minutes each.
   args <- c("-o", out_pmtiles, "-l", layer,
-            "-Z", minzoom, "-z", maxzoom,
-            "--drop-densest-as-needed", "--extend-zooms-if-still-dropping",
-            "--no-tile-size-limit", "--no-feature-limit", "--force",
+            "-Z", minzoom, "-z", maxzoom, "--simplification", simplification,
+            "--drop-densest-as-needed", "--coalesce-densest-as-needed",
+            "--extend-zooms-if-still-dropping", "--no-feature-limit", "--force",
             extra, src)
   st <- system2(tippecanoe, as.character(args),
                 stdout = if (quiet) FALSE else "", stderr = if (quiet) FALSE else "")
