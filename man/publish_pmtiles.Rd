@@ -10,7 +10,7 @@ publish_pmtiles(
   layer,
   minzoom = 0,
   maxzoom = 6,
-  simplification = 10,
+  simplification = 20,
   tippecanoe = "tippecanoe",
   extra = character(0),
   quiet = TRUE

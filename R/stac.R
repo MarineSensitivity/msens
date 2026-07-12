@@ -252,21 +252,23 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
 
   pq_href <- glue::glue("{cfg$atlas_base}/{cfg$version}/dist_merged/")
 
-  # Phase 4b native input surfaces (pyramided): a per-model COG (AquaMaps) or one PMTiles per
-  # dataset (vector ranges), which the species app overlays for whole-range (global) extents.
-  native_stac <- if (identical(ds$ds_key, "am")) {
-    list(cog = list(
-      href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/am/"),
+  # Phase 4b native input surfaces (pyramided), one file PER MODEL, driven by the dataset
+  # registry's `native_format` (NOT a hardcoded ds_key list) so a new dataset needs no edit
+  # here — just set `native_format` in its msens: front-matter (-> the `dataset` table):
+  #   raster -> per-model COG under native/{ds_key}/ (titiler /cog);
+  #   vector -> per-model PMTiles under pmtiles/{version}/{ds_key}/.
+  native_stac <- switch(as.character(ds$native_format),
+    raster = list(cog = list(
+      href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}/"),
       type  = "image/tiff; application=geotiff; profile=cloud-optimized",
       roles = I(c("data", "visual")),
-      title = "Per-model global COGs (overviews); file native/am/{safe(mdl_key)}.tif, served via titiler /cog"))
-  } else if (ds$ds_key %in% c("rng_iucn","rng_fws","ca_nmfs","ch_fws","ch_nmfs","rng_turtle_swot_dps","bl")) {
-    list(pmtiles = list(
-      href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}.pmtiles"),
+      title = "Per-model global COGs (overviews); one file per mdl_key, served via titiler /cog")),
+    vector = list(pmtiles = list(
+      href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}/"),
       type  = "application/vnd.pmtiles",
       roles = I(c("data", "visual")),
-      title = "Source range polygons as PMTiles; filter features by the mdl_key property"))
-  } else list()
+      title = "Per-model range PMTiles; one file per mdl_key (filter by the mdl_key property)")),
+    list())
 
   list(
     type            = "Feature",

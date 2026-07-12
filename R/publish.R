@@ -9,6 +9,11 @@
 #   - vector sources (IUCN/FWS/NMFS...) -> one PMTiles per dataset        (publish_pmtiles)
 # See workflows/publish_native.qmd for the orchestration.
 
+# filesystem/URL-safe slug for the sp_id portion of an mdl_key. Defined at package scope (NOT
+# as a closure inside the publish_* helpers) so future/furrr doesn't drag the helper's local
+# environment — a per-model sf can be hundreds of MB — into every parallel worker.
+.slug_sp <- function(s) gsub("^_|_$", "", gsub("[^A-Za-z0-9]+", "_", s))
+
 #' Grid spec for the global cell-id raster
 #'
 #' Plain-list description of the global 0.05° [-180,180] cell-id grid, so
@@ -114,11 +119,11 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
   } else {
     stopifnot(file.exists(x)); src <- x
   }
-  # the app filters this per-dataset archive to ONE mdl_key, so EVERY feature must
-  # survive at EVERY zoom — never --drop-densest / --coalesce (they drop or merge
-  # species, so a selected range vanishes at low zoom). Keep all features + tame
-  # size with aggressive geometry --simplification and a modest maxzoom (ranges are
-  # coarse; higher zooms overzoom cleanly). Only carry the id attributes.
+  # keep EVERY feature at EVERY zoom — never --drop-densest / --coalesce (they drop or
+  # merge features, so a range vanishes at low zoom). For a per-MODEL file (one species;
+  # see publish_pmtiles_models) every feature is the same range, so low-zoom tiles stay
+  # tiny; tame any complex single range with --simplification + a modest maxzoom (ranges
+  # are coarse; higher zooms overzoom cleanly). Only carry the id attributes.
   args <- c("-o", out_pmtiles, "-l", layer,
             "-Z", minzoom, "-z", maxzoom, "--simplification", simplification,
             "--no-tile-size-limit", "--no-feature-limit",
@@ -128,4 +133,116 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
                 stdout = if (quiet) FALSE else "", stderr = if (quiet) FALSE else "")
   if (!identical(st, 0L)) stop("tippecanoe failed (status ", st, ") for ", out_pmtiles)
   invisible(out_pmtiles)
+}
+
+#' Publish per-model PMTiles — one file per `mdl_key`
+#'
+#' Splits an sf carrying a `mdl_key` column into **one PMTiles per model**, written to
+#' `{dir_out}/{slug(sp_id)}.pmtiles` (`sp_id` = `mdl_key` after the first `|`). Each file
+#' holds a single model, so the species app needs no client-side filter and — crucially —
+#' low-zoom tiles never collide across species. Packing thousands of overlapping global
+#' ranges into one per-dataset archive overflows the z0–z2 world tiles past maplibre's
+#' per-tile budget, so it silently drops them (a selected range shows "no polygon at all"
+#' at global zoom); a per-model file tiles to a few KB and always renders. Mirrors the
+#' per-model AquaMaps COGs. Parallel (`furrr`) + resumable (skips existing unless `redo`).
+#'
+#' @param x an sf with a character `mdl_key` column (features may repeat a key)
+#' @param dir_out output directory (created); one `.pmtiles` per model
+#' @param layer tile layer name (the app's `source_layer`)
+#' @param workers parallel workers (default `max(1, detectCores() - 2)`)
+#' @param redo rebuild files that already exist (default `FALSE`)
+#' @param minzoom,maxzoom,simplification passed to [publish_pmtiles()]
+#' @return a tibble `(mdl_key, sp_id, file, mb)`, one row per model built or found
+#' @importFrom sf st_is_empty
+#' @importFrom fs dir_create file_exists file_size path
+#' @export
+#' @concept publish
+publish_pmtiles_models <- function(x, dir_out, layer, workers = NULL, redo = FALSE,
+                                   minzoom = 0, maxzoom = 6, simplification = 10) {
+  stopifnot(inherits(x, "sf"), "mdl_key" %in% names(x))
+  fs::dir_create(dir_out)
+  x$mdl_key <- as.character(x$mdl_key)
+  if (!"ds_key" %in% names(x)) x$ds_key <- sub("\\|.*$", "", x$mdl_key)
+  x <- x[!sf::st_is_empty(x), , drop = FALSE]
+  parts <- split(x, x$mdl_key)                                   # one small sf per model
+  if (is.null(workers)) workers <- max(1L, parallel::detectCores() - 2L)
+
+  build_one <- function(part) {
+    key   <- part$mdl_key[1]
+    sp_id <- sub("^[^|]*\\|", "", key)                           # everything after the first '|'
+    file  <- fs::path(dir_out, paste0(.slug_sp(sp_id), ".pmtiles"))
+    if (!fs::file_exists(file) || redo)
+      tryCatch(publish_pmtiles(part, file, layer = layer, minzoom = minzoom,
+                               maxzoom = maxzoom, simplification = simplification),
+               error = function(e) NULL)
+    if (!fs::file_exists(file)) return(NULL)
+    tibble::tibble(mdl_key = key, sp_id = sp_id, file = as.character(file),
+                   mb = round(as.numeric(fs::file_size(file)) / 1e6, 3))
+  }
+
+  if (workers > 1L && requireNamespace("furrr", quietly = TRUE)) {
+    future::plan(future::multisession, workers = workers)
+    on.exit(future::plan(future::sequential), add = TRUE)
+    res <- furrr::future_map(parts, build_one,
+                             .options = furrr::furrr_options(seed = TRUE))
+  } else {
+    res <- lapply(parts, build_one)
+  }
+  do.call(rbind, res)
+}
+
+#' Publish per-model PMTiles from an indexed GeoPackage
+#'
+#' Like [publish_pmtiles_models()] but reads each model's features **on demand** from an
+#' indexed GeoPackage (`SELECT ... WHERE mdl_key = ...`) instead of a pre-loaded sf — so a
+#' multi-GB source (full-resolution IUCN ranges are ~7 GB) never loads into memory at once,
+#' and the per-model query is an index hit. Parallel (`furrr`) + resumable.
+#'
+#' @param gpkg path to a GeoPackage whose `layer` has a character `mdl_key` column
+#'   (index it on `mdl_key` for speed: `CREATE INDEX ... ON layer(mdl_key)`)
+#' @param layer gpkg layer name (also the tile `source_layer`)
+#' @param keys character `mdl_key`s to publish (each -> one file)
+#' @param dir_out output directory (created); one `{slug(sp_id)}.pmtiles` per key
+#' @param workers,redo,minzoom,maxzoom,simplification as in [publish_pmtiles_models()]
+#' @return a tibble `(mdl_key, sp_id, file, mb)`, one row per model built or found
+#' @importFrom sf st_read st_zm st_is_empty
+#' @importFrom fs dir_create file_exists file_size path
+#' @export
+#' @concept publish
+publish_pmtiles_from_gpkg <- function(gpkg, layer, keys, dir_out, workers = NULL, redo = FALSE,
+                                      minzoom = 0, maxzoom = 6, simplification = 10) {
+  stopifnot(file.exists(gpkg))
+  fs::dir_create(dir_out)
+  keys <- unique(as.character(keys))
+  if (is.null(workers)) workers <- max(1L, parallel::detectCores() - 2L)
+
+  build_one <- function(key) {
+    sp_id <- sub("^[^|]*\\|", "", key)
+    file  <- fs::path(dir_out, paste0(.slug_sp(sp_id), ".pmtiles"))
+    made  <- function() tibble::tibble(mdl_key = key, sp_id = sp_id, file = as.character(file),
+                                       mb = round(as.numeric(fs::file_size(file)) / 1e6, 3))
+    if (fs::file_exists(file) && !redo) return(made())
+    part <- tryCatch(sf::st_read(gpkg, quiet = TRUE, query = sprintf(
+      "SELECT * FROM \"%s\" WHERE mdl_key = '%s'", layer, gsub("'", "''", key))),
+      error = function(e) NULL)
+    if (is.null(part) || !nrow(part)) return(NULL)
+    part$mdl_key <- key
+    if (!"ds_key" %in% names(part)) part$ds_key <- sub("\\|.*$", "", key)
+    part <- sf::st_zm(part, drop = TRUE)
+    part <- part[!sf::st_is_empty(part), , drop = FALSE]
+    if (!nrow(part)) return(NULL)
+    tryCatch(publish_pmtiles(part, file, layer = layer, minzoom = minzoom,
+                             maxzoom = maxzoom, simplification = simplification),
+             error = function(e) NULL)
+    if (fs::file_exists(file)) made() else NULL
+  }
+
+  if (workers > 1L && requireNamespace("furrr", quietly = TRUE)) {
+    future::plan(future::multisession, workers = workers)
+    on.exit(future::plan(future::sequential), add = TRUE)
+    res <- furrr::future_map(keys, build_one, .options = furrr::furrr_options(seed = TRUE))
+  } else {
+    res <- lapply(keys, build_one)
+  }
+  do.call(rbind, res)
 }
