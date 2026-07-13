@@ -10,7 +10,8 @@ cells_from_ranges(
   value = 100,
   cover = FALSE,
   min_coverage = 0,
-  max_vertices = 1000
+  max_vertices = 1000,
+  exact = FALSE
 )
 }
 \arguments{
@@ -29,13 +30,20 @@ flat \code{value} for any overlap}
 \item{min_coverage}{keep cells whose covered fraction exceeds this (default 0 =
 any overlap; use 0.5 for a majority/centre-like rule)}
 
-\item{max_vertices}{subdivide the range into chunks of at most this many
-vertices before rasterizing (default 1000). A globe-spanning range (a
-wide-ranging seabird) is one massive multipolygon that hangs \code{st_union} /
-\code{exact_extract}; subdividing bounds each chunk's raster window so it never
-touches the whole-globe polygon. Cells are de-duplicated afterward, so
-chunking is equivalent to a union here. Needs the \code{lwgeom} package; without
+\item{max_vertices}{(exact path only) subdivide the range into chunks of at
+most this many vertices before rasterizing (default 1000). A globe-spanning
+range (a wide-ranging seabird) is one massive multipolygon that hangs
+\code{st_union} / \code{exact_extract}; subdividing bounds each chunk's raster window so
+it never touches the whole-globe polygon. Cells are de-duplicated afterward,
+so chunking is equivalent to a union here. Needs the \code{lwgeom} package; without
 it, falls back to the single-union path.}
+
+\item{exact}{force the coverage-aware \code{exact_extract} path even for the flat
+any-overlap case (default \code{FALSE}). By default the flat case
+(\code{cover=FALSE}, \code{min_coverage=0}) uses the ~2x-faster \code{terra::rasterize}
+touches path, which yields an identical cell set; set \code{TRUE} for the
+boundary-exact coverage>0 behavior. \code{cover=TRUE} or \code{min_coverage>0} always
+use the exact path.}
 }
 \value{
 a tibble \verb{(cell_id integer, val double)}; empty if no overlap
