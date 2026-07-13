@@ -43,6 +43,37 @@ sdm_db_con <- function(version = "v6", read_only = TRUE) {
     read_only = read_only))
 }
 
+#' Require a modern DuckDB (and optionally the spatial GEOMETRY extension)
+#'
+#' Guards the v8 Parquet-V2 / byte-sized-row-group writers ([copy_atlas_parquet()],
+#' [write_atlas_parquet()]) and leaves room for a future GeoParquet cell-geometry
+#' column: checks the installed `duckdb` R package is `>= min` and, when
+#' `spatial = TRUE`, that `LOAD spatial` succeeds (native `GEOMETRY` type, DuckDB
+#' 1.5+). Geometry is not yet persisted — `spatial` defaults `FALSE`.
+#'
+#' @param min minimum `duckdb` package version (default `"1.5.0"`)
+#' @param con optional open connection to test `spatial` on (a temp in-memory one
+#'   is used if `NULL`)
+#' @param spatial also require the spatial extension (default `FALSE`)
+#' @return `TRUE` invisibly, or stops
+#' @importFrom utils packageVersion
+#' @importFrom DBI dbConnect dbExecute dbDisconnect
+#' @importFrom duckdb duckdb
+#' @export
+#' @concept db
+require_duckdb <- function(min = "1.5.0", con = NULL, spatial = FALSE) {
+  if (utils::packageVersion("duckdb") < min)
+    stop("duckdb >= ", min, " required; installed ",
+         as.character(utils::packageVersion("duckdb")))
+  if (spatial) {
+    if (is.null(con)) {
+      con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    }
+    DBI::dbExecute(con, "INSTALL spatial; LOAD spatial;")
+  }
+  invisible(TRUE)
+}
+
 #' Connect to species taxonomy DuckDB
 #'
 #' Open a DBI connection to the species taxonomy reference DuckDB database.

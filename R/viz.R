@@ -330,25 +330,39 @@ add_cell_tiles <- function(
 #' @param mtime character; optional cache-bust tag, typically the mtime of the
 #'   source DuckDB file (e.g. from `file.info(sdm_db)$mtime`). Distinct from
 #'   the data version tag (`v6`, `v7`, ...) used in paths.
+#' @param mdl_key character(1); the STABLE model key fast-path. When given (and
+#'   `sql` `NULL`), the tile reads exactly one serving partition by exact path —
+#'   the merged-model equivalent of a dense SQL point query, with no S3 LIST.
+#'   titiler resolves `mdl_key` -> the internal integer partition id from the
+#'   `model` registry, so this URL keeps referencing the same model across
+#'   releases even as that internal id is renumbered.
 #' @param base character; base URL of the titilecache service
 #' @return character(1) tile URL template
 #' @export
 #' @concept viz
 cell_tile_url <- function(
-    sql,
+    sql = NULL,
     colormap = "spectral_r", rescale = NULL, color = NULL, mtime = NULL,
+    mdl_key = NULL,
     base = "https://titilecache.marinesensitivity.org") {
-  stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
-  sql_b64 <- base64url_encode(canonicalize_sql(sql))
+  # source param: the merged-model fast-path (the STABLE `mdl_key`, resolved server-side to a
+  # serve partition read by exact path) OR a base64url SELECT. Exactly one. The internal integer
+  # partition id is NEVER put in the URL — mdl_key is what stays constant across releases.
+  if (!is.null(mdl_key)) {
+    stopifnot(is.character(mdl_key), length(mdl_key) == 1, nchar(mdl_key) > 0, is.null(sql))
+    src <- c(mdl_key = utils::URLencode(mdl_key, reserved = TRUE))
+  } else {
+    stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
+    src <- c(sql = base64url_encode(canonicalize_sql(sql)))
+  }
 
   if (!is.null(color)) {
     stopifnot(is.character(color), length(color) == 1,
               grepl("^#?[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", color))
     # strip the `#` (safe in URLs, but URL-encoding it makes no difference here)
-    color_q <- sub("^#", "", color)
-    params  <- c(sql = sql_b64, color = color_q)
+    params <- c(src, color = sub("^#", "", color))
   } else {
-    params  <- c(sql = sql_b64, colormap = colormap)
+    params <- c(src, colormap = colormap)
     if (!is.null(rescale)) {
       stopifnot(is.numeric(rescale), length(rescale) == 2)
       params <- c(params, rescale = paste(rescale, collapse = ","))
@@ -404,18 +418,26 @@ cog_tile_url <- function(
 #'
 #' @param sql character(1); same SELECT passed to [cell_tile_url()]
 #' @param mtime character; optional cache-bust tag, see [cell_tile_url()]
+#' @param mdl_key character(1); stable model key fast-path, see [cell_tile_url()]
 #' @param base character; base URL of the titilecache service
 #' @return named list of numeric statistics
 #' @importFrom httr2 request req_url_query req_perform resp_body_json
 #' @export
 #' @concept viz
 cell_stats <- function(
-    sql,
+    sql = NULL,
     mtime = NULL,
+    mdl_key = NULL,
     base = "https://titilecache.marinesensitivity.org") {
-  stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
-  sql_b64 <- base64url_encode(canonicalize_sql(sql))
-  q <- list(sql = sql_b64)
+  # req_url_query URL-encodes values, so pass the raw mdl_key (stable public id, not the
+  # internal integer partition id).
+  if (!is.null(mdl_key)) {
+    stopifnot(is.character(mdl_key), length(mdl_key) == 1, nchar(mdl_key) > 0, is.null(sql))
+    q <- list(mdl_key = mdl_key)
+  } else {
+    stopifnot(is.character(sql), length(sql) == 1, nchar(sql) > 0)
+    q <- list(sql = base64url_encode(canonicalize_sql(sql)))
+  }
   if (!is.null(mtime)) q$mtime <- format_mtime(mtime)
   req <- httr2::request(sprintf("%s/msens/statistics", sub("/$", "", base)))
   do.call(httr2::req_url_query, c(list(.req = req), q)) |>

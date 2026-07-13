@@ -252,22 +252,32 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
 
   pq_href <- glue::glue("{cfg$atlas_base}/{cfg$version}/dist_merged/")
 
-  # Phase 4b native input surfaces (pyramided), one file PER MODEL, driven by the dataset
-  # registry's `native_format` (NOT a hardcoded ds_key list) so a new dataset needs no edit
-  # here — just set `native_format` in its msens: front-matter (-> the `dataset` table):
-  #   raster -> per-model COG under native/{ds_key}/ (titiler /cog);
-  #   vector -> per-model PMTiles under pmtiles/{version}/{ds_key}/.
+  # Phase 4b/4c native input surfaces (pyramided), one file PER MODEL, driven by the dataset
+  # registry's `native_format` (NOT a hardcoded ds_key list). Each model is published in BOTH
+  # representations, keyed on the stable mdl_key + a `representation` field:
+  #   original/native  = source resolution (raster: native/{ds}_native/ COG; vector: PMTiles polygons)
+  #   model/interpolated = the 0.05° grid surface used in scoring (raster: native/{ds}/ COG;
+  #                        vector: native/vec_grid/ COG, opt-in)
+  cog_type <- "image/tiff; application=geotiff; profile=cloud-optimized"
   native_stac <- switch(as.character(ds$native_format),
-    raster = list(cog = list(
-      href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}/"),
-      type  = "image/tiff; application=geotiff; profile=cloud-optimized",
-      roles = I(c("data", "visual")),
-      title = "Per-model global COGs (overviews); one file per mdl_key, served via titiler /cog")),
-    vector = list(pmtiles = list(
-      href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}/"),
-      type  = "application/vnd.pmtiles",
-      roles = I(c("data", "visual")),
-      title = "Per-model range PMTiles; one file per mdl_key (filter by the mdl_key property)")),
+    raster = list(
+      cog_native = list(
+        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}_native/"),
+        type  = cog_type, roles = I(c("data", "visual")), representation = "native",
+        title = "Per-model native-resolution COGs (the ORIGINAL surface); titiler /cog"),
+      cog_model = list(
+        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}/"),
+        type  = cog_type, roles = I(c("data", "visual")), representation = "model",
+        title = "Per-model 0.05° resampled COGs (the MODELED surface); titiler /cog")),
+    vector = list(
+      pmtiles_native = list(
+        href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}/"),
+        type  = "application/vnd.pmtiles", roles = I(c("data", "visual")), representation = "native",
+        title = "Per-model original-range PMTiles (the ORIGINAL surface; filter by mdl_key)"),
+      cog_model = list(
+        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/vec_grid/"),
+        type  = cog_type, roles = I(c("data", "visual")), representation = "model",
+        title = "Per-model 0.05° gridded COGs (the MODELED surface; opt-in); titiler /cog")),
     list())
 
   list(

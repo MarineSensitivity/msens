@@ -5,8 +5,9 @@
 \title{Fetch msens cell value statistics for a SQL query}
 \usage{
 cell_stats(
-  sql,
+  sql = NULL,
   mtime = NULL,
+  mdl_key = NULL,
   base = "https://titilecache.marinesensitivity.org"
 )
 }
@@ -14,6 +15,8 @@ cell_stats(
 \item{sql}{character(1); same SELECT passed to \code{\link[=cell_tile_url]{cell_tile_url()}}}
 
 \item{mtime}{character; optional cache-bust tag, see \code{\link[=cell_tile_url]{cell_tile_url()}}}
+
+\item{mdl_key}{character(1); stable model key fast-path, see \code{\link[=cell_tile_url]{cell_tile_url()}}}
 
 \item{base}{character; base URL of the titilecache service}
 }
