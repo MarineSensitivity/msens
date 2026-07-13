@@ -64,7 +64,8 @@ share is separate — see <code><a href="cells_pct_marine.html">cells_pct_marine
 <span>  value <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>  cover <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  min_coverage <span class="op">=</span> <span class="fl">0</span>,</span>
-<span>  max_vertices <span class="op">=</span> <span class="fl">1000</span></span>
+<span>  max_vertices <span class="op">=</span> <span class="fl">1000</span>,</span>
+<span>  exact <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -98,13 +99,22 @@ any overlap; use 0.5 for a majority/centre-like rule)</p></dd>
 
 
 <dt id="arg-max-vertices">max_vertices<a class="anchor" aria-label="anchor" href="#arg-max-vertices"></a></dt>
-<dd><p>subdivide the range into chunks of at most this many
-vertices before rasterizing (default 1000). A globe-spanning range (a
-wide-ranging seabird) is one massive multipolygon that hangs <code>st_union</code> /
-<code>exact_extract</code>; subdividing bounds each chunk's raster window so it never
-touches the whole-globe polygon. Cells are de-duplicated afterward, so
-chunking is equivalent to a union here. Needs the <code>lwgeom</code> package; without
+<dd><p>(exact path only) subdivide the range into chunks of at
+most this many vertices before rasterizing (default 1000). A globe-spanning
+range (a wide-ranging seabird) is one massive multipolygon that hangs
+<code>st_union</code> / <code>exact_extract</code>; subdividing bounds each chunk's raster window so
+it never touches the whole-globe polygon. Cells are de-duplicated afterward,
+so chunking is equivalent to a union here. Needs the <code>lwgeom</code> package; without
 it, falls back to the single-union path.</p></dd>
+
+
+<dt id="arg-exact">exact<a class="anchor" aria-label="anchor" href="#arg-exact"></a></dt>
+<dd><p>force the coverage-aware <code>exact_extract</code> path even for the flat
+any-overlap case (default <code>FALSE</code>). By default the flat case
+(<code>cover=FALSE</code>, <code>min_coverage=0</code>) uses the ~2x-faster <code><a href="https://rspatial.github.io/terra/reference/rasterize.html" class="external-link">terra::rasterize</a></code>
+touches path, which yields an identical cell set; set <code>TRUE</code> for the
+boundary-exact coverage&gt;0 behavior. <code>cover=TRUE</code> or <code>min_coverage&gt;0</code> always
+use the exact path.</p></dd>
 
 </dl></div>
     <div class="section level2">
