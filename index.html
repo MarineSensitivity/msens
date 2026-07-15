@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,6 +57,23 @@
 <p>Install this R package by running the following command in your R Console:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"MarineSensitivity/msens"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="testing">Testing<a class="anchor" aria-label="anchor" href="#testing"></a>
+</h2>
+<p><code>msens</code> is where the pipeline’s scientific logic lives (merge, scoring, ingest, interpolation), so it is where that logic is <strong>guarded by unit tests</strong>. Run them with:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span>                                   <span class="co"># all tests</span></span>
+<span><span class="fu">testthat</span><span class="fu">::</span><span class="fu"><a href="https://testthat.r-lib.org/reference/test_file.html" class="external-link">test_file</a></span><span class="op">(</span><span class="st">"tests/testthat/test-merge.R"</span><span class="op">)</span> <span class="co"># one file</span></span></code></pre></div>
+<p>Conventions:</p>
+<ul>
+<li>
+<strong>Keep model rules in exported functions</strong> (e.g. <code><a href="reference/merge_sql.html">merge_sql()</a></code>, <code><a href="reference/turtle_sql.html">turtle_sql()</a></code>, <code><a href="reference/compute_er_score.html">compute_er_score()</a></code>) so the notebooks in <code>../workflows</code> <em>call</em> them and the tests <em>assert</em> them — they cannot drift.</li>
+<li>
+<strong>Every rule has a testthat fixture</strong> asserting its exact expected output. <code>test-merge.R</code> covers one synthetic taxon per merge category (range-only, both-masked, <code>iucn_range_outside_us_eez</code>-excluded, am-only single, am-only multi-model no-dedup, turtle multiplicative).</li>
+<li>
+<strong>Add/update the test in the same change as the logic</strong>, and keep a permanent regression assertion for every bug fixed, so it can never silently return. After edits, <code>devtools::document()</code> + reinstall so <code>../workflows</code> picks up the change.</li>
+</ul>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
