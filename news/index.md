@@ -1,5 +1,18 @@
 # Changelog
 
+## msens 0.5.1
+
+- **[`pra_score_delta()`](http://marinesensitivity.org/msens/reference/pra_score_delta.md)
+  is now schema-adaptive** across the v8 `value`→`val` reserved-word
+  rename. The Program-Area score/key column is `value` in a v7
+  `sdm.duckdb` but `val` in v8, so the previously hard-coded `z.value`
+  errored on any v8 database (“Table z does not have a column named
+  value”) — it had only ever worked for v7. The column is now resolved
+  per connection, so v7↔︎v8 and v8↔︎v8 comparisons both work.
+  Regression-tested in `test-validate.R` against synthetic `val`/`value`
+  DBs. Powers the new parameterized `workflows/validate_versions.qmd`
+  report.
+
 ## msens 0.5.0
 
 The **v8 “Marine Atlas”** modeling + serving pass, part 2 — merge rules

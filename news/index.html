@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,6 +33,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.1" id="msens-051">msens 0.5.1<a class="anchor" aria-label="anchor" href="#msens-051"></a></h2>
+<ul><li>
+<strong><code><a href="../reference/pra_score_delta.html">pra_score_delta()</a></code> is now schema-adaptive</strong> across the v8 <code>value</code>→<code>val</code> reserved-word rename. The Program-Area score/key column is <code>value</code> in a v7 <code>sdm.duckdb</code> but <code>val</code> in v8, so the previously hard-coded <code>z.value</code> errored on any v8 database (“Table z does not have a column named value”) — it had only ever worked for v7. The column is now resolved per connection, so v7↔︎v8 and v8↔︎v8 comparisons both work. Regression-tested in <code>test-validate.R</code> against synthetic <code>val</code>/<code>value</code> DBs. Powers the new parameterized <code>workflows/validate_versions.qmd</code> report.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.0" id="msens-050">msens 0.5.0<a class="anchor" aria-label="anchor" href="#msens-050"></a></h2>
 <p>The <strong>v8 “Marine Atlas”</strong> modeling + serving pass, part 2 — merge rules extracted to the package (single source of truth) and the read/score API made to compose off one connection.</p>

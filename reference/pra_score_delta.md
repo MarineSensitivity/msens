@@ -5,7 +5,7 @@ Reads the Program-Area composite score from two SDM DuckDB connections
 per-Program-Area
 [`score_delta()`](http://marinesensitivity.org/msens/reference/score_delta.md).
 Centralizes the query previously inlined in `workflows/dev/build_v7.R`
-so `build_v8.R` and `validate_v7_v8.qmd` share it.
+so `build_v8.R` and `validate_versions.qmd` share it.
 
 ## Usage
 
@@ -37,3 +37,12 @@ pra_score_delta(
 a tibble from
 [`score_delta()`](http://marinesensitivity.org/msens/reference/score_delta.md)
 keyed by `programarea_key`
+
+## Details
+
+Schema-adaptive: the score/key column is `value` in v7 and `val` in v8
+(the reserved-word rename), so the column name is resolved per
+connection via
+[`.value_col()`](http://marinesensitivity.org/msens/reference/dot-value_col.md)
+rather than hard-coded — otherwise a v7↔v8 (or v8↔v8) comparison errors
+with "Table z does not have a column named value".
