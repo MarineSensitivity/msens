@@ -50,6 +50,7 @@ connection with the atlas base URL stored in <code>attr(con, "atlas_base")</code
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  version <span class="op">=</span> <span class="st">"v8"</span>,</span>
 <span>  anon <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  views <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  bucket <span class="op">=</span> <span class="st">"s3://oceanmetrics.io-public/marine-atlas"</span>,</span>
 <span>  region <span class="op">=</span> <span class="st">"us-east-1"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -72,6 +73,12 @@ connection with the atlas base URL stored in <code>attr(con, "atlas_base")</code
 need LIST and will 403 unless the bucket policy allows anonymous ListBucket)</p></dd>
 
 
+<dt id="arg-views">views<a class="anchor" aria-label="anchor" href="#arg-views"></a></dt>
+<dd><p>if <code>TRUE</code> (default), also create named views over the released
+tables (via <code><a href="atlas_views.html">atlas_views()</a></code>) so the calc/score helpers compose directly —
+e.g. <code>scores_for_pra(attach_atlas(), pra_key)</code> just works</p></dd>
+
+
 <dt id="arg-bucket">bucket<a class="anchor" aria-label="anchor" href="#arg-bucket"></a></dt>
 <dd><p>S3 base of the atlas</p></dd>
 
@@ -82,7 +89,8 @@ need LIST and will 403 unless the bucket policy allows anonymous ListBucket)</p>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>the (configured) DuckDB connection</p>
+    <p>the (configured) DuckDB connection, with the atlas base URL in
+<code>attr(con, "atlas_base")</code> and (unless <code>views = FALSE</code>) the atlas table views</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

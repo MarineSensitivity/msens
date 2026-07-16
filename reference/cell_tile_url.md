@@ -10,11 +10,12 @@ Varnish keys on the full URL.
 
 ``` r
 cell_tile_url(
-  sql,
+  sql = NULL,
   colormap = "spectral_r",
   rescale = NULL,
   color = NULL,
   mtime = NULL,
+  mdl_key = NULL,
   base = "https://titilecache.marinesensitivity.org"
 )
 ```
@@ -49,6 +50,15 @@ cell_tile_url(
   character; optional cache-bust tag, typically the mtime of the source
   DuckDB file (e.g. from `file.info(sdm_db)$mtime`). Distinct from the
   data version tag (`v6`, `v7`, ...) used in paths.
+
+- mdl_key:
+
+  character(1); the STABLE model key fast-path. When given (and `sql`
+  `NULL`), the tile reads exactly one serving partition by exact path —
+  the merged-model equivalent of a dense SQL point query, with no S3
+  LIST. titiler resolves `mdl_key` -\> the internal integer partition id
+  from the `model` registry, so this URL keeps referencing the same
+  model across releases even as that internal id is renumbered.
 
 - base:
 

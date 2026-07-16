@@ -2,4 +2,5 @@
 
 ### All vignettes
 
-- [msens](http://marinesensitivity.org/msens/articles/msens.md):
+- [Getting started with the Marine Sensitivity
+  Atlas](http://marinesensitivity.org/msens/articles/msens.md):
