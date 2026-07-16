@@ -1,3 +1,52 @@
+# msens 0.5.0
+
+The **v8 "Marine Atlas"** modeling + serving pass, part 2 — merge rules extracted to the package
+(single source of truth) and the read/score API made to compose off one connection.
+
+* **Merge rules as a single source of truth.** New `merge.R`: `merge_sql()` and `turtle_sql()`
+  return the exact SQL for the two-surface merge (global viz `am ∪ range`; US-scoped, v7-faithful
+  scoring surface with the AquaMaps no-EEZ constraint) and the multiplicative turtle merge. The
+  `workflows` notebooks now *call* these and `test-merge.R` *asserts* them (one synthetic fixture per
+  taxon category), so the notebook and the tests can never drift.
+* **`attach_atlas()` now creates the table views** (via the new exported `atlas_views()`), mirroring
+  the serving `serve.duckdb`, so the calc/score helpers that reference bare table names
+  (`scores_for_pra()`, `species_for_cells()`, `scores_for_cells()`) compose directly — e.g.
+  `scores_for_pra(attach_atlas(anon = TRUE), pra_key)` just works. `test-atlas.R` guards it.
+* **Getting-started article + STAC alignment.** The `msens` article now walks attach → browse →
+  search the STAC catalog → retrieve + map a whole-range COG → score a Program Area (flower plot) →
+  species. The v8 STAC catalog reads cleanly in R (`rstac::read_stac()` for the static catalog — not
+  `stac()`, which is for STAC *API* servers) and Python (`pystac`); `rstac` added to Suggests.
+* `cells_from_ranges()` uses terra touches-rasterize as the fast default (keeping the `exact_extract`
+  coverage option) — big speed-up on large ranges.
+* `cell_tile_url()` / `cell_stats()` default `base` → the v8 `titiler-v8` factory (accepts
+  `?mdl_key=`). The legacy v7 `titilecache` Varnish takes `?sql=` and 422s on `mdl_key`, which had
+  left default-base callers (e.g. the article's map) with blank tiles.
+
+# msens 0.4.0
+
+The **v8 "Marine Atlas"** foundation: read the S3 Parquet release, ingest source models onto the
+global 0.05° grid, publish native + gridded representations, and emit a STAC catalog.
+
+* **Read the release.** `attach_atlas()` — canonical DuckDB reader for the marine-atlas Parquet on
+  S3 (path-style, credential-chain), with `atlas_path()` / `atlas_tbl()` accessors.
+* **Standardized Parquet + content-addressed change detection.** `write_atlas_parquet()` /
+  `copy_atlas_parquet()` (Parquet V2, zstd, ~80 MB byte-sized row groups) behind a `require_duckdb()`
+  version floor; `hash_parquet()` / `hash_query()` order-independent fingerprints +
+  `write_manifest()` / `force_target()` for deterministic, timestamp-free manifests; `report_table()`
+  / `report_parquet_summary()` for the notebook `## Outputs` sections.
+* **Stable model id.** `mdl_key_raw()` / `mdl_key_merged()` build the `{ds_key}|{sp_id}` key that
+  replaces the volatile `mdl_seq`; renamed the model-cell field `value` → `val` (SQL reserved word).
+* **Ingest helpers.** `cells_from_ranges()` / `cells_from_raster()` / `cells_pct_marine()` rasterize
+  a source model onto the global grid capturing the **whole** range (no land mask; `pct_marine`
+  derived), via `exactextractr`. `clean_sci_name()` for taxonomic matching.
+* **Native + gridded publishing.** `publish_cog()` (COG with overviews), `publish_pmtiles()` /
+  `publish_pmtiles_models()` (per-model PMTiles), and `cog_tile_url()` for titiler `/cog` tiles.
+* **STAC v8** (`stac.R`): `stac_build()` and the collection/item generators emit both `native` and
+  `model` representations per dataset on `model_cell` Items, keyed on the stable `mdl_key`.
+* **Pipeline generator.** `build_targets_list()` parses the `msens:` front-matter of the workflow
+  `*.qmd` into a `targets` list. `pra_score_delta()` is the version-equivalence gate.
+* `hex.R` + `interp.R` are marked **DORMANT** — v8 rolled back from an H3 grid to the 0.05° cell grid.
+
 # msens 0.3.4
 
 * `cell_tile_url()` gains a `color` argument for single-color mask tiles:
