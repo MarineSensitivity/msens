@@ -2,6 +2,15 @@
 
 ## msens 0.5.1
 
+- **Getting-started article: score-surface section.** The `msens`
+  article now maps the **sensitivity score surfaces** — the equal-weight
+  composite plus each per-category component — served as raster tiles by
+  titiler-v8 via a live `cell_id → value` SQL over `cell_metric` (no
+  per-metric COG; the scored cells *are* the raster). It reports titiler
+  [`cell_stats()`](http://marinesensitivity.org/msens/reference/cell_stats.md)
+  per surface (proof the tiles carry real values) and a leaflet
+  layers-control to toggle between them.
+
 - **[`pra_score_delta()`](http://marinesensitivity.org/msens/reference/pra_score_delta.md)
   is now schema-adaptive** across the v8 `value`→`val` reserved-word
   rename. The Program-Area score/key column is `value` in a v7

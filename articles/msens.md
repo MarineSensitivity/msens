@@ -170,7 +170,89 @@ leaflet() |>
   setView(0, 20, zoom = 1)
 ```
 
-## 5. Score a Program Area
+## 5. Map the sensitivity score surfaces
+
+Scoring produces a per-cell **value for each metric** — the equal-weight
+composite marine-sensitivity score and its per-category components
+(bird, mammal, fish, …, ecoregion-rescaled to 0–100). These live in the
+`cell_metric` table and are served as raster tiles by titiler-v8, which
+runs a `cell_id → value` SQL query over the scored cells on demand
+(there is no pre-rendered COG per metric — the cells *are* the raster).
+
+``` r
+
+library(glue)
+
+# the composite plus each per-category, ecoregion-rescaled component
+score_metrics <- tbl(con, "metric") |>
+  filter(grepl("equalweights$|^extrisk_[a-z]+_ecoregion_rescaled$", metric_key)) |>
+  pull(metric_key) |> sort()
+
+# a readable label from the metric_key (descriptions are sparse in the release)
+label_of <- function(mk) ifelse(
+  grepl("equalweights$", mk), "composite (equal-weight)",
+  paste0(sub("^extrisk_([a-z]+)_.*$", "\\1", mk), " extinction-risk"))
+
+# the (cell_id, value) SELECT titiler renders — the same path the scores app uses
+cell_sql <- function(mk) glue(
+  "SELECT cm.cell_id, cm.val AS value FROM cell_metric cm ",
+  "JOIN metric m ON cm.metric_seq = m.metric_seq WHERE m.metric_key = '{mk}'")
+```
+
+Ask titiler for each surface’s **raster statistics** — proof the served
+tiles carry real per-cell values (not a static image), computed live
+over the scored cells:
+
+``` r
+
+stats <- lapply(score_metrics, \(mk) cell_stats(cell_sql(mk)))
+names(stats) <- score_metrics
+
+purrr::imap_dfr(stats, \(s, mk) tibble::tibble(
+  surface = label_of(mk), cells = s$n,
+  min = round(s$min, 1), mean = round(s$mean, 1),
+  median = round(s$p50, 1), p98 = round(s$p98, 1), max = round(s$max, 1))) |>
+  arrange(desc(mean)) |>
+  knitr::kable(caption = "titiler raster statistics per score surface (US study area)")
+```
+
+| surface                      |  cells | min | mean | median |  p98 | max |
+|:-----------------------------|-------:|----:|-----:|-------:|-----:|----:|
+| mammal extinction-risk       | 623212 |   0 | 40.6 |   38.8 | 89.3 | 100 |
+| turtle extinction-risk       | 406103 |   0 | 36.8 |   23.8 | 94.2 | 100 |
+| bird extinction-risk         | 623212 |   0 | 36.2 |   38.6 | 83.5 | 100 |
+| composite (equal-weight)     | 623212 |   0 | 22.1 |   20.0 | 56.0 |  96 |
+| fish extinction-risk         | 589800 |   0 | 18.1 |   11.3 | 71.3 | 100 |
+| invertebrate extinction-risk | 623212 |   0 | 14.9 |    3.6 | 74.7 | 100 |
+| coral extinction-risk        | 542955 |   0 | 11.1 |    3.5 | 65.6 | 100 |
+
+titiler raster statistics per score surface (US study area) {.table}
+
+Hand each metric’s SQL to
+[`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
+for a leaflet layer, rescaled to its own range. A layers control toggles
+between the composite and its components — one raster surface at a time:
+
+``` r
+
+# add components first, composite last (so it is the default-visible base layer)
+ordered <- c(setdiff(score_metrics, grep("equalweights$", score_metrics, value = TRUE)),
+             grep("equalweights$", score_metrics, value = TRUE))
+
+m <- leaflet() |> addProviderTiles("CartoDB.DarkMatter") |> setView(-105, 38, zoom = 3)
+for (mk in ordered) {
+  s <- stats[[mk]]
+  m <- m |> addTiles(
+    urlTemplate = cell_tile_url(cell_sql(mk), colormap = "spectral_r",
+                                rescale = c(s$min, s$max)),
+    group = label_of(mk), options = tileOptions(opacity = 0.9))
+}
+m |> addLayersControl(
+  baseGroups = label_of(rev(ordered)),                 # composite listed first
+  options = layersControlOptions(collapsed = FALSE))
+```
+
+## 6. Score a Program Area
 
 [`scores_for_pra()`](http://marinesensitivity.org/msens/reference/scores_for_pra.md)
 returns the per-category marine-sensitivity scores for a BOEM Program
@@ -205,7 +287,7 @@ plot_flower(
   title        = "ALA")
 ```
 
-## 6. Species
+## 7. Species
 
 The `taxon` table carries each merged taxon’s category, governing
 extinction-risk score, and protection flags — e.g. the highest-risk
