@@ -34,6 +34,40 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.0" id="msens-050">msens 0.5.0<a class="anchor" aria-label="anchor" href="#msens-050"></a></h2>
+<p>The <strong>v8 “Marine Atlas”</strong> modeling + serving pass, part 2 — merge rules extracted to the package (single source of truth) and the read/score API made to compose off one connection.</p>
+<ul><li>
+<strong>Merge rules as a single source of truth.</strong> New <code>merge.R</code>: <code><a href="../reference/merge_sql.html">merge_sql()</a></code> and <code><a href="../reference/turtle_sql.html">turtle_sql()</a></code> return the exact SQL for the two-surface merge (global viz <code>am ∪ range</code>; US-scoped, v7-faithful scoring surface with the AquaMaps no-EEZ constraint) and the multiplicative turtle merge. The <code>workflows</code> notebooks now <em>call</em> these and <code>test-merge.R</code> <em>asserts</em> them (one synthetic fixture per taxon category), so the notebook and the tests can never drift.</li>
+<li>
+<strong><code><a href="../reference/attach_atlas.html">attach_atlas()</a></code> now creates the table views</strong> (via the new exported <code><a href="../reference/atlas_views.html">atlas_views()</a></code>), mirroring the serving <code>serve.duckdb</code>, so the calc/score helpers that reference bare table names (<code><a href="../reference/scores_for_pra.html">scores_for_pra()</a></code>, <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code>, <code><a href="../reference/scores_for_cells.html">scores_for_cells()</a></code>) compose directly — e.g. <code>scores_for_pra(attach_atlas(anon = TRUE), pra_key)</code> just works. <code>test-atlas.R</code> guards it.</li>
+<li>
+<strong>Getting-started article + STAC alignment.</strong> The <code>msens</code> article now walks attach → browse → search the STAC catalog → retrieve + map a whole-range COG → score a Program Area (flower plot) → species. The v8 STAC catalog reads cleanly in R (<code><a href="https://brazil-data-cube.github.io/rstac/reference/static_functions.html" class="external-link">rstac::read_stac()</a></code> for the static catalog — not <code><a href="https://brazil-data-cube.github.io/rstac/reference/stac.html" class="external-link">stac()</a></code>, which is for STAC <em>API</em> servers) and Python (<code>pystac</code>); <code>rstac</code> added to Suggests.</li>
+<li>
+<code><a href="../reference/cells_from_ranges.html">cells_from_ranges()</a></code> uses terra touches-rasterize as the fast default (keeping the <code>exact_extract</code> coverage option) — big speed-up on large ranges.</li>
+<li>
+<code><a href="../reference/cell_tile_url.html">cell_tile_url()</a></code> / <code><a href="../reference/cell_stats.html">cell_stats()</a></code> default <code>base</code> → the v8 <code>titiler-v8</code> factory (accepts <code>?mdl_key=</code>). The legacy v7 <code>titilecache</code> Varnish takes <code>?sql=</code> and 422s on <code>mdl_key</code>, which had left default-base callers (e.g. the article’s map) with blank tiles.</li>
+</ul></div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.4.0" id="msens-040">msens 0.4.0<a class="anchor" aria-label="anchor" href="#msens-040"></a></h2>
+<p>The <strong>v8 “Marine Atlas”</strong> foundation: read the S3 Parquet release, ingest source models onto the global 0.05° grid, publish native + gridded representations, and emit a STAC catalog.</p>
+<ul><li>
+<strong>Read the release.</strong> <code><a href="../reference/attach_atlas.html">attach_atlas()</a></code> — canonical DuckDB reader for the marine-atlas Parquet on S3 (path-style, credential-chain), with <code><a href="../reference/atlas_path.html">atlas_path()</a></code> / <code><a href="../reference/atlas_tbl.html">atlas_tbl()</a></code> accessors.</li>
+<li>
+<strong>Standardized Parquet + content-addressed change detection.</strong> <code><a href="../reference/write_atlas_parquet.html">write_atlas_parquet()</a></code> / <code><a href="../reference/copy_atlas_parquet.html">copy_atlas_parquet()</a></code> (Parquet V2, zstd, ~80 MB byte-sized row groups) behind a <code><a href="../reference/require_duckdb.html">require_duckdb()</a></code> version floor; <code><a href="../reference/hash_parquet.html">hash_parquet()</a></code> / <code><a href="../reference/hash_query.html">hash_query()</a></code> order-independent fingerprints + <code><a href="../reference/write_manifest.html">write_manifest()</a></code> / <code><a href="../reference/force_target.html">force_target()</a></code> for deterministic, timestamp-free manifests; <code><a href="../reference/report_table.html">report_table()</a></code> / <code><a href="../reference/report_parquet_summary.html">report_parquet_summary()</a></code> for the notebook <code>## Outputs</code> sections.</li>
+<li>
+<strong>Stable model id.</strong> <code><a href="../reference/mdl_key_raw.html">mdl_key_raw()</a></code> / <code><a href="../reference/mdl_key_merged.html">mdl_key_merged()</a></code> build the <code>{ds_key}|{sp_id}</code> key that replaces the volatile <code>mdl_seq</code>; renamed the model-cell field <code>value</code> → <code>val</code> (SQL reserved word).</li>
+<li>
+<strong>Ingest helpers.</strong> <code><a href="../reference/cells_from_ranges.html">cells_from_ranges()</a></code> / <code><a href="../reference/cells_from_raster.html">cells_from_raster()</a></code> / <code><a href="../reference/cells_pct_marine.html">cells_pct_marine()</a></code> rasterize a source model onto the global grid capturing the <strong>whole</strong> range (no land mask; <code>pct_marine</code> derived), via <code>exactextractr</code>. <code><a href="../reference/clean_sci_name.html">clean_sci_name()</a></code> for taxonomic matching.</li>
+<li>
+<strong>Native + gridded publishing.</strong> <code><a href="../reference/publish_cog.html">publish_cog()</a></code> (COG with overviews), <code><a href="../reference/publish_pmtiles.html">publish_pmtiles()</a></code> / <code><a href="../reference/publish_pmtiles_models.html">publish_pmtiles_models()</a></code> (per-model PMTiles), and <code><a href="../reference/cog_tile_url.html">cog_tile_url()</a></code> for titiler <code>/cog</code> tiles.</li>
+<li>
+<strong>STAC v8</strong> (<code>stac.R</code>): <code><a href="../reference/stac_build.html">stac_build()</a></code> and the collection/item generators emit both <code>native</code> and <code>model</code> representations per dataset on <code>model_cell</code> Items, keyed on the stable <code>mdl_key</code>.</li>
+<li>
+<strong>Pipeline generator.</strong> <code><a href="../reference/build_targets_list.html">build_targets_list()</a></code> parses the <code>msens:</code> front-matter of the workflow <code>*.qmd</code> into a <code>targets</code> list. <code><a href="../reference/pra_score_delta.html">pra_score_delta()</a></code> is the version-equivalence gate.</li>
+<li>
+<code>hex.R</code> + <code>interp.R</code> are marked <strong>DORMANT</strong> — v8 rolled back from an H3 grid to the 0.05° cell grid.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.4" id="msens-034">msens 0.3.4<a class="anchor" aria-label="anchor" href="#msens-034"></a></h2>
 <ul><li>
 <code><a href="../reference/cell_tile_url.html">cell_tile_url()</a></code> gains a <code>color</code> argument for single-color mask tiles: when set to a hex string (e.g. <code>"#222222"</code>), the URL uses the msens TiTiler factory’s <code>color=</code> query param, which renders every valid pixel in that flat RGBA color and ignores <code>colormap</code> / <code>rescale</code>. Used by the mapgl app’s “Cells outside Program Areas” overlay — replaces the old <code>msens::add_cells(r_outside_pra, colors = c("#222222","#222222"), ...)</code> pattern that shipped a terra raster as a base64 image source.</li>
