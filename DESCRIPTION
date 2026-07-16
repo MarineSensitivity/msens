@@ -59,6 +59,7 @@ Suggests:
     knitr,
     pkgload,
     quarto,
+    rstac,
     targets,
     testthat (>= 3.0.0),
     withr

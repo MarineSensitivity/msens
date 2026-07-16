@@ -16,12 +16,16 @@
 #' @param version atlas version (e.g. `"v8"`)
 #' @param anon  if `TRUE`, skip credentials (single-file public reads only; globs
 #'   need LIST and will 403 unless the bucket policy allows anonymous ListBucket)
+#' @param views if `TRUE` (default), also create named views over the released
+#'   tables (via [atlas_views()]) so the calc/score helpers compose directly —
+#'   e.g. `scores_for_pra(attach_atlas(), pra_key)` just works
 #' @param bucket S3 base of the atlas
 #' @param region S3 region
-#' @return the (configured) DuckDB connection
+#' @return the (configured) DuckDB connection, with the atlas base URL in
+#'   `attr(con, "atlas_base")` and (unless `views = FALSE`) the atlas table views
 #' @importFrom DBI dbConnect dbExecute
 #' @export
-attach_atlas <- function(con = NULL, version = "v8", anon = FALSE,
+attach_atlas <- function(con = NULL, version = "v8", anon = FALSE, views = TRUE,
                          bucket = "s3://oceanmetrics.io-public/marine-atlas",
                          region = "us-east-1") {
   if (is.null(con)) con <- DBI::dbConnect(duckdb::duckdb())
@@ -33,8 +37,53 @@ attach_atlas <- function(con = NULL, version = "v8", anon = FALSE,
       "CREATE OR REPLACE SECRET atlas_s3 (TYPE s3, PROVIDER credential_chain, REGION '%s')", region)),
       silent = TRUE)
   }
-  attr(con, "atlas_base") <- sprintf("%s/%s", bucket, version)
+  base <- sprintf("%s/%s", bucket, version)
+  attr(con, "atlas_base") <- base
+  if (views) atlas_views(con, base = base, region = region, anon = anon)
   con
+}
+
+#' Create named views over the released atlas tables
+#'
+#' Mirrors the view set the serving `serve.duckdb` exposes, so the calc/score
+#' helpers that reference bare table names (`tbl(con, "zone")`, `scores_for_pra()`,
+#' `species_for_cells()`, …) compose directly with an [attach_atlas()] connection.
+#' Single-file tables are read via **path-style HTTPS** (anonymous GET + HTTP range;
+#' the dotted bucket breaks virtual-hosted TLS). `model_cell` is Hive-partitioned
+#' under `serve/` and its glob needs S3 LIST, so it is created only when
+#' `anon = FALSE` (credentialed); it joins `model` back so ad-hoc queries select by
+#' the stable `mdl_key`, not the volatile `mdl_id`. The scoring tables store the
+#' metric in `val`; a `val AS value` alias is exposed for back-compat.
+#'
+#' @param con  connection from [attach_atlas()]
+#' @param base atlas base URL (defaults to `attr(con, "atlas_base")`)
+#' @param region S3 region
+#' @param anon  if `TRUE`, skip the credentialed `model_cell` glob view
+#' @return `con`, invisibly
+#' @importFrom DBI dbExecute
+#' @export
+atlas_views <- function(con, base = attr(con, "atlas_base"),
+                        region = "us-east-1", anon = FALSE) {
+  if (is.null(base)) stop("con not configured; call attach_atlas() first")
+  http     <- sub("^s3://", sprintf("https://s3.%s.amazonaws.com/", region), base)
+  val_tbls <- c("cell_metric", "zone_metric", "zone")     # apps/calc reference `value`
+  tbls     <- c("cell", "taxon", "dataset", "model", "metric", "cell_metric",
+                "zone", "zone_cell", "zone_metric", "native_asset")
+  for (t in tbls) {
+    extra <- if (t %in% val_tbls) ", val AS value" else ""
+    DBI::dbExecute(con, sprintf(
+      "CREATE OR REPLACE VIEW %s AS SELECT *%s FROM read_parquet('%s/tables/%s.parquet')",
+      t, extra, http, t))
+  }
+  if (!anon) {
+    mc <- sprintf("%s/serve/model_cell/*/*.parquet", base)
+    try(DBI::dbExecute(con, sprintf(
+      "CREATE OR REPLACE VIEW model_cell AS
+         SELECT m.mdl_key, mc.mdl_id, mc.cell_id, mc.val, mc.val AS value
+         FROM read_parquet('%s', hive_partitioning = true) mc JOIN model m USING (mdl_id)", mc)),
+      silent = TRUE)
+  }
+  invisible(con)
 }
 
 #' Path to a release component under the atlas base

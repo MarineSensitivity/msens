@@ -8,6 +8,7 @@ attach_atlas(
   con = NULL,
   version = "v8",
   anon = FALSE,
+  views = TRUE,
   bucket = "s3://oceanmetrics.io-public/marine-atlas",
   region = "us-east-1"
 )
@@ -20,12 +21,17 @@ attach_atlas(
 \item{anon}{if \code{TRUE}, skip credentials (single-file public reads only; globs
 need LIST and will 403 unless the bucket policy allows anonymous ListBucket)}
 
+\item{views}{if \code{TRUE} (default), also create named views over the released
+tables (via \code{\link[=atlas_views]{atlas_views()}}) so the calc/score helpers compose directly —
+e.g. \code{scores_for_pra(attach_atlas(), pra_key)} just works}
+
 \item{bucket}{S3 base of the atlas}
 
 \item{region}{S3 region}
 }
 \value{
-the (configured) DuckDB connection
+the (configured) DuckDB connection, with the atlas base URL in
+\code{attr(con, "atlas_base")} and (unless \code{views = FALSE}) the atlas table views
 }
 \description{
 Loads \code{httpfs} (+ \code{aws} for credentialed listing), sets path-style addressing +

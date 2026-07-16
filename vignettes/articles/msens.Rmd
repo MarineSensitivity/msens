@@ -1,22 +1,153 @@
 ---
-title: "msens"
+title: "Getting started with the Marine Sensitivity Atlas"
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE, warning = FALSE)
 ```
+
+The **`msens`** package reads the published **Marine Sensitivity Atlas** (`v8` "marine-atlas") —
+species distribution models from many sources merged onto a global 0.05° grid, scored for marine
+sensitivity over the US study area, and released as partitioned Parquet on S3 with a
+[STAC](https://stacspec.org) catalog and [titiler](https://developmentseed.org/titiler/) tile
+services. Everything below runs against the **live public release** — no download, no credentials.
 
 ```{r setup}
 library(msens)
+library(dplyr)
 ```
 
-```{r}
-d <- get_species_by_feature(
-  schema.table = "raw.mr_eez",
-  where        = "mrgid = 8442")
-d
+## 1. Attach the atlas
+
+A single `attach_atlas()` call configures a DuckDB connection to the S3 release and creates the
+table **views**, so every reader and score helper composes off one connection. Use `anon = TRUE`
+for anonymous public reads of the released tables.
+
+```{r attach}
+con <- attach_atlas(anon = TRUE)
+
+# the atlas tables are now queryable by name
+DBI::dbGetQuery(con, "SELECT table_name FROM information_schema.tables
+                      WHERE table_schema = 'main' ORDER BY 1")$table_name
 ```
 
+## 2. Browse — datasets and taxa
+
+```{r datasets}
+tbl(con, "dataset") |>
+  arrange(sort_order) |>
+  select(ds_key, name_short, response_type, native_format) |>
+  collect() |>
+  knitr::kable()
+```
+
+How many merged taxa are valid globally vs. specifically in US waters, per scoring category?
+
+```{r taxa}
+tbl(con, "taxon") |>
+  group_by(sp_cat) |>
+  summarise(
+    valid_global = sum(as.integer(is_valid_global), na.rm = TRUE),
+    valid_us     = sum(as.integer(is_valid_global & is_valid_usa), na.rm = TRUE),
+    .groups = "drop") |>
+  arrange(desc(valid_global)) |>
+  collect() |>
+  knitr::kable()
+```
+
+## 3. Search the STAC catalog
+
+Each dataset is a STAC collection; each model is an item whose assets point at the published
+Cloud-Optimized GeoTIFFs, PMTiles, and Parquet. Read the **static** catalog with
+`rstac::read_stac()` (use `rstac::stac()` only for STAC *API* servers).
+
+```{r stac-r}
+library(rstac)
+v8 <- read_stac("https://file.marinesensitivity.org/stac/v8/collection.json")
+
+# dataset collections under v8
+basename(dirname(vapply(Filter(\(l) l$rel == "child", v8$links), \(l) l$href, character(1))))
+```
+
+```{r stac-item}
+# one dataset's item + its published assets (native vs. gridded-model representations).
+# item links are relative to the collection, so resolve against its base URL.
+ch_base   <- "https://file.marinesensitivity.org/stac/v8/ch_fws/"
+ch        <- read_stac(paste0(ch_base, "collection.json"))
+item_href <- Filter(\(l) l$rel == "item", ch$links)[[1]]$href     # "./…json"
+it        <- read_stac(paste0(ch_base, sub("^\\./", "", item_href)))
+tibble(
+  asset = names(it$assets),
+  type  = vapply(it$assets, \(a) if (is.null(a$type)) "" else a$type, character(1)),
+  href  = vapply(it$assets, \(a) basename(a$href), character(1))) |>
+  knitr::kable()
+```
+
+> **Python** reads the same catalog with [`pystac`](https://pystac.readthedocs.io):
+>
+> ```python
+> import pystac
+> v8   = pystac.Collection.from_file("https://file.marinesensitivity.org/stac/v8/collection.json")
+> item = next(pystac.Collection.from_file(
+>     "https://file.marinesensitivity.org/stac/v8/ch_fws/collection.json").get_items())
+> {k: a.media_type for k, a in item.assets.items()}
+> ```
+
+## 4. Retrieve and map a distribution
+
+Every merged taxon is served as a whole-range surface via titiler; `cell_tile_url()` builds the XYZ
+tile template, which drops straight into a leaflet map.
+
+```{r map, eval = requireNamespace("leaflet", quietly = TRUE)}
+library(leaflet)
+mk  <- "ms_merge|WORMS:137209"                    # Dermochelys coriacea (Leatherback Turtle)
+url <- cell_tile_url(mdl_key = mk, colormap = "spectral_r", rescale = c(1, 100))
+
+leaflet() |>
+  addProviderTiles("CartoDB.DarkMatter") |>
+  addTiles(urlTemplate = url, options = tileOptions(opacity = 0.85)) |>
+  setView(-90, 25, zoom = 3)
+```
+
+## 5. Score a Program Area
+
+`scores_for_pra()` returns the per-category marine-sensitivity scores for a BOEM Program Area —
+ready for a flower plot, where each petal's height is the category score.
+
+```{r scores}
+sc <- scores_for_pra(con, "ALA")                  # ALA = a BOEM Program Area key
+knitr::kable(sc[c("component", "score")], digits = 1)
+```
+
+```{r flower, eval = requireNamespace("ggiraph", quietly = TRUE), fig.height = 4.5}
+plot_flower(
+  sc,
+  fld_category = component,
+  fld_height   = score,
+  fld_width    = even,
+  tooltip_expr = "{component}: {round(score, 1)}",
+  title        = "ALA")
+```
+
+## 6. Species
+
+The `taxon` table carries each merged taxon's category, governing extinction-risk score, and
+protection flags — e.g. the highest-risk mammals in US waters:
+
+```{r species}
+tbl(con, "taxon") |>
+  filter(sp_cat == "mammal", is_valid_usa, er_score >= 80) |>
+  select(scientific_name, common_name, extrisk_code, er_score, is_mmpa) |>
+  arrange(desc(er_score), scientific_name) |>
+  head(10) |>
+  collect() |>
+  knitr::kable()
+```
+
+To go the other way — *which species occur in a set of cells* — use `species_for_cells(con, cells)`,
+which joins the merged `model_cell` surface to `taxon` (that view needs credentials, so call
+`attach_atlas()` without `anon`).
+
+```{r cleanup, include = FALSE}
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
