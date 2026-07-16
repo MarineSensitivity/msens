@@ -16,7 +16,7 @@ cell_tile_url(
   color = NULL,
   mtime = NULL,
   mdl_key = NULL,
-  base = "https://titilecache.marinesensitivity.org"
+  base = "https://titiler-v8.marinesensitivity.org"
 )
 ```
 
@@ -62,7 +62,10 @@ cell_tile_url(
 
 - base:
 
-  character; base URL of the titilecache service
+  character; base URL of the tile service. Defaults to the **v8**
+  `titiler-v8` factory, which accepts `?mdl_key=`. (The legacy
+  `titilecache` Varnish caches the **v7** titiler, whose API takes
+  `?sql=` and 422s on `mdl_key` — so it must not be used for v8 tiles.)
 
 ## Value
 

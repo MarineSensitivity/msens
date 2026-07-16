@@ -56,7 +56,7 @@ with equivalent SQL produce identical URLs — Varnish keys on the full URL.</p>
 <span>  color <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mtime <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mdl_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  base <span class="op">=</span> <span class="st">"https://titilecache.marinesensitivity.org"</span></span>
+<span>  base <span class="op">=</span> <span class="st">"https://titiler-v8.marinesensitivity.org"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -101,7 +101,10 @@ releases even as that internal id is renumbered.</p></dd>
 
 
 <dt id="arg-base">base<a class="anchor" aria-label="anchor" href="#arg-base"></a></dt>
-<dd><p>character; base URL of the titilecache service</p></dd>
+<dd><p>character; base URL of the tile service. Defaults to the <strong>v8</strong>
+<code>titiler-v8</code> factory, which accepts <code>?mdl_key=</code>. (The legacy
+<code>titilecache</code> Varnish caches the <strong>v7</strong> titiler, whose API takes <code>?sql=</code>
+and 422s on <code>mdl_key</code> — so it must not be used for v8 tiles.)</p></dd>
 
 </dl></div>
     <div class="section level2">

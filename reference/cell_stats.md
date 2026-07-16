@@ -11,7 +11,7 @@ cell_stats(
   sql = NULL,
   mtime = NULL,
   mdl_key = NULL,
-  base = "https://titilecache.marinesensitivity.org"
+  base = "https://titiler-v8.marinesensitivity.org"
 )
 ```
 
@@ -34,7 +34,9 @@ cell_stats(
 
 - base:
 
-  character; base URL of the titilecache service
+  character; base URL of the tile service (v8 `titiler-v8`; see
+  [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
+  on why the legacy v7 `titilecache` must not be used)
 
 ## Value
 
