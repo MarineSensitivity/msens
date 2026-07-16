@@ -336,7 +336,10 @@ add_cell_tiles <- function(
 #'   titiler resolves `mdl_key` -> the internal integer partition id from the
 #'   `model` registry, so this URL keeps referencing the same model across
 #'   releases even as that internal id is renumbered.
-#' @param base character; base URL of the titilecache service
+#' @param base character; base URL of the tile service. Defaults to the **v8**
+#'   `titiler-v8` factory, which accepts `?mdl_key=`. (The legacy
+#'   `titilecache` Varnish caches the **v7** titiler, whose API takes `?sql=`
+#'   and 422s on `mdl_key` — so it must not be used for v8 tiles.)
 #' @return character(1) tile URL template
 #' @export
 #' @concept viz
@@ -344,7 +347,7 @@ cell_tile_url <- function(
     sql = NULL,
     colormap = "spectral_r", rescale = NULL, color = NULL, mtime = NULL,
     mdl_key = NULL,
-    base = "https://titilecache.marinesensitivity.org") {
+    base = "https://titiler-v8.marinesensitivity.org") {
   # source param: the merged-model fast-path (the STABLE `mdl_key`, resolved server-side to a
   # serve partition read by exact path) OR a base64url SELECT. Exactly one. The internal integer
   # partition id is NEVER put in the URL — mdl_key is what stays constant across releases.
@@ -419,7 +422,8 @@ cog_tile_url <- function(
 #' @param sql character(1); same SELECT passed to [cell_tile_url()]
 #' @param mtime character; optional cache-bust tag, see [cell_tile_url()]
 #' @param mdl_key character(1); stable model key fast-path, see [cell_tile_url()]
-#' @param base character; base URL of the titilecache service
+#' @param base character; base URL of the tile service (v8 `titiler-v8`; see
+#'   [cell_tile_url()] on why the legacy v7 `titilecache` must not be used)
 #' @return named list of numeric statistics
 #' @importFrom httr2 request req_url_query req_perform resp_body_json
 #' @export
@@ -428,7 +432,7 @@ cell_stats <- function(
     sql = NULL,
     mtime = NULL,
     mdl_key = NULL,
-    base = "https://titilecache.marinesensitivity.org") {
+    base = "https://titiler-v8.marinesensitivity.org") {
   # req_url_query URL-encodes values, so pass the raw mdl_key (stable public id, not the
   # internal integer partition id).
   if (!is.null(mdl_key)) {

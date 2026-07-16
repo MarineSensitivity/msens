@@ -95,18 +95,24 @@ tibble(
 
 ## 4. Retrieve and map a distribution
 
-Every merged taxon is served as a whole-range surface via titiler; `cell_tile_url()` builds the XYZ
-tile template, which drops straight into a leaflet map.
+The `native_asset` table maps each model to its published tile services. Retrieve a merged taxon's
+whole-range Cloud-Optimized GeoTIFF and hand it to `cog_tile_url()`, which builds an XYZ tile
+template that drops straight into a leaflet map. (For the US-scored surface instead, `cell_tile_url(mdl_key = mk)` serves the `model_cell` cells.)
 
 ```{r map, eval = requireNamespace("leaflet", quietly = TRUE)}
 library(leaflet)
 mk  <- "ms_merge|WORMS:137209"                    # Dermochelys coriacea (Leatherback Turtle)
-url <- cell_tile_url(mdl_key = mk, colormap = "spectral_r", rescale = c(1, 100))
+
+# the published whole-range COG for this merged taxon
+cog <- tbl(con, "native_asset") |>
+  filter(ms_merge_key == mk, ds_key == "ms_merge") |>
+  pull(asset_url) |> head(1)
+url <- cog_tile_url(cog, colormap = "spectral_r", rescale = c(1, 100))
 
 leaflet() |>
   addProviderTiles("CartoDB.DarkMatter") |>
-  addTiles(urlTemplate = url, options = tileOptions(opacity = 0.85)) |>
-  setView(-90, 25, zoom = 3)
+  addTiles(urlTemplate = url, options = tileOptions(opacity = 0.9)) |>
+  setView(0, 20, zoom = 1)
 ```
 
 ## 5. Score a Program Area

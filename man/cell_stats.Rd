@@ -8,7 +8,7 @@ cell_stats(
   sql = NULL,
   mtime = NULL,
   mdl_key = NULL,
-  base = "https://titilecache.marinesensitivity.org"
+  base = "https://titiler-v8.marinesensitivity.org"
 )
 }
 \arguments{
@@ -18,7 +18,8 @@ cell_stats(
 
 \item{mdl_key}{character(1); stable model key fast-path, see \code{\link[=cell_tile_url]{cell_tile_url()}}}
 
-\item{base}{character; base URL of the titilecache service}
+\item{base}{character; base URL of the tile service (v8 \code{titiler-v8}; see
+\code{\link[=cell_tile_url]{cell_tile_url()}} on why the legacy v7 \code{titilecache} must not be used)}
 }
 \value{
 named list of numeric statistics

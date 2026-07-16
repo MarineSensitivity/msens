@@ -11,7 +11,7 @@ cell_tile_url(
   color = NULL,
   mtime = NULL,
   mdl_key = NULL,
-  base = "https://titilecache.marinesensitivity.org"
+  base = "https://titiler-v8.marinesensitivity.org"
 )
 }
 \arguments{
@@ -39,7 +39,10 @@ titiler resolves \code{mdl_key} -> the internal integer partition id from the
 \code{model} registry, so this URL keeps referencing the same model across
 releases even as that internal id is renumbered.}
 
-\item{base}{character; base URL of the titilecache service}
+\item{base}{character; base URL of the tile service. Defaults to the \strong{v8}
+\code{titiler-v8} factory, which accepts \verb{?mdl_key=}. (The legacy
+\code{titilecache} Varnish caches the \strong{v7} titiler, whose API takes \verb{?sql=}
+and 422s on \code{mdl_key} — so it must not be used for v8 tiles.)}
 }
 \value{
 character(1) tile URL template
