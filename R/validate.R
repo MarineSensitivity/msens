@@ -123,12 +123,34 @@ mass_conservation <- function(total_source, total_hex, tol = 0.1) {
   list(ratio = ratio, within = isTRUE(abs(ratio - 1) <= tol), tol = tol)
 }
 
+#' Name of a table's scalar value column (`val` or `value`)
+#'
+#' The v8 schema renamed the score/key column from `value` to `val` (`value` is a
+#' DuckDB reserved word). Detecting it per-connection lets [pra_score_delta()]
+#' compare a v7 database (`value`) against a v8 database (`val`) with one query
+#' shape. Prefers `val` when both somehow exist.
+#'
+#' @param con a DBI connection
+#' @param tbl table name to inspect
+#' @return `"val"` or `"value"`
+#' @keywords internal
+#' @importFrom DBI dbGetQuery dbQuoteString
+.value_col <- function(con, tbl) {
+  cols <- DBI::dbGetQuery(con, sprintf("PRAGMA table_info(%s)", DBI::dbQuoteString(con, tbl)))$name
+  if ("val" %in% cols) "val" else "value"
+}
+
 #' Program-Area composite-score delta between two version databases
 #'
 #' Reads the Program-Area composite score from two SDM DuckDB connections (e.g.
 #' v7 on the cell grid and v8 on the hex grid) and returns the per-Program-Area
 #' [score_delta()]. Centralizes the query previously inlined in
-#' `workflows/dev/build_v7.R` so `build_v8.R` and `validate_v7_v8.qmd` share it.
+#' `workflows/dev/build_v7.R` so `build_v8.R` and `validate_versions.qmd` share it.
+#'
+#' Schema-adaptive: the score/key column is `value` in v7 and `val` in v8 (the
+#' reserved-word rename), so the column name is resolved per connection via
+#' [.value_col()] rather than hard-coded — otherwise a v7↔v8 (or v8↔v8) comparison
+#' errors with "Table z does not have a column named value".
 #'
 #' @param con_a,con_b DBI connections to the two versions' `sdm.duckdb`
 #' @param metric_key composite metric key (default [METRIC_SCORE_DEFAULT])
@@ -141,14 +163,18 @@ mass_conservation <- function(total_source, total_hex, tol = 0.1) {
 pra_score_delta <- function(con_a, con_b,
                             metric_key = METRIC_SCORE_DEFAULT,
                             labels = c("v7", "v8")) {
-  q <- glue::glue("
-    SELECT z.value AS programarea_key, zm.value AS score
-    FROM zone z
-    JOIN zone_metric zm USING(zone_seq)
-    JOIN metric m USING(metric_seq)
-    WHERE z.fld = 'programarea_key' AND m.metric_key = '{metric_key}'")
+  q <- function(con) {
+    zc <- .value_col(con, "zone")           # programarea_key string
+    mc <- .value_col(con, "zone_metric")    # numeric score
+    glue::glue("
+      SELECT z.{zc} AS programarea_key, zm.{mc} AS score
+      FROM zone z
+      JOIN zone_metric zm USING(zone_seq)
+      JOIN metric m USING(metric_seq)
+      WHERE z.fld = 'programarea_key' AND m.metric_key = '{metric_key}'")
+  }
   score_delta(
-    DBI::dbGetQuery(con_a, q),
-    DBI::dbGetQuery(con_b, q),
+    DBI::dbGetQuery(con_a, q(con_a)),
+    DBI::dbGetQuery(con_b, q(con_b)),
     key = "programarea_key", value = "score", labels = labels)
 }

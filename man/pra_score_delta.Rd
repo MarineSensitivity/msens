@@ -25,6 +25,12 @@ a tibble from \code{\link[=score_delta]{score_delta()}} keyed by \code{programar
 Reads the Program-Area composite score from two SDM DuckDB connections (e.g.
 v7 on the cell grid and v8 on the hex grid) and returns the per-Program-Area
 \code{\link[=score_delta]{score_delta()}}. Centralizes the query previously inlined in
-\code{workflows/dev/build_v7.R} so \code{build_v8.R} and \code{validate_v7_v8.qmd} share it.
+\code{workflows/dev/build_v7.R} so \code{build_v8.R} and \code{validate_versions.qmd} share it.
+}
+\details{
+Schema-adaptive: the score/key column is \code{value} in v7 and \code{val} in v8 (the
+reserved-word rename), so the column name is resolved per connection via
+\code{\link[=.value_col]{.value_col()}} rather than hard-coded — otherwise a v7↔v8 (or v8↔v8) comparison
+errors with "Table z does not have a column named value".
 }
 \concept{validate}
