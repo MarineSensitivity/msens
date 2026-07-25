@@ -154,58 +154,140 @@ scores_for_cells <- function(con, cells,
     dplyr::filter(component != "all")
 }
 
+# Resolve the v7 vs v8 column names for the species-table query (internal).
+#
+# The v8 rewrite renamed three things this query depends on, and the app-side
+# copy of it was never migrated — which is why the v8 "Table of Species" tab came
+# up empty with "Can't select columns that don't exist":
+#
+#   concept          v7                 v8
+#   taxon validity   is_ok              is_valid_usa
+#   model id         mdl_seq            ms_merge_key (taxon) / mdl_key (model_cell)
+#   cell value       value              val           (`value` is reserved in DuckDB)
+#
+# Resolved per connection so one implementation serves both schemas.
+.sdm_cols <- function(con) {
+  taxon_cols <- DBI::dbListFields(con, "taxon")
+  mc_cols    <- DBI::dbListFields(con, "model_cell")
+  pick <- function(cands, have, what) {
+    hit <- cands[cands %in% have]
+    if (length(hit) == 0)
+      stop("cannot resolve the ", what, " column; looked for: ",
+           paste(cands, collapse = ", "), call. = FALSE)
+    hit[1]
+  }
+  list(
+    valid = pick(c("is_ok", "is_valid_usa"), taxon_cols, "taxon validity"),
+    # v7's `is_ok` already baked in the marine/category cull; v8's
+    # `is_valid_usa` only means "has >=1 merged cell in US waters", so the
+    # scoring-eligibility rules must be applied explicitly (see below).
+    marine = if ("is_marine" %in% taxon_cols) "is_marine" else NA_character_,
+    tkey  = pick(c("mdl_seq", "ms_merge_key"), taxon_cols, "taxon model-id"),
+    mkey  = pick(c("mdl_seq", "mdl_key"), mc_cols, "model_cell model-id"),
+    val   = pick(c("value", "val"), mc_cols, "model_cell value"))
+}
+
+# The one species-table aggregation, given SQL that yields (cell_id, pct_covered).
+# Weighted by pct_covered so partially covered edge cells count proportionally.
+.species_sql <- function(con, cells_sql) {
+  k <- .sdm_cols(con)
+  # SCORING ELIGIBILITY, not just "has cells". v7 encoded this in `is_ok`; v8
+  # splits it out, so without these the table lists non-marine and excluded
+  # taxa — the v8 run surfaced a cane toad (amphibian) as the first row of the
+  # study-area species table.
+  marine_clause <- if (is.na(k$marine)) "" else glue::glue(" AND t.{k$marine}")
+  glue::glue("
+    WITH z AS ({cells_sql})
+    SELECT t.sp_cat,
+           t.common_name              AS sp_common,
+           t.scientific_name          AS sp_scientific,
+           t.taxon_id,
+           t.taxon_authority,
+           t.extrisk_code             AS er_code,
+           t.er_score / 100.0         AS er_score,
+           t.is_mmpa,
+           t.is_mbta,
+           CAST(mc.{k$mkey} AS VARCHAR) AS mdl_key,
+           sum(c.area_km2 * z.pct_covered / 100.0)                         AS area_km2,
+           sum(mc.{k$val} * z.pct_covered) / sum(z.pct_covered) / 100.0    AS avg_suit
+    FROM model_cell mc
+    JOIN z      USING (cell_id)
+    JOIN cell c USING (cell_id)
+    JOIN taxon t ON t.{k$tkey} = mc.{k$mkey}
+    WHERE t.{k$valid}{marine_clause}
+      AND t.sp_cat NOT IN ('reptile', 'amphibian')
+    GROUP BY 1,2,3,4,5,6,7,8,9,10")
+}
+
+# shared post-aggregation: per-species and per-category contribution shares
+.species_shares <- function(d) {
+  d |>
+    dplyr::mutate(
+      suit_er      = .data$avg_suit * .data$er_score,
+      suit_er_area = .data$avg_suit * .data$er_score * .data$area_km2) |>
+    dplyr::group_by(.data$sp_cat) |>
+    dplyr::mutate(cat_suit_er_area = sum(.data$suit_er_area, na.rm = TRUE)) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(pct_cat = .data$suit_er_area / .data$cat_suit_er_area) |>
+    dplyr::arrange(.data$sp_cat, .data$sp_scientific)
+}
+
 #' Species table aggregated across a set of cells
 #'
-#' Returns a tibble with one row per species, aggregated across the
-#' supplied cell set with `pct_covered` weighting. Column shape matches
-#' the inline query in the mapgl app's drawn-polygon path.
+#' Returns a tibble with one row per species, aggregated across the supplied
+#' cell set with `pct_covered` weighting. Works against **both** the v7 and v8
+#' schemas — the differing column names (`is_ok`/`is_valid_usa`,
+#' `mdl_seq`/`ms_merge_key`, `value`/`val`) are resolved per connection.
 #'
-#' @param con a DBI connection (e.g. from [sdm_db_con()])
-#' @param cells a tibble from [cells_in_polygon()]
-#' @return tibble
-#' @importFrom dplyr tbl filter select mutate inner_join group_by summarize
-#'   collect ungroup join_by
-#' @importFrom dbplyr copy_inline
+#' Use [species_for_zone()] instead for a whole zone (subregion / Program Area /
+#' ecoregion): it resolves the zone's cells inside the database rather than
+#' shipping hundreds of thousands of cell ids into the query.
+#'
+#' @param con a DBI connection to an `sdm.duckdb`
+#' @param cells a tibble with `cell_id` and `pct_covered`, e.g. from
+#'   [cells_in_polygon()]
+#' @return tibble, one row per species; `mdl_key` is the model id as character
+#'   (the v7 `mdl_seq` or the v8 `mdl_key`)
 #' @export
 #' @concept calc
 species_for_cells <- function(con, cells) {
-  cells_t <- dbplyr::copy_inline(con, cells)
-  tbl_taxon <- dplyr::tbl(con, "taxon") |>
-    dplyr::filter(is_ok) |>
-    dplyr::select(
-      sp_cat,
-      sp_common     = common_name,
-      sp_scientific = scientific_name,
-      taxon_id,
-      taxon_authority,
-      er_code       = extrisk_code,
-      er_score,
-      is_mmpa,
-      is_mbta,
-      mdl_seq) |>
-    dplyr::mutate(er_score = er_score / 100)
-  dplyr::tbl(con, "model_cell") |>
-    dplyr::inner_join(cells_t,   by = "cell_id") |>
-    dplyr::inner_join(tbl_taxon, by = dplyr::join_by(mdl_seq)) |>
-    dplyr::inner_join(
-      dplyr::tbl(con, "cell") |> dplyr::select(cell_id, area_km2),
-      by = dplyr::join_by(cell_id)) |>
-    dplyr::group_by(
-      mdl_seq, sp_cat, sp_common, sp_scientific, taxon_id,
-      taxon_authority, er_code, er_score, is_mmpa, is_mbta) |>
-    dplyr::summarize(
-      area_km2 = sum(area_km2 * pct_covered / 100, na.rm = TRUE),
-      avg_suit = sum(value * pct_covered, na.rm = TRUE) /
-                 sum(pct_covered, na.rm = TRUE) / 100,
-      .groups  = "drop") |>
-    dplyr::collect() |>
-    dplyr::mutate(
-      suit_er      = avg_suit * er_score,
-      suit_er_area = avg_suit * er_score * area_km2) |>
-    dplyr::group_by(sp_cat) |>
-    dplyr::mutate(cat_suit_er_area = sum(suit_er_area, na.rm = TRUE)) |>
-    dplyr::ungroup() |>
-    dplyr::mutate(pct_cat = suit_er_area / cat_suit_er_area)
+  stopifnot(all(c("cell_id", "pct_covered") %in% names(cells)))
+  vals <- paste(
+    sprintf("(%d, %s)", as.integer(cells$cell_id), as.numeric(cells$pct_covered)),
+    collapse = ", ")
+  cells_sql <- glue::glue("SELECT * FROM (VALUES {vals}) AS v(cell_id, pct_covered)")
+  DBI::dbGetQuery(con, .species_sql(con, cells_sql)) |>
+    dplyr::as_tibble() |>
+    .species_shares()
+}
+
+#' Species table aggregated across a zone
+#'
+#' One row per species within a named zone (`subregion_key`, `programarea_key`
+#' or `ecoregion_key`), aggregated with `pct_covered` weighting.
+#'
+#' Computed live from `zone_cell` + `model_cell` + `taxon` rather than read from
+#' a precomputed table: v7 shipped a `zone_taxon` table, but **v8 does not build
+#' one**, which left the app's species table broken. Measured on the v8 database,
+#' the largest zone (`subregion_key = "USA"`, ~349k cells, ~10k species) takes
+#' ~5 s, so precomputation is not required.
+#'
+#' @param con a DBI connection to an `sdm.duckdb`
+#' @param zone_fld zone field, e.g. `"programarea_key"`
+#' @param zone_val zone value, e.g. `"GAA"`
+#' @return tibble, same shape as [species_for_cells()]
+#' @export
+#' @concept calc
+species_for_zone <- function(con, zone_fld, zone_val) {
+  stopifnot(length(zone_fld) == 1L, length(zone_val) == 1L)
+  cells_sql <- glue::glue(
+    "SELECT zc.cell_id, zc.pct_covered FROM zone_cell zc ",
+    "JOIN zone zn USING (zone_seq) ",
+    "WHERE zn.fld = {DBI::dbQuoteString(con, zone_fld)} ",
+    "AND zn.val = {DBI::dbQuoteString(con, zone_val)}")
+  DBI::dbGetQuery(con, .species_sql(con, cells_sql)) |>
+    dplyr::as_tibble() |>
+    .species_shares()
 }
 
 #' Weighted mean of component scores

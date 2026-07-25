@@ -1,3 +1,24 @@
+# msens 0.7.0
+
+* **The species table works on v8 again** — `species_for_cells()` is now schema-adaptive and a new
+  `species_for_zone()` computes the table for a subregion / Program Area / ecoregion.
+
+  The v8 rewrite renamed `is_ok`→`is_valid_usa`, `mdl_seq`→`ms_merge_key`/`mdl_key` and
+  `value`→`val`, **and dropped the precomputed `zone_taxon` table** that v7 read. The query had also
+  been duplicated inline in the scores app against the old names. Together that left the v8 "Table
+  of Species" tab empty (`Can't select columns that don't exist`) and its CSV download unable to
+  produce a file. The app now *calls* these functions, so app and tests cannot drift.
+
+* **Scoring eligibility is enforced, not just cell presence.** v7 baked the marine/category cull
+  into `is_ok`; v8's `is_valid_usa` only means "has ≥1 merged cell in US waters". Filtering on
+  validity alone listed ineligible taxa — the first row of the real v8 study-area table was a
+  **cane toad**. Now also requires `is_marine` (where present) and excludes `reptile`/`amphibian`,
+  giving 9,632 species for subregion USA across the seven scoring categories.
+
+* No precomputed table is needed: the largest zone (~349k cells, ~10k species) computes in ~5 s.
+  Guarded by `tests/testthat/test-species-table.R` — synthetic v7 **and** v8 fixtures with identical
+  numbers, so both schemas must agree.
+
 # msens 0.6.1
 
 * **`ms_apps_script()` gains a `doGet()` health check.** Opening the deployed `/exec` URL in a

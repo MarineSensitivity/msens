@@ -7,16 +7,24 @@
 species_for_cells(con, cells)
 }
 \arguments{
-\item{con}{a DBI connection (e.g. from \code{\link[=sdm_db_con]{sdm_db_con()}})}
+\item{con}{a DBI connection to an \code{sdm.duckdb}}
 
-\item{cells}{a tibble from \code{\link[=cells_in_polygon]{cells_in_polygon()}}}
+\item{cells}{a tibble with \code{cell_id} and \code{pct_covered}, e.g. from
+\code{\link[=cells_in_polygon]{cells_in_polygon()}}}
 }
 \value{
-tibble
+tibble, one row per species; \code{mdl_key} is the model id as character
+(the v7 \code{mdl_seq} or the v8 \code{mdl_key})
 }
 \description{
-Returns a tibble with one row per species, aggregated across the
-supplied cell set with \code{pct_covered} weighting. Column shape matches
-the inline query in the mapgl app's drawn-polygon path.
+Returns a tibble with one row per species, aggregated across the supplied
+cell set with \code{pct_covered} weighting. Works against \strong{both} the v7 and v8
+schemas — the differing column names (\code{is_ok}/\code{is_valid_usa},
+\code{mdl_seq}/\code{ms_merge_key}, \code{value}/\code{val}) are resolved per connection.
+}
+\details{
+Use \code{\link[=species_for_zone]{species_for_zone()}} instead for a whole zone (subregion / Program Area /
+ecoregion): it resolves the zone's cells inside the database rather than
+shipping hundreds of thousands of cell ids into the query.
 }
 \concept{calc}
