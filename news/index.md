@@ -1,5 +1,51 @@
 # Changelog
 
+## msens 0.6.0
+
+- **Usage analytics for the browser-facing products** (`analytics.R`),
+  so the toolkit can report which layers, tabs, species and downloads
+  are actually used. Two channels, one code path — and **neither
+  performs network I/O on the R side**, so instrumenting a hot control
+  adds no latency to the reactive that follows:
+
+  - [`ga_js()`](http://marinesensitivity.org/msens/reference/ga_js.md) /
+    [`ga_head()`](http://marinesensitivity.org/msens/reference/ga_head.md)
+    — the `<head>` snippet: GA4 (gtag) for aggregate, bounded behaviour,
+    plus a client-side queue that beacons detail to a Google Sheet.
+    Batched (10 events / 15 s / page-hidden) via `navigator.sendBeacon`,
+    which keeps the Apps Script execution quota flat regardless of
+    interaction rate. The beacon body is `text/plain` on purpose: that
+    keeps it a CORS *simple* request, and an Apps Script `/exec`
+    endpoint does not answer the `OPTIONS` preflight an
+    `application/json` body would trigger.
+  - `ms_track(session, event, ...)` — send an event from the Shiny
+    **server** for facts only R knows (the scientific name behind a
+    picker value, a report’s parameters, a row count, an error). It
+    pushes one message over the session’s existing websocket; it never
+    opens an HTTP connection, and it swallows errors so instrumentation
+    can never take down an app. Verified to work from inside
+    `downloadHandler(content=)`.
+  - [`ms_event()`](http://marinesensitivity.org/msens/reference/ms_event.md)
+    — the payload constructor: normalises event names to GA4’s rules
+    (lowercase `[a-z0-9_]`, leading letter, ≤40 chars) and drops absent
+    parameters.
+  - [`ms_log_header()`](http://marinesensitivity.org/msens/reference/ms_log_header.md)
+    /
+    [`ms_apps_script()`](http://marinesensitivity.org/msens/reference/ms_apps_script.md)
+    — the Sheet’s column header and the `doPost()` Apps Script that
+    appends a **batch** in one `setValues()`. Column order comes from
+    [`ms_log_header()`](http://marinesensitivity.org/msens/reference/ms_log_header.md)
+    so the Sheet, the script and the client payload cannot drift.
+
+  One GA4 measurement ID is shared by every product (gtag scopes the
+  `_ga` cookie to the registrable domain, so a single stream already
+  spans `marinesensitivity.org` and `app.marinesensitivity.org`);
+  products are separated by `content_group`. Guarded by
+  `tests/testthat/test-analytics.R`.
+
+- **`_pkgdown.yml`**: the reference site now carries the same GA4 tag
+  (`content_group: msens`).
+
 ## msens 0.5.1
 
 - **Getting-started article: score-surface section.** The `msens`

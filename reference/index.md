@@ -157,6 +157,15 @@ Other functions not defined by the concepts above
 - [`force_target()`](http://marinesensitivity.org/msens/reference/force_target.md)
   : Should this target be forced to rebuild?
 
+- [`ga_head()`](http://marinesensitivity.org/msens/reference/ga_head.md)
+  :
+
+  Analytics `<head>` snippet as a Shiny tag
+
+- [`ga_js()`](http://marinesensitivity.org/msens/reference/ga_js.md) :
+
+  Analytics `<head>` snippet (GA4 + batched Sheet beacon)
+
 - [`grid_spec()`](http://marinesensitivity.org/msens/reference/grid_spec.md)
   : Grid spec for the global cell-id raster
 
@@ -214,6 +223,18 @@ Other functions not defined by the concepts above
 - [`model_hex_from_weights()`](http://marinesensitivity.org/msens/reference/model_hex_from_weights.md)
   : Interpolate one model's source values onto hexes with precomputed
   weights
+
+- [`ms_apps_script()`](http://marinesensitivity.org/msens/reference/ms_apps_script.md)
+  : Apps Script source for the usage-log Sheet
+
+- [`ms_event()`](http://marinesensitivity.org/msens/reference/ms_event.md)
+  : Build a tracking-event payload
+
+- [`ms_log_header()`](http://marinesensitivity.org/msens/reference/ms_log_header.md)
+  : Column header for the usage-log Sheet
+
+- [`ms_track()`](http://marinesensitivity.org/msens/reference/ms_track.md)
+  : Send a tracking event from the Shiny server to the browser
 
 - [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
   : Parse NOAA protected_status field

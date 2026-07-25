@@ -34,6 +34,8 @@
 <url><loc>http://marinesensitivity.org/msens/reference/copy_atlas_parquet.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/dot-value_col.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/force_target.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ga_head.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ga_js.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/get_species_by_feature.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ggmap_areas.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ggplot_flower.html</loc></url>
@@ -58,7 +60,11 @@
 <url><loc>http://marinesensitivity.org/msens/reference/mean_score.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/merge_sql.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/model_hex_from_weights.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_apps_script.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_basemap.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_event.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_log_header.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_track.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_noaa_status.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_qmd_frontmatter.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/plot_flower.html</loc></url>
