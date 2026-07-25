@@ -2,6 +2,18 @@ url: http://marinesensitivity.org/msens/
 template:
   bootstrap: 5
   assets: inst
+  # GA4 property 413466008 — the SAME measurement ID as every other
+  # MarineSensitivity product, separated in reporting by `content_group`
+  # (pkgdown 2.x dropped the old `params: ganalytics` key).
+  includes:
+    in_header: |
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-9HW6L751XG"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){ dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-9HW6L751XG', { content_group: 'msens' });
+      </script>
 reference:
 - title: Read
   desc: Fetch data, spatial and non-spatial, especially from APIs
