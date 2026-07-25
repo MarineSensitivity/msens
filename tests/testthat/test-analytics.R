@@ -120,6 +120,12 @@ test_that("the Sheet header, Apps Script, and client payload agree", {
   expect_true(grepl("setValues(values)", gs, fixed = TRUE))
   expect_false(grepl("sh.appendRow", gs, fixed = TRUE))
 
+  # a GET health check must exist: without doGet, opening the /exec URL returns
+  # "Script function not found: doGet", which reads as a broken deployment and
+  # costs real debugging time even though only POST is ever used.
+  expect_true(grepl("function doGet(e)", gs, fixed = TRUE))
+  expect_true(grepl("function doPost(e)", gs, fixed = TRUE))
+
   # every header column is populated by the client payload builder in ga_js()
   js <- ga_js("scores", log_url = "https://example.com/exec")
   for (col in hdr)

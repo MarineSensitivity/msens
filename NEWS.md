@@ -1,3 +1,11 @@
+# msens 0.6.1
+
+* **`ms_apps_script()` gains a `doGet()` health check.** Opening the deployed `/exec` URL in a
+  browser previously returned *"Script function not found: doGet"*, which reads as a broken or
+  unauthorized deployment — it is not, since the client only ever POSTs, but it sends you hunting
+  through Apps Script deployment settings. A GET now answers `{ok:true, rows:<n>}`, so the endpoint
+  (and that writes are landing) can be verified at a glance.
+
 # msens 0.6.0
 
 * **Usage analytics for the browser-facing products** (`analytics.R`), so the toolkit can
