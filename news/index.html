@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.6.1" id="msens-061">msens 0.6.1<a class="anchor" aria-label="anchor" href="#msens-061"></a></h2>
+<ul><li>
+<strong><code><a href="../reference/ms_apps_script.html">ms_apps_script()</a></code> gains a <code>doGet()</code> health check.</strong> Opening the deployed <code>/exec</code> URL in a browser previously returned <em>“Script function not found: doGet”</em>, which reads as a broken or unauthorized deployment — it is not, since the client only ever POSTs, but it sends you hunting through Apps Script deployment settings. A GET now answers <code>{ok:true, rows:&lt;n&gt;}</code>, so the endpoint (and that writes are landing) can be verified at a glance.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.6.0" id="msens-060">msens 0.6.0<a class="anchor" aria-label="anchor" href="#msens-060"></a></h2>
 <ul><li>

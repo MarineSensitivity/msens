@@ -18,7 +18,7 @@ execution quota — flat regardless of interaction rate."><script async src="htt
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -79,6 +79,24 @@ the client payload cannot drift.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> // request stays CORS-simple (this endpoint does not answer OPTIONS).</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> var COLS = ["timestamp","app","app_version","client_id","session_id","event","params","page","referrer","user_agent"];</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> // Health check. Without this, opening the /exec URL in a browser returns</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> // "Script function not found: doGet", which looks like a broken or unauthorized</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> // deployment and sends you hunting through deployment settings. It is not — the</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> // client only ever POSTs. A GET now answers {ok:true,...} so the endpoint can be</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> // verified at a glance. Reports the row count so you can confirm writes land.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> function doGet(e) {</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   try {</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     var sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     return ContentService</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       .createTextOutput(JSON.stringify({ ok: true, endpoint: "msens-usage-log", rows: sh.getLastRow() - 1 }))</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       .setMimeType(ContentService.MimeType.JSON);</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   } catch (err) {</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     return ContentService</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       .setMimeType(ContentService.MimeType.JSON);</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   }</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> }</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> function doPost(e) {</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   try {</span>
