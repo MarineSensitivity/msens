@@ -303,6 +303,9 @@ Other functions not defined by the concepts above
 - [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
   : Species table aggregated across a set of cells
 
+- [`species_for_zone()`](http://marinesensitivity.org/msens/reference/species_for_zone.md)
+  : Species table aggregated across a zone
+
 - [`spp_db_con()`](http://marinesensitivity.org/msens/reference/spp_db_con.md)
   : Connect to species taxonomy DuckDB
 

@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,15 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.7.0" id="msens-070">msens 0.7.0<a class="anchor" aria-label="anchor" href="#msens-070"></a></h2>
+<ul><li>
+<p><strong>The species table works on v8 again</strong> — <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code> is now schema-adaptive and a new <code><a href="../reference/species_for_zone.html">species_for_zone()</a></code> computes the table for a subregion / Program Area / ecoregion.</p>
+<p>The v8 rewrite renamed <code>is_ok</code>→<code>is_valid_usa</code>, <code>mdl_seq</code>→<code>ms_merge_key</code>/<code>mdl_key</code> and <code>value</code>→<code>val</code>, <strong>and dropped the precomputed <code>zone_taxon</code> table</strong> that v7 read. The query had also been duplicated inline in the scores app against the old names. Together that left the v8 “Table of Species” tab empty (<code>Can't select columns that don't exist</code>) and its CSV download unable to produce a file. The app now <em>calls</em> these functions, so app and tests cannot drift.</p>
+</li>
+<li><p><strong>Scoring eligibility is enforced, not just cell presence.</strong> v7 baked the marine/category cull into <code>is_ok</code>; v8’s <code>is_valid_usa</code> only means “has ≥1 merged cell in US waters”. Filtering on validity alone listed ineligible taxa — the first row of the real v8 study-area table was a <strong>cane toad</strong>. Now also requires <code>is_marine</code> (where present) and excludes <code>reptile</code>/<code>amphibian</code>, giving 9,632 species for subregion USA across the seven scoring categories.</p></li>
+<li><p>No precomputed table is needed: the largest zone (~349k cells, ~10k species) computes in ~5 s. Guarded by <code>tests/testthat/test-species-table.R</code> — synthetic v7 <strong>and</strong> v8 fixtures with identical numbers, so both schemas must agree.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.6.1" id="msens-061">msens 0.6.1<a class="anchor" aria-label="anchor" href="#msens-061"></a></h2>
 <ul><li>
