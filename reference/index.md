@@ -126,6 +126,9 @@ Other functions not defined by the concepts above
 
   Build the targets list from `msens:` frontmatter
 
+- [`build_zone_taxon()`](http://marinesensitivity.org/msens/reference/build_zone_taxon.md)
+  : Build the precomputed zone x taxon summary table
+
 - [`cell_i_grid()`](http://marinesensitivity.org/msens/reference/cell_i_grid.md)
   : Canonical global 0.5-degree cell index for lon/lat
 

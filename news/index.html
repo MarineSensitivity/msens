@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,13 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.7.1" id="msens-071">msens 0.7.1<a class="anchor" aria-label="anchor" href="#msens-071"></a></h2>
+<ul><li>
+<p><strong><code><a href="../reference/build_zone_taxon.html">build_zone_taxon()</a></code> + <code><a href="../reference/species_for_zone.html">species_for_zone()</a></code> now prefers the precomputed table.</strong> Computing a zone’s species list live works locally but <strong>cannot work on the server</strong>, which holds only the KB-sized <code>serve.duckdb</code> whose <code>model_cell</code> is an S3 view <em>partitioned by <code>mdl_id</code></em> for per-model point reads (titiler tiles). Aggregating there means listing and scanning ~580M rows over HTTPS and fails with <code>IO Error: … HTTP GET …/serve/model_cell/</code>. This is exactly why v7 shipped a <code>zone_taxon</code> table, and why v8 dropping it broke the app’s species table.</p>
+<p><code><a href="../reference/build_zone_taxon.html">build_zone_taxon()</a></code> precomputes every zone where <code>model_cell</code> is local (115,700 rows across 36 zones, a few MB) and the pipeline releases it; <code><a href="../reference/species_for_zone.html">species_for_zone()</a></code> reads it when present and falls back to the live aggregation otherwise, so local development still works without it. Subregion USA went from <strong>5.7 s to 0.021 s</strong>.</p>
+</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.7.0" id="msens-070">msens 0.7.0<a class="anchor" aria-label="anchor" href="#msens-070"></a></h2>
 <ul><li>
