@@ -1,5 +1,31 @@
 # Changelog
 
+## msens 0.9.0
+
+- **`cell_model` — the cell-oriented twin of `model_cell`**
+  (`cell_model.R`). `serve/model_cell` is partitioned by `mdl_id`, which
+  makes a titiler tile one point read but makes any per-**cell** or
+  per-**polygon** question (the scores app’s clicked cell, the Report
+  tab’s arbitrary area) a scan of all ~580M rows — over S3 that fails
+  outright. `cell_model` holds the same rows partitioned by a **2.5°
+  spatial tile**: 422 partitions, avg 1.4M rows, 1.4 GB total, and a
+  single cell resolves in **0.066 s**. Row counts match the source
+  exactly (580,568,326 / 634,208 cells / 17,763 models).
+
+  [`cell_model_tile_sql()`](http://marinesensitivity.org/msens/reference/cell_model_tile_sql.md)
+  and
+  [`cell_model_tiles()`](http://marinesensitivity.org/msens/reference/cell_model_tiles.md)
+  are the SQL and R halves of one formula — the writer partitions with
+  the first, readers prune with the second, and a test asserts they
+  agree on identical inputs, because a mismatch makes queries silently
+  return **nothing**.
+  [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
+  uses `cell_model` automatically when present.
+
+  Deliberately kept as LOCAL Parquet on the server, not S3: these
+  queries touch many partitions, which is exactly the access pattern
+  that fails over HTTPS.
+
 ## msens 0.8.0
 
 - **[`widget_png()`](http://marinesensitivity.org/msens/reference/widget_png.md)**

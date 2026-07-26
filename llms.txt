@@ -182,6 +182,12 @@ Other functions not defined by the concepts above
 - [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
   : Cell-ID SpatRaster
 
+- [`cell_model_tile_sql()`](http://marinesensitivity.org/msens/reference/cell_model_tile_sql.md)
+  : SQL expression for a cell's spatial tile id
+
+- [`cell_model_tiles()`](http://marinesensitivity.org/msens/reference/cell_model_tiles.md)
+  : Spatial tile ids covering a set of cells
+
 - [`cells_from_ranges()`](http://marinesensitivity.org/msens/reference/cells_from_ranges.md)
   : Rasterize range polygons onto the global 0.05° cell grid (whole
   range)

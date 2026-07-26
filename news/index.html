@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,14 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.9.0" id="msens-090">msens 0.9.0<a class="anchor" aria-label="anchor" href="#msens-090"></a></h2>
+<ul><li>
+<p><strong><code>cell_model</code> — the cell-oriented twin of <code>model_cell</code></strong> (<code>cell_model.R</code>). <code>serve/model_cell</code> is partitioned by <code>mdl_id</code>, which makes a titiler tile one point read but makes any per-<strong>cell</strong> or per-<strong>polygon</strong> question (the scores app’s clicked cell, the Report tab’s arbitrary area) a scan of all ~580M rows — over S3 that fails outright. <code>cell_model</code> holds the same rows partitioned by a <strong>2.5° spatial tile</strong>: 422 partitions, avg 1.4M rows, 1.4 GB total, and a single cell resolves in <strong>0.066 s</strong>. Row counts match the source exactly (580,568,326 / 634,208 cells / 17,763 models).</p>
+<p><code><a href="../reference/cell_model_tile_sql.html">cell_model_tile_sql()</a></code> and <code><a href="../reference/cell_model_tiles.html">cell_model_tiles()</a></code> are the SQL and R halves of one formula — the writer partitions with the first, readers prune with the second, and a test asserts they agree on identical inputs, because a mismatch makes queries silently return <strong>nothing</strong>. <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code> uses <code>cell_model</code> automatically when present.</p>
+<p>Deliberately kept as LOCAL Parquet on the server, not S3: these queries touch many partitions, which is exactly the access pattern that fails over HTTPS.</p>
+</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.8.0" id="msens-080">msens 0.8.0<a class="anchor" aria-label="anchor" href="#msens-080"></a></h2>
 <ul><li>
