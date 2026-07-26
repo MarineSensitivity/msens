@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.9.2" id="msens-092">msens 0.9.2<a class="anchor" aria-label="anchor" href="#msens-092"></a></h2>
+<ul><li>
+<strong>Never inspect <code>model_cell</code> when <code>cell_model</code> is available.</strong> <code>.sdm_cols()</code> read <code>model_cell</code>’s schema <em>before</em> choosing a source; on the server that alone makes DuckDB LIST the S3 prefix and fail (<code>IO Error: SSL peer certificate … HTTP GET …/serve/model_cell/</code>), so the clicked cell stayed broken even once <code>cell_model</code> existed. The source is now chosen first and only that table’s schema is read. Guarded by a test that drops <code>model_cell</code> outright, so any reference at all fails.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.9.1" id="msens-091">msens 0.9.1<a class="anchor" aria-label="anchor" href="#msens-091"></a></h2>
 <ul><li>
