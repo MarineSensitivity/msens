@@ -222,3 +222,29 @@ test_that("species_for_cells uses cell_model when present, with identical result
   expect_equal(got$mdl_key,       want$mdl_key)
   expect_gt(nrow(got), 0)                          # guards a silently-empty join
 })
+
+test_that("model_cell is never touched when cell_model is available", {
+  # REGRESSION (production): .sdm_cols() read model_cell's schema before
+  # choosing a source. On the server that alone makes DuckDB LIST the S3 prefix
+  # and fail —
+  #   IO Error: SSL peer certificate ... HTTP GET .../serve/model_cell/
+  # — so the clicked cell still broke even after cell_model existed. Here
+  # model_cell is removed outright here, so any access at all errors.
+  con <- fixture_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  cells <- data.frame(cell_id = c(1L, 2L), pct_covered = c(100, 50))
+
+  DBI::dbExecute(con, "CREATE TABLE model AS SELECT 1 AS mdl_id, 'ms_merge|WORMS:1' AS mdl_key
+                       UNION ALL SELECT 2, 'ms_merge|WORMS:2'")
+  DBI::dbExecute(con, paste0(
+    "CREATE TABLE cell_model AS SELECT ", cell_model_tile_sql("mc.cell_id"), " AS tile, ",
+    "mo.mdl_id, mc.cell_id, mc.val FROM model_cell mc JOIN model mo USING (mdl_key)"))
+
+  # remove model_cell entirely: any reference to it — including reading its
+  # schema — now errors, so this passes only if the code truly never touches it
+  DBI::dbExecute(con, "DROP TABLE model_cell")
+  expect_error(DBI::dbListFields(con, "model_cell"))   # confirms the trap
+
+  d <- species_for_cells(con, cells)
+  expect_equal(nrow(d), 1L)
+  expect_equal(d$mdl_key, "ms_merge|WORMS:1")
+})

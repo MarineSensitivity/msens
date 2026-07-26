@@ -1,3 +1,11 @@
+# msens 0.9.2
+
+* **Never inspect `model_cell` when `cell_model` is available.** `.sdm_cols()` read `model_cell`'s
+  schema *before* choosing a source; on the server that alone makes DuckDB LIST the S3 prefix and
+  fail (`IO Error: SSL peer certificate … HTTP GET …/serve/model_cell/`), so the clicked cell stayed
+  broken even once `cell_model` existed. The source is now chosen first and only that table's schema
+  is read. Guarded by a test that drops `model_cell` outright, so any reference at all fails.
+
 # msens 0.9.1
 
 * **`sdm_db_path()` falls back to `serve.duckdb`** when the full `sdm.duckdb` is absent. The server

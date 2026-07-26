@@ -166,9 +166,13 @@ scores_for_cells <- function(con, cells,
 #   cell value       value              val           (`value` is reserved in DuckDB)
 #
 # Resolved per connection so one implementation serves both schemas.
-.sdm_cols <- function(con) {
+.sdm_cols <- function(con, mc_tbl = "model_cell") {
   taxon_cols <- DBI::dbListFields(con, "taxon")
-  mc_cols    <- DBI::dbListFields(con, "model_cell")
+  # `mc_tbl` matters on the server: inspecting `model_cell` there means DuckDB
+  # LISTs the S3 prefix just to read its schema, which fails
+  # ("SSL peer certificate ... HTTP GET .../serve/model_cell/") — so when the
+  # local cell_model surface is being used, never touch model_cell at all.
+  mc_cols    <- if (is.null(mc_tbl)) character(0) else DBI::dbListFields(con, mc_tbl)
   pick <- function(cands, have, what) {
     hit <- cands[cands %in% have]
     if (length(hit) == 0)
@@ -183,14 +187,16 @@ scores_for_cells <- function(con, cells,
     # scoring-eligibility rules must be applied explicitly (see below).
     marine = if ("is_marine" %in% taxon_cols) "is_marine" else NA_character_,
     tkey  = pick(c("mdl_seq", "ms_merge_key"), taxon_cols, "taxon model-id"),
-    mkey  = pick(c("mdl_seq", "mdl_key"), mc_cols, "model_cell model-id"),
-    val   = pick(c("value", "val"), mc_cols, "model_cell value"))
+    mkey  = if (length(mc_cols)) pick(c("mdl_seq", "mdl_key"), mc_cols, "model_cell model-id") else NA_character_,
+    val   = if (length(mc_cols)) pick(c("value", "val"), mc_cols, "model_cell value") else NA_character_)
 }
 
 # The one species-table aggregation, given SQL that yields (cell_id, pct_covered).
 # Weighted by pct_covered so partially covered edge cells count proportionally.
 .species_sql <- function(con, cells_sql, tiles = NULL) {
-  k <- .sdm_cols(con)
+  # decide the source FIRST, then only inspect that table's schema
+  use_cm <- "cell_model" %in% DBI::dbListTables(con)
+  k <- .sdm_cols(con, if (use_cm) NULL else "model_cell")
   # SCORING ELIGIBILITY, not just "has cells". v7 encoded this in `is_ok`; v8
   # splits it out, so without these the table lists non-marine and excluded
   # taxa — the v8 run surfaced a cane toad (amphibian) as the first row of the
@@ -203,15 +209,19 @@ scores_for_cells <- function(con, cells,
   # integer mdl_id rather than the mdl_key string, so join back through `model`.
   # `tiles` prunes to the relevant partitions — pass it whenever the cell ids are
   # known up front.
-  use_cm <- "cell_model" %in% DBI::dbListTables(con)
-  mc_from <- if (!use_cm) "model_cell mc" else {
+  if (use_cm) {
+    # the subquery below exposes exactly these names, so nothing needs resolving
+    k$mkey <- "mdl_key"
+    k$val  <- "val"
     tile_clause <- if (is.null(tiles)) "" else
       glue::glue(" WHERE tile IN ({paste(tiles, collapse = ', ')})")
-    glue::glue("(SELECT cm.cell_id, cm.val, mo.mdl_key FROM cell_model cm",
-               " JOIN model mo USING (mdl_id)",
-               "{tile_clause}) mc")
+    mc_from <- glue::glue(
+      "(SELECT cm.cell_id, cm.val, mo.mdl_key FROM cell_model cm",
+      " JOIN model mo USING (mdl_id)",
+      "{tile_clause}) mc")
+  } else {
+    mc_from <- "model_cell mc"
   }
-  if (use_cm) k$mkey <- "mdl_key"   # the subquery exposes the key by name
   glue::glue("
     WITH z AS ({cells_sql})
     SELECT t.sp_cat,
