@@ -198,3 +198,27 @@ test_that("species_for_zone prefers the precomputed zone_taxon when present", {
   DBI::dbExecute(con, "UPDATE zone_taxon SET area_km2 = 12345 WHERE zone_value = 'AAA'")
   expect_equal(species_for_zone(con, "programarea_key", "AAA")$area_km2, 12345)
 })
+
+test_that("species_for_cells uses cell_model when present, with identical results", {
+  # model_cell is partitioned by mdl_id, so a per-cell query scans everything;
+  # cell_model holds the same rows partitioned by spatial tile. Both must give
+  # the same answer — and the cell_model path joins mdl_id back through `model`,
+  # which is where a wrong join would silently return zero rows.
+  con <- fixture_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  cells <- data.frame(cell_id = c(1L, 2L), pct_covered = c(100, 50))
+  want  <- species_for_cells(con, cells)          # via model_cell
+
+  # add the cell-oriented twin: same rows, mdl_id instead of mdl_key
+  DBI::dbExecute(con, "CREATE TABLE model AS SELECT 1 AS mdl_id, 'ms_merge|WORMS:1' AS mdl_key
+                       UNION ALL SELECT 2, 'ms_merge|WORMS:2'")
+  DBI::dbExecute(con, paste0(
+    "CREATE TABLE cell_model AS SELECT ", cell_model_tile_sql("mc.cell_id"), " AS tile, ",
+    "mo.mdl_id, mc.cell_id, mc.val FROM model_cell mc JOIN model mo USING (mdl_key)"))
+
+  got <- species_for_cells(con, cells)            # via cell_model
+  expect_equal(got$sp_scientific, want$sp_scientific)
+  expect_equal(got$area_km2,      want$area_km2)
+  expect_equal(got$avg_suit,      want$avg_suit)
+  expect_equal(got$mdl_key,       want$mdl_key)
+  expect_gt(nrow(got), 0)                          # guards a silently-empty join
+})

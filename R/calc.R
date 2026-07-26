@@ -189,13 +189,29 @@ scores_for_cells <- function(con, cells,
 
 # The one species-table aggregation, given SQL that yields (cell_id, pct_covered).
 # Weighted by pct_covered so partially covered edge cells count proportionally.
-.species_sql <- function(con, cells_sql) {
+.species_sql <- function(con, cells_sql, tiles = NULL) {
   k <- .sdm_cols(con)
   # SCORING ELIGIBILITY, not just "has cells". v7 encoded this in `is_ok`; v8
   # splits it out, so without these the table lists non-marine and excluded
   # taxa — the v8 run surfaced a cane toad (amphibian) as the first row of the
   # study-area species table.
   marine_clause <- if (is.na(k$marine)) "" else glue::glue(" AND t.{k$marine}")
+
+  # PREFER THE CELL-ORIENTED SURFACE. `model_cell` is partitioned by mdl_id, so
+  # a per-cell question scans everything; `cell_model` holds the same rows
+  # partitioned by a 2.5-degree spatial tile (see cell_model.R). It stores the
+  # integer mdl_id rather than the mdl_key string, so join back through `model`.
+  # `tiles` prunes to the relevant partitions — pass it whenever the cell ids are
+  # known up front.
+  use_cm <- "cell_model" %in% DBI::dbListTables(con)
+  mc_from <- if (!use_cm) "model_cell mc" else {
+    tile_clause <- if (is.null(tiles)) "" else
+      glue::glue(" WHERE tile IN ({paste(tiles, collapse = ', ')})")
+    glue::glue("(SELECT cm.cell_id, cm.val, mo.mdl_key FROM cell_model cm",
+               " JOIN model mo USING (mdl_id)",
+               "{tile_clause}) mc")
+  }
+  if (use_cm) k$mkey <- "mdl_key"   # the subquery exposes the key by name
   glue::glue("
     WITH z AS ({cells_sql})
     SELECT t.sp_cat,
@@ -210,7 +226,7 @@ scores_for_cells <- function(con, cells,
            CAST(mc.{k$mkey} AS VARCHAR) AS mdl_key,
            sum(c.area_km2 * z.pct_covered / 100.0)                         AS area_km2,
            sum(mc.{k$val} * z.pct_covered) / sum(z.pct_covered) / 100.0    AS avg_suit
-    FROM model_cell mc
+    FROM {mc_from}
     JOIN z      USING (cell_id)
     JOIN cell c USING (cell_id)
     JOIN taxon t ON t.{k$tkey} = mc.{k$mkey}
@@ -256,7 +272,7 @@ species_for_cells <- function(con, cells) {
     sprintf("(%d, %s)", as.integer(cells$cell_id), as.numeric(cells$pct_covered)),
     collapse = ", ")
   cells_sql <- glue::glue("SELECT * FROM (VALUES {vals}) AS v(cell_id, pct_covered)")
-  DBI::dbGetQuery(con, .species_sql(con, cells_sql)) |>
+  DBI::dbGetQuery(con, .species_sql(con, cells_sql, tiles = cell_model_tiles(cells$cell_id))) |>
     dplyr::as_tibble() |>
     .species_shares()
 }
