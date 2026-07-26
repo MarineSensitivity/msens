@@ -1,3 +1,17 @@
+# msens 0.7.1
+
+* **`build_zone_taxon()` + `species_for_zone()` now prefers the precomputed table.** Computing a
+  zone's species list live works locally but **cannot work on the server**, which holds only the
+  KB-sized `serve.duckdb` whose `model_cell` is an S3 view *partitioned by `mdl_id`* for per-model
+  point reads (titiler tiles). Aggregating there means listing and scanning ~580M rows over HTTPS
+  and fails with `IO Error: … HTTP GET …/serve/model_cell/`. This is exactly why v7 shipped a
+  `zone_taxon` table, and why v8 dropping it broke the app's species table.
+
+  `build_zone_taxon()` precomputes every zone where `model_cell` is local (115,700 rows across 36
+  zones, a few MB) and the pipeline releases it; `species_for_zone()` reads it when present and
+  falls back to the live aggregation otherwise, so local development still works without it.
+  Subregion USA went from **5.7 s to 0.021 s**.
+
 # msens 0.7.0
 
 * **The species table works on v8 again** — `species_for_cells()` is now schema-adaptive and a new

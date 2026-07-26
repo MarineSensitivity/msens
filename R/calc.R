@@ -261,6 +261,42 @@ species_for_cells <- function(con, cells) {
     .species_shares()
 }
 
+#' Build the precomputed zone x taxon summary table
+#'
+#' Computes [species_for_zone()] for **every** zone in the `zone` table and
+#' writes the result as a single `zone_taxon` table.
+#'
+#' WHY PRECOMPUTE. v7 shipped a `zone_taxon` table and v8 dropped it, on the
+#' assumption the app could aggregate live. It can locally — but **not on the
+#' server**, which holds only the KB-sized `serve.duckdb` whose `model_cell` is a
+#' view over S3 Parquet *partitioned by `mdl_id`* for per-model point reads
+#' (titiler tiles). A zone-wide aggregation there means listing and scanning the
+#' whole 580M-row dataset over HTTPS; in practice it fails outright with
+#' `IO Error: ... HTTP GET .../serve/model_cell/`. Precomputing here — where
+#' `model_cell` is local — turns that into a few-MB table the app just reads.
+#'
+#' @param con a DBI connection to the FULL `sdm.duckdb` (local `model_cell`)
+#' @param overwrite replace an existing `zone_taxon` table
+#' @return invisibly, the number of rows written
+#' @export
+#' @concept calc
+build_zone_taxon <- function(con, overwrite = TRUE) {
+  zones <- DBI::dbGetQuery(con, "SELECT DISTINCT fld, val FROM zone ORDER BY fld, val")
+  stopifnot("no zones found" = nrow(zones) > 0)
+  out <- vector("list", nrow(zones))
+  for (i in seq_len(nrow(zones))) {
+    d <- species_for_zone(con, zones$fld[i], zones$val[i])
+    if (nrow(d) == 0) next
+    out[[i]] <- dplyr::mutate(d, zone_fld = zones$fld[i], zone_value = zones$val[i],
+                              .before = 1)
+  }
+  d_all <- dplyr::bind_rows(out)
+  if (overwrite && "zone_taxon" %in% DBI::dbListTables(con))
+    DBI::dbExecute(con, "DROP TABLE zone_taxon")
+  DBI::dbWriteTable(con, "zone_taxon", as.data.frame(d_all))
+  invisible(nrow(d_all))
+}
+
 #' Species table aggregated across a zone
 #'
 #' One row per species within a named zone (`subregion_key`, `programarea_key`
@@ -280,6 +316,23 @@ species_for_cells <- function(con, cells) {
 #' @concept calc
 species_for_zone <- function(con, zone_fld, zone_val) {
   stopifnot(length(zone_fld) == 1L, length(zone_val) == 1L)
+
+  # PREFER THE PRECOMPUTED TABLE. On the server `con` is the KB-sized
+  # serve.duckdb whose `model_cell` is an S3 view partitioned by mdl_id for
+  # per-model point reads, so aggregating live there means listing + scanning
+  # ~580M rows over HTTPS and fails with an S3 IO error. `zone_taxon` (built by
+  # build_zone_taxon() where model_cell is local, and released alongside the
+  # other tables) makes this a small indexed read. Falling back to the live
+  # aggregation keeps local development working before/without that table.
+  if ("zone_taxon" %in% DBI::dbListTables(con)) {
+    q <- glue::glue(
+      "SELECT * FROM zone_taxon ",
+      "WHERE zone_fld = {DBI::dbQuoteString(con, zone_fld)} ",
+      "AND zone_value = {DBI::dbQuoteString(con, zone_val)}")
+    d <- dplyr::as_tibble(DBI::dbGetQuery(con, q))
+    return(dplyr::arrange(d, .data$sp_cat, .data$sp_scientific))
+  }
+
   cells_sql <- glue::glue(
     "SELECT zc.cell_id, zc.pct_covered FROM zone_cell zc ",
     "JOIN zone zn USING (zone_seq) ",

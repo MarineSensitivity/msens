@@ -154,3 +154,47 @@ test_that("v7 keeps relying on is_ok (no is_marine column present)", {
   DBI::dbExecute(con, "UPDATE taxon SET is_ok = TRUE")     # both valid under v7 rules
   expect_equal(nrow(species_for_zone(con, "programarea_key", "AAA")), 2L)
 })
+
+test_that("build_zone_taxon precomputes every zone", {
+  # REGRESSION: v8 dropped v7's zone_taxon on the assumption the app could
+  # aggregate live. It cannot on the server, which holds only serve.duckdb whose
+  # model_cell is an S3 view partitioned by mdl_id for point reads — a zone-wide
+  # scan there fails with an S3 IO error. So this table must exist.
+  con <- fixture_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "INSERT INTO zone VALUES (2, 'z', 'subregion_key', 'USA')")
+  DBI::dbExecute(con, "INSERT INTO zone_cell VALUES (2, 1, 100)")
+
+  n <- build_zone_taxon(con)
+  expect_true("zone_taxon" %in% DBI::dbListTables(con))
+  zt <- DBI::dbReadTable(con, "zone_taxon")
+  expect_equal(nrow(zt), n)
+  expect_true(all(c("zone_fld", "zone_value") %in% names(zt)))
+  expect_setequal(unique(zt$zone_fld), c("programarea_key", "subregion_key"))
+
+  # each zone's rows must match computing that zone directly
+  d_pra <- species_for_zone(con, "programarea_key", "AAA")
+  zt_pra <- zt[zt$zone_value == "AAA", ]
+  expect_equal(nrow(zt_pra), nrow(d_pra))
+  expect_equal(zt_pra$area_km2, d_pra$area_km2)
+
+  # re-running replaces rather than appends
+  build_zone_taxon(con)
+  expect_equal(nrow(DBI::dbReadTable(con, "zone_taxon")), n)
+})
+
+test_that("species_for_zone prefers the precomputed zone_taxon when present", {
+  # On the server the live aggregation is impossible (S3 model_cell partitioned
+  # by mdl_id), so the precomputed table must take precedence when it exists.
+  con <- fixture_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  live <- species_for_zone(con, "programarea_key", "AAA")   # no zone_taxon yet
+
+  build_zone_taxon(con)
+  pre <- species_for_zone(con, "programarea_key", "AAA")    # now reads the table
+  expect_equal(pre$sp_scientific, live$sp_scientific)
+  expect_equal(pre$area_km2, live$area_km2)
+  expect_equal(pre$avg_suit, live$avg_suit)
+
+  # proof it is READING the table, not recomputing: doctor a row and see it back
+  DBI::dbExecute(con, "UPDATE zone_taxon SET area_km2 = 12345 WHERE zone_value = 'AAA'")
+  expect_equal(species_for_zone(con, "programarea_key", "AAA")$area_km2, 12345)
+})
