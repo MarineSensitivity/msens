@@ -4,6 +4,13 @@
 #' v3 lives under `<data>/derived/sdm_v3.duckdb`; v4+ lives under
 #' `<big>/<version>/sdm.duckdb`.
 #'
+#' **Falls back to `serve.duckdb`** when the full `sdm.duckdb` is absent. The
+#' server deliberately does not carry the multi-GB v8 database — it holds only
+#' the KB-sized view DB over the released Parquet — so without this fallback
+#' anything calling `sdm_db_con()` there (notably the `/report` endpoint) fails
+#' outright on v8. The Shiny apps already did this inline; centralising it here
+#' stops the two from drifting.
+#'
 #' @param version version suffix (default: "v6")
 #' @return character path to the DuckDB file
 #' @importFrom glue glue
@@ -22,7 +29,10 @@ sdm_db_path <- function(version = "v6") {
       sysname,
       "Darwin" = glue::glue("~/_big/msens/derived/{version}"),
       "Linux"  = glue::glue("/share/data/big/{version}"))
-    glue::glue("{dir_big}/sdm.duckdb")
+    full  <- glue::glue("{dir_big}/sdm.duckdb")
+    serve <- glue::glue("{dir_big}/serve.duckdb")
+    if (!file.exists(path.expand(full)) && file.exists(path.expand(serve)))
+      serve else full
   }
 }
 

@@ -1,3 +1,11 @@
+# msens 0.9.1
+
+* **`sdm_db_path()` falls back to `serve.duckdb`** when the full `sdm.duckdb` is absent. The server
+  deliberately carries only the KB-sized view DB for v8, so `sdm_db_con()` — and therefore the
+  `/report` endpoint — failed outright there. The Shiny apps already did this inline; centralising
+  it stops the two from drifting, and it is what lets a v8 report reach the new `cell_model`
+  surface at all.
+
 # msens 0.9.0
 
 * **`cell_model` — the cell-oriented twin of `model_cell`** (`cell_model.R`). `serve/model_cell` is

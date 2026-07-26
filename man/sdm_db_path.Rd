@@ -17,4 +17,12 @@ Get the file path to the species distribution model DuckDB database.
 v3 lives under \verb{<data>/derived/sdm_v3.duckdb}; v4+ lives under
 \verb{<big>/<version>/sdm.duckdb}.
 }
+\details{
+\strong{Falls back to \code{serve.duckdb}} when the full \code{sdm.duckdb} is absent. The
+server deliberately does not carry the multi-GB v8 database — it holds only
+the KB-sized view DB over the released Parquet — so without this fallback
+anything calling \code{sdm_db_con()} there (notably the \verb{/report} endpoint) fails
+outright on v8. The Shiny apps already did this inline; centralising it here
+stops the two from drifting.
+}
 \concept{db}
