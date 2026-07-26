@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.7.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,16 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.8.0" id="msens-080">msens 0.8.0<a class="anchor" aria-label="anchor" href="#msens-080"></a></h2>
+<ul><li>
+<p><strong><code><a href="../reference/widget_png.html">widget_png()</a></code></strong> — render a heavyweight htmlwidget to a static PNG (<code><a href="https://rdrr.io/pkg/htmlwidgets/man/saveWidget.html" class="external-link">htmlwidgets::saveWidget()</a></code></p>
+<ul><li>headless Chrome via <code>webshot2</code>), for use as <code>knitr::include_graphics(widget_png(m, "figures/map.png"))</code> in a notebook chunk.</li>
+</ul><p>An interactive widget serialises its ENTIRE data payload into the rendered HTML, which had produced published pages of 43–53 MB dominated by a single <code>&lt;script&gt;</code> block (one turtle map embedded 26 MB of GeoJSON; a study-area map, 40 MB) — over GitHub’s 50 MB warning, and downloaded in full by every visitor just to look at a picture. <code>show_study-area</code> went from <strong>43 MB to 2.7 MB</strong> with a 684 KB image. Side benefit: the MapTiler style URL carries an API key that the embedded JSON published verbatim; a screenshot leaves it out of the HTML entirely.</p>
+<p>Use it where interactivity isn’t the point — keep printing the widget where panning/zooming is.</p>
+</li>
+<li><p><strong>The test suite is green.</strong> The two long-standing failures were both in <code>hex.R</code>/<code>interp.R</code>, marked DORMANT since v8 rolled back from H3 to the 0.05° cell grid; their SQL no longer binds under DuckDB 1.5 (tighter GROUP BY/CTE scoping). They are now <code>skip()</code>ped with that reason rather than deleted, since those modules are explicitly retained for future H3 use: <strong>0 failures, 223 passing, 2 skips.</strong></p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.7.1" id="msens-071">msens 0.7.1<a class="anchor" aria-label="anchor" href="#msens-071"></a></h2>
 <ul><li>

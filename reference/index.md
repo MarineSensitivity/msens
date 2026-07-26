@@ -74,6 +74,9 @@ Plot and map Seascapes
 - [`tbl_species()`](http://marinesensitivity.org/msens/reference/tbl_species.md)
   : Species table (interactive DT or static gt)
 
+- [`widget_png()`](http://marinesensitivity.org/msens/reference/widget_png.md)
+  : Render an htmlwidget to a static PNG
+
 ## Data
 
 Lookups for easy reference
