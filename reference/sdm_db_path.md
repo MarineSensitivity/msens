@@ -19,3 +19,14 @@ sdm_db_path(version = "v6")
 ## Value
 
 character path to the DuckDB file
+
+## Details
+
+**Falls back to `serve.duckdb`** when the full `sdm.duckdb` is absent.
+The server deliberately does not carry the multi-GB v8 database — it
+holds only the KB-sized view DB over the released Parquet — so without
+this fallback anything calling
+[`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
+there (notably the `/report` endpoint) fails outright on v8. The Shiny
+apps already did this inline; centralising it here stops the two from
+drifting.

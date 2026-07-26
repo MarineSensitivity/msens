@@ -16,7 +16,7 @@ v3 lives under &amp;lt;data&amp;gt;/derived/sdm_v3.duckdb; v4+ lives under
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -65,6 +65,15 @@ v3 lives under <code>&lt;data&gt;/derived/sdm_v3.duckdb</code>; v4+ lives under
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>character path to the DuckDB file</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p><strong>Falls back to <code>serve.duckdb</code></strong> when the full <code>sdm.duckdb</code> is absent. The
+server deliberately does not carry the multi-GB v8 database — it holds only
+the KB-sized view DB over the released Parquet — so without this fallback
+anything calling <code><a href="sdm_db_con.html">sdm_db_con()</a></code> there (notably the <code>/report</code> endpoint) fails
+outright on v8. The Shiny apps already did this inline; centralising it here
+stops the two from drifting.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.9.1" id="msens-091">msens 0.9.1<a class="anchor" aria-label="anchor" href="#msens-091"></a></h2>
+<ul><li>
+<strong><code><a href="../reference/sdm_db_path.html">sdm_db_path()</a></code> falls back to <code>serve.duckdb</code></strong> when the full <code>sdm.duckdb</code> is absent. The server deliberately carries only the KB-sized view DB for v8, so <code><a href="../reference/sdm_db_con.html">sdm_db_con()</a></code> — and therefore the <code>/report</code> endpoint — failed outright there. The Shiny apps already did this inline; centralising it stops the two from drifting, and it is what lets a v8 report reach the new <code>cell_model</code> surface at all.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.9.0" id="msens-090">msens 0.9.0<a class="anchor" aria-label="anchor" href="#msens-090"></a></h2>
 <ul><li>
