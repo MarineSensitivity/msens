@@ -19,6 +19,8 @@ character vector of column names, in order
 
 ``` r
 ms_log_header()
-#>  [1] "timestamp"   "app"         "app_version" "client_id"   "session_id" 
-#>  [6] "event"       "params"      "page"        "referrer"    "user_agent" 
+#>  [1] "timestamp"   "ip"          "session"     "event"       "params"     
+#>  [6] "n_rows"      "ms"          "status"      "error"       "app_version"
+#> [11] "app"         "client_id"   "session_id"  "page"        "referrer"   
+#> [16] "user_agent" 
 ```

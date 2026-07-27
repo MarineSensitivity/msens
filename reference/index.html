@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -571,6 +571,13 @@
 
         <dt>
 
+          <code><a href="ms_client_ip.html">ms_client_ip()</a></code>
+
+        </dt>
+        <dd>Best-effort client IP from a Shiny request</dd>
+
+        <dt>
+
           <code><a href="ms_event.html">ms_event()</a></code>
 
         </dt>
@@ -589,6 +596,20 @@
 
         </dt>
         <dd>Send a tracking event from the Shiny server to the browser</dd>
+
+        <dt>
+
+          <code><a href="ms_track_query.html">ms_track_query()</a></code>
+
+        </dt>
+        <dd>Time a query, log its shape, and re-raise any error</dd>
+
+        <dt>
+
+          <code><a href="ms_track_session.html">ms_track_session()</a></code>
+
+        </dt>
+        <dd>Hand the browser the session facts only the server knows</dd>
 
         <dt>
 

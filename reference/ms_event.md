@@ -48,6 +48,9 @@ ms_event("Select Species", scientific_name = "Dermochelys coriacea", n = 3)
 #> [1] "3"
 #> 
 #> 
+#> $metrics
+#> named list()
+#> 
 ms_event("download", file = NULL, format = "csv")   # NULL dropped
 #> $event
 #> [1] "download"
@@ -56,5 +59,8 @@ ms_event("download", file = NULL, format = "csv")   # NULL dropped
 #> $params$format
 #> [1] "csv"
 #> 
+#> 
+#> $metrics
+#> named list()
 #> 
 ```

@@ -283,6 +283,9 @@ Other functions not defined by the concepts above
 - [`ms_apps_script()`](http://marinesensitivity.org/msens/reference/ms_apps_script.md)
   : Apps Script source for the usage-log Sheet
 
+- [`ms_client_ip()`](http://marinesensitivity.org/msens/reference/ms_client_ip.md)
+  : Best-effort client IP from a Shiny request
+
 - [`ms_event()`](http://marinesensitivity.org/msens/reference/ms_event.md)
   : Build a tracking-event payload
 
@@ -291,6 +294,12 @@ Other functions not defined by the concepts above
 
 - [`ms_track()`](http://marinesensitivity.org/msens/reference/ms_track.md)
   : Send a tracking event from the Shiny server to the browser
+
+- [`ms_track_query()`](http://marinesensitivity.org/msens/reference/ms_track_query.md)
+  : Time a query, log its shape, and re-raise any error
+
+- [`ms_track_session()`](http://marinesensitivity.org/msens/reference/ms_track_session.md)
+  : Hand the browser the session facts only the server knows
 
 - [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
   : Parse NOAA protected_status field

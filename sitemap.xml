@@ -65,9 +65,12 @@
 <url><loc>http://marinesensitivity.org/msens/reference/model_hex_from_weights.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_apps_script.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_basemap.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_client_ip.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_event.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_log_header.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/ms_track.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_track_query.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/ms_track_session.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_noaa_status.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/parse_qmd_frontmatter.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/plot_flower.html</loc></url>

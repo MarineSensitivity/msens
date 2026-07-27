@@ -13,6 +13,7 @@ ga_js(
   app,
   content_group = app,
   app_version = "",
+  ip = "",
   measurement_id = .MS_GA_ID,
   log_url = Sys.getenv("MSENS_LOG_URL", "")
 )
@@ -30,7 +31,15 @@ ga_js(
 
 - app_version:
 
-  version string recorded on every event, e.g. `"v8"`
+  version string recorded on every event — the deployed git commit, so a
+  Sheet row ties back to the exact code that produced it
+
+- ip:
+
+  client IP to stamp on every logged row, from `ms_client_ip(req)` in a
+  `ui = function(req)`. Behind shiny-server this is the ONLY place a
+  real address exists — see
+  [`ms_client_ip()`](http://marinesensitivity.org/msens/reference/ms_client_ip.md).
 
 - measurement_id:
 

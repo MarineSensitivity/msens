@@ -18,7 +18,7 @@ execution quota — flat regardless of interaction rate."><script async src="htt
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.9.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,7 +78,7 @@ the client payload cannot drift.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> // The client (msens::ga_js) posts {rows:[{...}, ...]} as text/plain so the</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> // request stays CORS-simple (this endpoint does not answer OPTIONS).</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> var COLS = ["timestamp","app","app_version","client_id","session_id","event","params","page","referrer","user_agent"];</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> var COLS = ["timestamp","ip","session","event","params","n_rows","ms","status","error","app_version","app","client_id","session_id","page","referrer","user_agent"];</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> // Health check. Without this, opening the /exec URL in a browser returns</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> // "Script function not found: doGet", which looks like a broken or unauthorized</span>
