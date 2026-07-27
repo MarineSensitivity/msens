@@ -1,3 +1,28 @@
+# msens 0.10.0
+
+*Log the real client IP, and the commit that produced the row*
+
+* **`ga_js()` / `ga_head()` gain `ip`.** Stamps a client IP on every logged row, taken from the
+  **page** request. Behind shiny-server that is the only place a real one exists: shiny-server does
+  not proxy the websocket upgrade — it opens a fresh localhost connection to the R worker — so
+  `session$request` has no `X-Forwarded-For` and `REMOTE_ADDR` is always `127.0.0.1`, however
+  correctly Caddy is configured. Make the app's `ui` a `function(req)` and pass
+  `ip = ms_client_ip(req)`.
+* **`ms_client_ip()`** — reads `X-Forwarded-For` (first entry of the chain) then `REMOTE_ADDR`,
+  from either a `session` or the `req` of a `ui` function. Never errors.
+* **`ms_track_session()`** — hands the browser the Shiny session token, which JavaScript cannot
+  read. Its IP is a **fallback, never an override**: otherwise the websocket's `127.0.0.1` would
+  clobber the good page-supplied address moments later. Regression-tested, since it would silently
+  undo the whole fix.
+* **`ms_track_query()`** — wrap a query to record its row count, duration and any error. The result
+  (including a lazy `dbplyr` table) passes through untouched and an error is re-raised after logging.
+* **The Sheet gains six columns**, matching CalCOFI's shape:
+  `timestamp, ip, session, event, params, n_rows, ms, status, error, app_version, app, client_id,
+  session_id, page, referrer, user_agent`. `n_rows`/`ms` stay **numeric** so they remain chartable —
+  Apps Script `setValues()` would write a JS string as text. `n_rows`, `ms`, `status` and `error` are
+  reserved parameter names, hoisted out of `params` into their own columns.
+* **`app_version` is now the deployed commit** in the apps, so a row ties back to the exact code.
+
 # msens 0.9.2
 
 * **Never inspect `model_cell` when `cell_model` is available.** `.sdm_cols()` read `model_cell`'s

@@ -8,6 +8,7 @@ ga_js(
   app,
   content_group = app,
   app_version = "",
+  ip = "",
   measurement_id = .MS_GA_ID,
   log_url = Sys.getenv("MSENS_LOG_URL", "")
 )
@@ -17,7 +18,12 @@ ga_js(
 
 \item{content_group}{GA4 content group for reporting; defaults to \code{app}}
 
-\item{app_version}{version string recorded on every event, e.g. \code{"v8"}}
+\item{app_version}{version string recorded on every event — the deployed git
+commit, so a Sheet row ties back to the exact code that produced it}
+
+\item{ip}{client IP to stamp on every logged row, from
+\code{ms_client_ip(req)} in a \verb{ui = function(req)}. Behind shiny-server this is
+the ONLY place a real address exists — see \code{\link[=ms_client_ip]{ms_client_ip()}}.}
 
 \item{measurement_id}{GA4 measurement ID; defaults to the project property}
 

@@ -64,8 +64,13 @@
 #' @export
 #' @concept analytics
 ms_log_header <- function()
-  c("timestamp", "app", "app_version", "client_id", "session_id",
-    "event", "params", "page", "referrer", "user_agent")
+  c("timestamp", "ip", "session", "event", "params", "n_rows", "ms", "status",
+    "error", "app_version", "app", "client_id", "session_id", "page",
+    "referrer", "user_agent")
+
+# reserved parameter names hoisted out of `params` into their own Sheet columns,
+# so they stay numeric/filterable instead of being buried in the params JSON.
+.MS_LOG_METRICS <- c("n_rows", "ms", "status", "error")
 
 #' Build a tracking-event payload
 #'
@@ -104,11 +109,25 @@ ms_event <- function(event, ...) {
     # drop NULL / NA / "" so absent facts don't clutter the Sheet's params column
     keep <- vapply(
       params,
-      function(v) length(v) == 1L && !is.na(v) && nzchar(as.character(v)),
+      function(v) length(v) >= 1L && !all(is.na(v)) && any(nzchar(as.character(v))),
       logical(1))
-    params <- lapply(params[keep], as.character)
+    params <- params[keep]
   }
-  list(event = nm, params = params)
+
+  # hoist the reserved metric names into their own bag. n_rows / ms stay NUMERIC:
+  # Apps Script setValues() writes a JS string as text, which would make the
+  # column unchartable.
+  metrics <- params[intersect(.MS_LOG_METRICS, names(params))]
+  params  <- params[setdiff(names(params), .MS_LOG_METRICS)]
+  if (!is.null(metrics$n_rows)) metrics$n_rows <- as.integer(metrics$n_rows)
+  if (!is.null(metrics$ms))     metrics$ms     <- round(as.numeric(metrics$ms), 1)
+  for (k in intersect(c("status", "error"), names(metrics)))
+    metrics[[k]] <- as.character(metrics[[k]])
+
+  # everything else is text; a multi-value parameter collapses to one readable
+  # cell rather than a nested JSON array
+  params <- lapply(params, function(v) paste(as.character(v), collapse = ", "))
+  list(event = nm, params = params, metrics = metrics)
 }
 
 #' Send a tracking event from the Shiny server to the browser
@@ -141,6 +160,117 @@ ms_track <- function(session, event, ...) {
   invisible(payload)
 }
 
+#' Best-effort client IP from a Shiny request
+#'
+#' Reads `X-Forwarded-For` (set by the Caddy reverse proxy the apps sit behind)
+#' and falls back to the direct `REMOTE_ADDR`. Never errors.
+#'
+#' **Pass the `req` of a `ui` function, not a `session`, when you can.**
+#' shiny-server does not proxy the websocket upgrade — it opens a fresh
+#' localhost connection to the R worker — so a session's `request` carries no
+#' `X-Forwarded-For` and its `REMOTE_ADDR` is always `127.0.0.1`, no matter how
+#' correctly Caddy is configured (verified on msens1: the page GET shows the real
+#' address while the websocket handshake shows `HTTP_HOST 127.0.0.1:<worker port>`
+#' and no forwarded header at all). The page's HTTP request, which
+#' `ui = function(req)` receives, is the only place the real client IP survives.
+#' See the `ip` argument of [ga_js()].
+#'
+#' @param x a Shiny `session`, or the `req` environment handed to a `ui`
+#'   function (anything carrying the request fields directly)
+#' @return character scalar, or `NA_character_` if unavailable
+#' @examples
+#' ms_client_ip(list(request = list(HTTP_X_FORWARDED_FOR = "203.0.113.7, 10.0.0.1")))
+#' ms_client_ip(list(HTTP_X_FORWARDED_FOR = "203.0.113.7"))   # a ui(req)
+#' @export
+#' @concept analytics
+ms_client_ip <- function(x) {
+  tryCatch({
+    # a session carries the fields under $request; a ui() req carries them itself
+    req <- if (is.null(x$request)) x else x$request
+    xff <- req[["HTTP_X_FORWARDED_FOR"]]
+    if (!is.null(xff) && nzchar(xff)) trimws(strsplit(xff, ",")[[1]][1])
+    else {
+      addr <- req[["REMOTE_ADDR"]]
+      if (is.null(addr) || !nzchar(addr)) NA_character_ else addr
+    }
+  }, error = function(e) NA_character_)
+}
+
+#' Hand the browser the session facts only the server knows
+#'
+#' The Shiny session token cannot be read in JavaScript, so the server pushes it
+#' once at session start; the client then stamps it on every queued row (the
+#' `session` column of [ms_log_header()]). Call it at the top of the `server`
+#' function, before any [ms_track()] call, so no event is written without it.
+#'
+#' The token is authoritative, the IP is only a **fallback**: behind shiny-server
+#' a session sees `127.0.0.1`, so an `ip` already baked into the page by
+#' [ga_js()] wins and this one is ignored. Without that rule the websocket's
+#' useless address would silently overwrite the good one a moment after the page
+#' supplied it.
+#'
+#' @param session the Shiny `session` object
+#' @return the sent list, invisibly
+#' @examples
+#' \dontrun{
+#' server <- function(input, output, session) {
+#'   msens::ms_track_session(session)
+#'   ...
+#' }
+#' }
+#' @export
+#' @concept analytics
+ms_track_session <- function(session) {
+  msg <- list(
+    ip      = ms_client_ip(session),
+    session = tryCatch(session$token, error = function(e) NA_character_))
+  try(session$sendCustomMessage("msTrackSession", msg), silent = TRUE)
+  invisible(msg)
+}
+
+#' Time a query, log its shape, and re-raise any error
+#'
+#' Wraps an expression so the Sheet records how long it took, how many rows it
+#' returned, and whether it failed — in the dedicated `ms` / `n_rows` / `status`
+#' / `error` columns, which stay numeric and chartable rather than being buried
+#' in the `params` JSON.
+#'
+#' The result passes through untouched (including a lazy `dbplyr` table, whose
+#' row count is deliberately NOT forced), and an error is re-raised after being
+#' logged, so wrapping a call never changes behaviour.
+#'
+#' @param session the Shiny `session` object
+#' @param event event name, passed to [ms_event()]
+#' @param params named list of event parameters
+#' @param expr the expression to time
+#' @return whatever `expr` returns
+#' @examples
+#' \dontrun{
+#' d <- ms_track_query(session, "download_species_csv", list(area = hdr),
+#'                     species_for_zone(con, "programarea_key", key))
+#' }
+#' @export
+#' @concept analytics
+ms_track_query <- function(session, event, params = list(), expr) {
+  t0  <- Sys.time()
+  res <- tryCatch(force(expr), error = function(e) e)
+  ms  <- as.numeric(difftime(Sys.time(), t0, units = "secs")) * 1000
+
+  send <- function(extra) {
+    payload <- do.call(ms_event, c(list(event), params, extra))
+    try(session$sendCustomMessage("msTrack", payload), silent = TRUE)
+  }
+  if (inherits(res, "error")) {
+    send(list(ms = ms, status = "error", error = conditionMessage(res)))
+    stop(res)
+  }
+  # a lazy dbplyr table has no row count until collected — don't force one
+  n <- tryCatch(if (is.data.frame(res)) nrow(res) else NA_integer_,
+                error = function(e) NA_integer_)
+  send(list(n_rows = n, ms = ms, status = "ok"))
+  res
+}
+
 #' Analytics `<head>` snippet (GA4 + batched Sheet beacon)
 #'
 #' Generates the self-contained HTML/JS installed once per page: the GA4 gtag
@@ -153,7 +283,11 @@ ms_track <- function(session, event, ...) {
 #'
 #' @param app short app/product id recorded on every event, e.g. `"scores"`
 #' @param content_group GA4 content group for reporting; defaults to `app`
-#' @param app_version version string recorded on every event, e.g. `"v8"`
+#' @param app_version version string recorded on every event — the deployed git
+#'   commit, so a Sheet row ties back to the exact code that produced it
+#' @param ip client IP to stamp on every logged row, from
+#'   `ms_client_ip(req)` in a `ui = function(req)`. Behind shiny-server this is
+#'   the ONLY place a real address exists — see [ms_client_ip()].
 #' @param measurement_id GA4 measurement ID; defaults to the project property
 #' @param log_url Apps Script `/exec` endpoint for the Sheet log. Defaults to the
 #'   `MSENS_LOG_URL` environment variable; empty means the Sheet leg is a silent
@@ -166,9 +300,12 @@ ms_track <- function(session, event, ...) {
 ga_js <- function(app,
                   content_group  = app,
                   app_version    = "",
+                  ip             = "",
                   measurement_id = .MS_GA_ID,
                   log_url        = Sys.getenv("MSENS_LOG_URL", "")) {
   stopifnot(length(app) == 1L, nzchar(app))
+  # ms_client_ip() returns NA when it cannot tell; the page wants an empty string
+  if (length(ip) != 1L || is.na(ip)) ip <- ""
 
   # JSON-encode every interpolated value so a stray quote can't break the script
   j <- function(x) as.character(jsonlite::toJSON(x, auto_unbox = TRUE))
@@ -209,6 +346,12 @@ ga_js <- function(app,
   var CLIENT_ID  = stored(window.localStorage,   "msens_client_id");
   var SESSION_ID = stored(window.sessionStorage, "msens_session_id");
 
+  // The client IP and the Shiny session token are server-only facts. The IP is
+  // baked in from the PAGE request — the only request that still carries
+  // X-Forwarded-For, because shiny-server rebuilds the websocket handshake as a
+  // fresh localhost connection — and the token arrives from ms_track_session().
+  var SERVER_IP = <<j(ip)>>, SERVER_SESSION = "";
+
   // ---- Sheet log: queue + batched beacon -----------------------------------
   var queue = [];
 
@@ -239,8 +382,9 @@ ga_js <- function(app,
   // ---- the one entry point -------------------------------------------------
   // Sends to BOTH legs: GA4 (truncated to its 100-char param limit) and the
   // Sheet queue (full values).
-  window.msTrack = function (event, params) {
-    params = params || {};
+  window.msTrack = function (event, params, metrics) {
+    params  = params  || {};
+    metrics = metrics || {};
     try {
       var ga = { content_group: GROUP, app_name: APP, app_version: APP_VER };
       Object.keys(params).forEach(function (k) {
@@ -251,29 +395,42 @@ ga_js <- function(app,
     } catch (e) {}
 
     if (!LOG_URL) return;
+    function m(k) { return (metrics[k] === undefined || metrics[k] === null) ? "" : metrics[k]; }
     queue.push({
-      timestamp:  new Date().toISOString(),
-      app:        APP,
+      timestamp:   new Date().toISOString(),
+      ip:          SERVER_IP,
+      session:     SERVER_SESSION,
+      event:       event,
+      params:      JSON.stringify(params),
+      n_rows:      m("n_rows"),
+      ms:          m("ms"),
+      status:      m("status"),
+      error:       m("error"),
       app_version: APP_VER,
-      client_id:  CLIENT_ID,
-      session_id: SESSION_ID,
-      event:      event,
-      params:     JSON.stringify(params),
-      page:       location.pathname + location.search,
-      referrer:   document.referrer || "",
-      user_agent: navigator.userAgent || ""
+      app:         APP,
+      client_id:   CLIENT_ID,
+      session_id:  SESSION_ID,
+      page:        location.pathname + location.search,
+      referrer:    document.referrer || "",
+      user_agent:  navigator.userAgent || ""
     });
     if (queue.length >= BATCH) flush();
   };
 
   // ---- server -> browser (msens::ms_track) ---------------------------------
   if (window.Shiny && Shiny.addCustomMessageHandler) {
+    // an EMPTY R list serialises as [] rather than {}, which would land in the
+    // params column of the Sheet as "[]" — normalise both bags to objects.
+    function obj(x) { return (!x || Array.isArray(x)) ? {} : x; }
     Shiny.addCustomMessageHandler("msTrack", function (m) {
-      // an EMPTY R list serialises as [] rather than {}, which would land in
-      // the params column of the Sheet as "[]" — normalise to an object.
-      var p = m.params;
-      if (!p || Array.isArray(p)) p = {};
-      window.msTrack(m.event, p);
+      window.msTrack(m.event, obj(m.params), obj(m.metrics));
+    });
+    Shiny.addCustomMessageHandler("msTrackSession", function (m) {
+      // the IP reported here is a FALLBACK, never an override: behind
+      // shiny-server a session always sees 127.0.0.1, which would clobber the
+      // real address the page request supplied.
+      if (!SERVER_IP && m.ip) SERVER_IP = m.ip;
+      SERVER_SESSION = m.session || "";
     });
   }
 })();
@@ -297,9 +454,10 @@ ga_js <- function(app,
 ga_head <- function(app,
                     content_group  = app,
                     app_version    = "",
+                    ip             = "",
                     measurement_id = .MS_GA_ID,
                     log_url        = Sys.getenv("MSENS_LOG_URL", ""))
-  htmltools::HTML(ga_js(app, content_group, app_version, measurement_id, log_url))
+  htmltools::HTML(ga_js(app, content_group, app_version, ip, measurement_id, log_url))
 
 #' Apps Script source for the usage-log Sheet
 #'
