@@ -230,3 +230,16 @@ test_that("ms_track_query records shape and re-raises errors", {
   expect_equal(sent[[2]]$metrics$status, "error")
   expect_match(sent[[2]]$metrics$error, "boom")
 })
+
+test_that("only ok/error-style values should reach the status column", {
+  # `status` is reserved and gets its own Sheet column, shared with the ok/error
+  # values ms_track_query() writes. An event passing a different KIND of status
+  # (a deep link's "input_model") silently lands there too and spoils the column
+  # for filtering — such parameters belong under their own name.
+  p <- ms_event("deeplink_mdl_key", mdl_key = "x", resolution = "input_model")
+  expect_equal(names(p$params), c("mdl_key", "resolution"))
+  expect_equal(names(p$metrics), character(0))
+
+  # ... whereas a genuine health status is hoisted, as intended
+  expect_equal(ms_event("report_result", status = "ok")$metrics$status, "ok")
+})
