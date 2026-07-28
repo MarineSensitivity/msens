@@ -53,6 +53,11 @@ Plot and map Seascapes
 
   Build a titiler `/cog` tile URL template for a native COG
 
+- [`drawn_features_sf()`](http://marinesensitivity.org/msens/reference/drawn_features_sf.md)
+  :
+
+  Parse mapgl's drawn-features Shiny input into `sf`
+
 - [`ggmap_areas()`](http://marinesensitivity.org/msens/reference/ggmap_areas.md)
   : Static ggplot map of labeled areas
 

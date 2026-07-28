@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.10.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,15 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.11.0" id="msens-0110">msens 0.11.0<a class="anchor" aria-label="anchor" href="#msens-0110"></a></h2>
+<p><em>Read mapgl’s drawn polygons whichever shape they arrive in</em></p>
+<ul><li>
+<strong><code><a href="../reference/drawn_features_sf.html">drawn_features_sf()</a></code></strong> — turns the raw <code>input$&lt;map_id&gt;_drawn_features</code> value from a mapgl draw control into <code>sf</code> (EPSG:4326), or <code>NULL</code> when nothing is drawn. Accepts <strong>both</strong> payload shapes: the character GeoJSON older mapgl stringified, and the object current mapgl (<code>_mapglSyncDrawnFeatures</code>, &gt;= 0.5.0) sends, which Shiny delivers as a nested list.</li>
+<li>Fixes the scores Report tab (“Add drawn polygon” answering <em>“Draw a polygon on the map first.”</em> for every polygon drawn) in <strong>both</strong> the v7 and v8 apps, which gated on <code><a href="https://rdrr.io/r/base/character.html" class="external-link">is.character()</a></code> and so discarded every payload from the newer mapgl. Regression-tested against both shapes.</li>
+<li>
+<strong><code>Remotes:</code> now points at the antimeridian-fixed mapgl fork</strong> (<code>bbest/mapgl@484e869f</code> = walkerke/mapgl <code>main</code> + walkerke/mapgl#211), not <code>walkerke/mapgl</code>. Twelve Shiny apps <code>librarian::shelf(MarineSensitivity/msens)</code> at startup, so every msens install from GitHub resolved this field and silently overwrote the fork that the rstudio image pins — which is how the h3-db globe went back to showing a gap at the antimeridian. Revert to <code>walkerke/mapgl</code> once <a href="https://github.com/MarineSensitivities/msens/issues/211" class="external-link">#211</a> merges.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.0" id="msens-0100">msens 0.10.0<a class="anchor" aria-label="anchor" href="#msens-0100"></a></h2>
 <p><em>Log the real client IP, and the commit that produced the row</em></p>
