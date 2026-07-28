@@ -57,10 +57,13 @@ cell_id_raster <- function() {
 #' @importFrom terra rasterize vect values
 #' @importFrom tibble tibble
 #' @importFrom DBI dbGetQuery
+#' @importFrom methods is
 #' @export
 #' @concept calc
 cells_in_polygon <- function(poly, src, res = 0.05) {
-  if (inherits(src, "DBIConnection")) {
+  # methods::is(), not inherits(): a duckdb_connection is an S4 object, and S4
+  # superclasses are not reliably visible to inherits()
+  if (methods::is(src, "DBIConnection")) {
     if (.cell_has_lonlat(src))
       return(.cells_in_polygon_db(poly, src, res))
     src <- cell_id_raster()          # v7: `cell` has no lon/lat

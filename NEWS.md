@@ -1,3 +1,11 @@
+# msens 0.12.1
+
+* **`cells_in_polygon()` dispatches with `methods::is()`, not `inherits()`.** A `duckdb_connection`
+  is an **S4** object, whose superclasses `inherits()` does not reliably see — so a connection could
+  fall through to the raster branch and fail with
+  `unable to find an inherited method for 'rasterize' for signature 'y = "duckdb_connection"'`.
+  `methods` is now declared in `Imports:` (it was in `NAMESPACE` only).
+
 # msens 0.12.0
 
 *Drawn areas resolve against the grid of the version being queried*
