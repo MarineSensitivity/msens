@@ -1,5 +1,17 @@
 # Changelog
 
+## msens 0.12.1
+
+- **[`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
+  dispatches with [`methods::is()`](https://rdrr.io/r/methods/is.html),
+  not [`inherits()`](https://rdrr.io/r/base/class.html).** A
+  `duckdb_connection` is an **S4** object, whose superclasses
+  [`inherits()`](https://rdrr.io/r/base/class.html) does not reliably
+  see — so a connection could fall through to the raster branch and fail
+  with
+  `unable to find an inherited method for 'rasterize' for signature 'y = "duckdb_connection"'`.
+  `methods` is now declared in `Imports:` (it was in `NAMESPACE` only).
+
 ## msens 0.12.0
 
 *Drawn areas resolve against the grid of the version being queried*
