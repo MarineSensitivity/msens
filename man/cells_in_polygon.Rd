@@ -4,20 +4,40 @@
 \alias{cells_in_polygon}
 \title{Cells intersecting a polygon}
 \usage{
-cells_in_polygon(poly, r_cell_id)
+cells_in_polygon(poly, src, res = 0.05)
 }
 \arguments{
 \item{poly}{an sf polygon (assumed or transformable to EPSG:4326)}
 
-\item{r_cell_id}{a single-layer \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} of integer cell ids}
+\item{src}{a DBI connection (\strong{preferred}), or a single-layer
+\code{\link[terra:SpatRaster-class]{terra::SpatRaster}} of integer cell ids}
+
+\item{res}{grid resolution in degrees, SQL path only (default \code{0.05})}
 }
 \value{
 a tibble with columns \code{cell_id} (integer) and \code{pct_covered} (0-100)
 }
 \description{
-Given an sf polygon and a cell-id raster, return a tibble of
-intersecting \code{cell_id} with \code{pct_covered} (0-100). The cell raster
-uses 0-360 longitudes, so the input polygon is transformed and
-shifted accordingly.
+Returns \code{cell_id} + \code{pct_covered} (0-100) for the cells a polygon overlaps.
+\code{pct_covered} is the fraction of each cell inside the polygon, and it is not
+cosmetic — \code{\link[=scores_for_cells]{scores_for_cells()}} and \code{\link[=species_for_cells]{species_for_cells()}} weight by it, so
+partially covered edge cells count proportionally.
+}
+\details{
+\strong{Pass a DB connection.} Then the grid is read from the database being
+queried and cannot disagree with it. Two paths, chosen automatically:
+\itemize{
+\item \strong{v8} (\code{cell} carries \code{lon}/\code{lat}) — a SQL bbox select on \code{cell} picks the
+candidates and \code{sf} computes exact coverage on just those. No raster is
+touched. For a 2x1.5-degree area this is \strong{~0.02 s} against ~35 s to read
+the whole cell-id raster, and it joins \code{cell_model}, which is already
+cell-oriented.
+\item \strong{v7} (no \code{lon}/\code{lat}) — falls back to \code{\link[=cell_id_raster]{cell_id_raster()}}, the 0-360
+regional raster that IS v7's grid.
+}
+
+Passing a \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} directly still works, but nothing can then
+verify it matches the database — see \code{\link[=cell_id_raster]{cell_id_raster()}} for how that failed
+silently on v8.
 }
 \concept{calc}

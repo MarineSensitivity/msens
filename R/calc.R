@@ -1,8 +1,16 @@
-#' Cell-ID SpatRaster
+#' Cell-ID SpatRaster (the **v7** grid)
 #'
-#' Return the global cell-id [`terra::SpatRaster`] used to identify
-#' cells for `cells_in_polygon()` and related helpers. The raster is
-#' shared across versions (not version-specific).
+#' `derived/r_bio-oracle_planarea.tif` — a **regional** raster on **0-360**
+#' longitudes whose pixel values are **v7** `cell_id`s.
+#'
+#' It is NOT version-neutral, despite the generic name. v8 uses a different grid
+#' entirely: global, `[-180,180]`, `cell_id` 1..24,293,128. Handing this raster
+#' to [cells_in_polygon()] against a **v8** database therefore yields ids that do
+#' exist in v8 but denote **completely different places** — a polygon off Santa
+#' Barbara resolved to cells in the Arctic, so `species_for_cells()` returned
+#' zero species with no error at all. Prefer passing the DB connection to
+#' [cells_in_polygon()], which picks the right grid for the version it is
+#' actually looking at.
 #'
 #' @return a [`terra::SpatRaster`] with a `cell_id` layer
 #' @importFrom terra rast
@@ -19,20 +27,49 @@ cell_id_raster <- function() {
 
 #' Cells intersecting a polygon
 #'
-#' Given an sf polygon and a cell-id raster, return a tibble of
-#' intersecting `cell_id` with `pct_covered` (0-100). The cell raster
-#' uses 0-360 longitudes, so the input polygon is transformed and
-#' shifted accordingly.
+#' Returns `cell_id` + `pct_covered` (0-100) for the cells a polygon overlaps.
+#' `pct_covered` is the fraction of each cell inside the polygon, and it is not
+#' cosmetic — [scores_for_cells()] and [species_for_cells()] weight by it, so
+#' partially covered edge cells count proportionally.
+#'
+#' **Pass a DB connection.** Then the grid is read from the database being
+#' queried and cannot disagree with it. Two paths, chosen automatically:
+#'
+#' * **v8** (`cell` carries `lon`/`lat`) — a SQL bbox select on `cell` picks the
+#'   candidates and `sf` computes exact coverage on just those. No raster is
+#'   touched. For a 2x1.5-degree area this is **~0.02 s** against ~35 s to read
+#'   the whole cell-id raster, and it joins `cell_model`, which is already
+#'   cell-oriented.
+#' * **v7** (no `lon`/`lat`) — falls back to [cell_id_raster()], the 0-360
+#'   regional raster that IS v7's grid.
+#'
+#' Passing a [`terra::SpatRaster`] directly still works, but nothing can then
+#' verify it matches the database — see [cell_id_raster()] for how that failed
+#' silently on v8.
 #'
 #' @param poly an sf polygon (assumed or transformable to EPSG:4326)
-#' @param r_cell_id a single-layer [`terra::SpatRaster`] of integer cell ids
+#' @param src a DBI connection (**preferred**), or a single-layer
+#'   [`terra::SpatRaster`] of integer cell ids
+#' @param res grid resolution in degrees, SQL path only (default `0.05`)
 #' @return a tibble with columns `cell_id` (integer) and `pct_covered` (0-100)
-#' @importFrom sf st_transform st_shift_longitude
+#' @importFrom sf st_transform st_shift_longitude st_geometry st_union st_bbox
+#'   st_set_crs st_sfc st_polygon st_intersects st_intersection st_area
 #' @importFrom terra rasterize vect values
 #' @importFrom tibble tibble
+#' @importFrom DBI dbGetQuery
 #' @export
 #' @concept calc
-cells_in_polygon <- function(poly, r_cell_id) {
+cells_in_polygon <- function(poly, src, res = 0.05) {
+  if (inherits(src, "DBIConnection")) {
+    if (.cell_has_lonlat(src))
+      return(.cells_in_polygon_db(poly, src, res))
+    src <- cell_id_raster()          # v7: `cell` has no lon/lat
+  }
+  .cells_in_polygon_raster(poly, src)
+}
+
+# v7 path: rasterize against the 0-360 cell-id raster (the original behavior)
+.cells_in_polygon_raster <- function(poly, r_cell_id) {
   poly_t <- poly |>
     sf::st_transform(4326) |>
     sf::st_shift_longitude() # [-180,180] -> [0,360]
@@ -46,6 +83,53 @@ cells_in_polygon <- function(poly, r_cell_id) {
   tibble::tibble(
     cell_id     = as.integer(r_id_vals[keep]),
     pct_covered = round(as.numeric(r_cov_vals[keep]) * 100))
+}
+
+# does this database's `cell` table carry lon/lat? (v8 yes, v7 no)
+.cell_has_lonlat <- function(con) {
+  cols <- tryCatch(
+    names(DBI::dbGetQuery(con, "SELECT * FROM cell LIMIT 0")),
+    error = function(e) character())
+  all(c("lon", "lat") %in% cols)
+}
+
+# split a longitude range into 1-2 ranges inside [-180,180] (antimeridian-safe)
+.lon_ranges <- function(x0, x1) {
+  if (x1 - x0 >= 360) return(list(c(-180, 180)))
+  wrap <- function(x) ((x + 180) %% 360) - 180
+  a <- wrap(x0); b <- wrap(x1)
+  if (a <= b) list(c(a, b)) else list(c(a, 180), c(-180, b))
+}
+
+# v8 path: bbox-select candidates in SQL, then exact coverage on just those.
+# Coverage is computed PLANAR in degrees, which is what terra's `cover = TRUE`
+# does in the raster's CRS — so the two paths report pct_covered the same way.
+.cells_in_polygon_db <- function(poly, con, res = 0.05) {
+  empty <- tibble::tibble(cell_id = integer(), pct_covered = numeric())
+  g <- sf::st_union(sf::st_geometry(sf::st_transform(poly, 4326)))
+  g <- tryCatch(sf::st_wrap_dateline(g), error = function(e) g)
+  bb <- sf::st_bbox(g)
+  h  <- res / 2
+  lon_sql <- paste(vapply(
+    .lon_ranges(bb[["xmin"]] - h, bb[["xmax"]] + h),
+    function(r) sprintf("(lon BETWEEN %.10f AND %.10f)", r[1], r[2]), ""),
+    collapse = " OR ")
+  cand <- DBI::dbGetQuery(con, sprintf(
+    "SELECT cell_id, lon, lat FROM cell WHERE (%s) AND lat BETWEEN %.10f AND %.10f",
+    lon_sql, bb[["ymin"]] - h, bb[["ymax"]] + h))
+  if (!nrow(cand)) return(empty)
+  gp <- sf::st_set_crs(g, NA_character_)
+  bx <- sf::st_sfc(lapply(seq_len(nrow(cand)), function(i) sf::st_polygon(list(cbind(
+    cand$lon[i] + c(-h, h, h, -h, -h),
+    cand$lat[i] + c(-h, -h, h, h, -h))))))
+  hit <- sf::st_intersects(bx, gp, sparse = FALSE)[, 1]
+  if (!any(hit)) return(empty)
+  inter <- suppressWarnings(sf::st_intersection(bx[hit], gp))
+  pct   <- round(as.numeric(sf::st_area(inter)) / (res * res) * 100)
+  keep  <- pct > 0
+  tibble::tibble(
+    cell_id     = as.integer(cand$cell_id[hit][keep]),
+    pct_covered = pct[keep])
 }
 
 #' Cells belonging to a Program Area zone

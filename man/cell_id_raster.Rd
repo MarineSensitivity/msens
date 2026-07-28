@@ -2,7 +2,7 @@
 % Please edit documentation in R/calc.R
 \name{cell_id_raster}
 \alias{cell_id_raster}
-\title{Cell-ID SpatRaster}
+\title{Cell-ID SpatRaster (the \strong{v7} grid)}
 \usage{
 cell_id_raster()
 }
@@ -10,8 +10,17 @@ cell_id_raster()
 a \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} with a \code{cell_id} layer
 }
 \description{
-Return the global cell-id \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} used to identify
-cells for \code{cells_in_polygon()} and related helpers. The raster is
-shared across versions (not version-specific).
+\code{derived/r_bio-oracle_planarea.tif} — a \strong{regional} raster on \strong{0-360}
+longitudes whose pixel values are \strong{v7} \code{cell_id}s.
+}
+\details{
+It is NOT version-neutral, despite the generic name. v8 uses a different grid
+entirely: global, \verb{[-180,180]}, \code{cell_id} 1..24,293,128. Handing this raster
+to \code{\link[=cells_in_polygon]{cells_in_polygon()}} against a \strong{v8} database therefore yields ids that do
+exist in v8 but denote \strong{completely different places} — a polygon off Santa
+Barbara resolved to cells in the Arctic, so \code{species_for_cells()} returned
+zero species with no error at all. Prefer passing the DB connection to
+\code{\link[=cells_in_polygon]{cells_in_polygon()}}, which picks the right grid for the version it is
+actually looking at.
 }
 \concept{calc}

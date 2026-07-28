@@ -1,3 +1,26 @@
+# msens 0.12.0
+
+*Drawn areas resolve against the grid of the version being queried*
+
+* **`cells_in_polygon(poly, src)` now takes a DB connection** (still accepts a `SpatRaster` for
+  back-compat) and picks the grid from the database it is querying, so the two cannot disagree.
+  v8 (`cell` has `lon`/`lat`) takes a **SQL bbox select** on `cell` plus exact `sf` coverage on just
+  those candidates; v7 falls back to [cell_id_raster()], the 0-360 regional raster that IS v7's grid.
+* **Fixes silently EMPTY drawn-area reports on v8.** `cell_id_raster()` is the **v7** raster —
+  regional, 0-360 longitudes, holding v7 `cell_id`s — but the `/report` and `/species.csv` endpoints
+  passed it for every version. Against v8 those ids are valid but denote different places: a polygon
+  off Santa Barbara resolved to ids 2,924,984-3,015,011, and id 2,928,088 is **lon 64.375 / lat
+  69.675 — the Arctic**. Nothing errored; `species_for_cells()` simply returned **0 species**.
+  Regression-tested, since a wrong `cell_id` is still a *valid* `cell_id` and so cannot fail loudly.
+* **~31x faster on the same query.** For a 2 x 1.5-degree area off California, measured on the
+  server: the raster path took **35.7 s and returned 0 species**; the SQL path takes **1.15 s and
+  returns 2,572 species** (bbox select 0.02 s, `species_for_cells` 0.75 s, `scores_for_cells`
+  0.37 s). It no longer reads the whole cell-id raster, and it joins `cell_model`, which is already
+  partitioned by spatial tile.
+* `pct_covered` semantics are preserved exactly — computed planar in degrees, as terra's
+  `cover = TRUE` does — because [scores_for_cells()] and [species_for_cells()] weight by it.
+* Antimeridian-safe: the candidate longitude span splits into two ranges across 180 degrees.
+
 # msens 0.11.0
 
 *Read mapgl's drawn polygons whichever shape they arrive in*
