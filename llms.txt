@@ -185,7 +185,9 @@ Other functions not defined by the concepts above
   : Canonical global 0.5-degree cell index for lon/lat
 
 - [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
-  : Cell-ID SpatRaster
+  :
+
+  Cell-ID SpatRaster (the **v7** grid)
 
 - [`cell_model_tile_sql()`](http://marinesensitivity.org/msens/reference/cell_model_tile_sql.md)
   : SQL expression for a cell's spatial tile id

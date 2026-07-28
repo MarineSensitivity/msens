@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.11.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,19 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.12.0" id="msens-0120">msens 0.12.0<a class="anchor" aria-label="anchor" href="#msens-0120"></a></h2>
+<p><em>Drawn areas resolve against the grid of the version being queried</em></p>
+<ul><li>
+<strong><code>cells_in_polygon(poly, src)</code> now takes a DB connection</strong> (still accepts a <code>SpatRaster</code> for back-compat) and picks the grid from the database it is querying, so the two cannot disagree. v8 (<code>cell</code> has <code>lon</code>/<code>lat</code>) takes a <strong>SQL bbox select</strong> on <code>cell</code> plus exact <code>sf</code> coverage on just those candidates; v7 falls back to [cell_id_raster()], the 0-360 regional raster that IS v7’s grid.</li>
+<li>
+<strong>Fixes silently EMPTY drawn-area reports on v8.</strong> <code><a href="../reference/cell_id_raster.html">cell_id_raster()</a></code> is the <strong>v7</strong> raster — regional, 0-360 longitudes, holding v7 <code>cell_id</code>s — but the <code>/report</code> and <code>/species.csv</code> endpoints passed it for every version. Against v8 those ids are valid but denote different places: a polygon off Santa Barbara resolved to ids 2,924,984-3,015,011, and id 2,928,088 is <strong>lon 64.375 / lat 69.675 — the Arctic</strong>. Nothing errored; <code><a href="../reference/species_for_cells.html">species_for_cells()</a></code> simply returned <strong>0 species</strong>. Regression-tested, since a wrong <code>cell_id</code> is still a <em>valid</em> <code>cell_id</code> and so cannot fail loudly.</li>
+<li>
+<strong>~31x faster on the same query.</strong> For a 2 x 1.5-degree area off California, measured on the server: the raster path took <strong>35.7 s and returned 0 species</strong>; the SQL path takes <strong>1.15 s and returns 2,572 species</strong> (bbox select 0.02 s, <code>species_for_cells</code> 0.75 s, <code>scores_for_cells</code> 0.37 s). It no longer reads the whole cell-id raster, and it joins <code>cell_model</code>, which is already partitioned by spatial tile.</li>
+<li>
+<code>pct_covered</code> semantics are preserved exactly — computed planar in degrees, as terra’s <code>cover = TRUE</code> does — because [scores_for_cells()] and [species_for_cells()] weight by it.</li>
+<li>Antimeridian-safe: the candidate longitude span splits into two ranges across 180 degrees.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.11.0" id="msens-0110">msens 0.11.0<a class="anchor" aria-label="anchor" href="#msens-0110"></a></h2>
 <p><em>Read mapgl’s drawn polygons whichever shape they arrive in</em></p>
