@@ -1,3 +1,21 @@
+# msens 0.11.0
+
+*Read mapgl's drawn polygons whichever shape they arrive in*
+
+* **`drawn_features_sf()`** — turns the raw `input$<map_id>_drawn_features` value from a mapgl
+  draw control into `sf` (EPSG:4326), or `NULL` when nothing is drawn. Accepts **both** payload
+  shapes: the character GeoJSON older mapgl stringified, and the object current mapgl
+  (`_mapglSyncDrawnFeatures`, >= 0.5.0) sends, which Shiny delivers as a nested list.
+* Fixes the scores Report tab ("Add drawn polygon" answering *"Draw a polygon on the map first."*
+  for every polygon drawn) in **both** the v7 and v8 apps, which gated on `is.character()` and so
+  discarded every payload from the newer mapgl. Regression-tested against both shapes.
+* **`Remotes:` now points at the antimeridian-fixed mapgl fork**
+  (`bbest/mapgl@484e869f` = walkerke/mapgl `main` + walkerke/mapgl#211), not `walkerke/mapgl`.
+  Twelve Shiny apps `librarian::shelf(MarineSensitivity/msens)` at startup, so every msens install
+  from GitHub resolved this field and silently overwrote the fork that the rstudio image pins —
+  which is how the h3-db globe went back to showing a gap at the antimeridian. Revert to
+  `walkerke/mapgl` once #211 merges.
+
 # msens 0.10.0
 
 *Log the real client IP, and the commit that produced the row*

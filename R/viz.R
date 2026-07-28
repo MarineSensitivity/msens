@@ -955,6 +955,45 @@ ggmap_areas <- function(areas_sf, fill_color = "#3388ff",
     ggplot2::labs(x = NULL, y = NULL)
 }
 
+#' Parse mapgl's drawn-features Shiny input into `sf`
+#'
+#' `mapgl`'s draw control pushes its FeatureCollection to
+#' `input$<map_id>_drawn_features`. **What lands there has changed shape across
+#' mapgl versions**: older builds sent `JSON.stringify(fc)` (a character
+#' string), current builds (`_mapglSyncDrawnFeatures`, mapgl >= 0.5.0) send the
+#' object itself, which Shiny parses into a nested list. An app that tests for
+#' only one of those forms silently sees "nothing drawn" — which is exactly how
+#' the scores Report tab stopped recognizing drawn polygons.
+#'
+#' This accepts BOTH forms so the apps cannot drift from mapgl again.
+#'
+#' @param x the raw value of `input$<map_id>_drawn_features`: a character
+#'   GeoJSON string, a parsed list, or `NULL`
+#' @return an `sf` data frame in EPSG:4326 with one row per drawn feature, or
+#'   `NULL` when nothing is drawn or the payload is unusable
+#' @examples
+#' drawn_features_sf(NULL)  # NULL — nothing drawn
+#' @importFrom jsonlite toJSON
+#' @importFrom sf read_sf st_crs
+#' @export
+#' @concept viz
+drawn_features_sf <- function(x) {
+  if (is.null(x))
+    return(NULL)
+  json <- if (is.character(x))
+    paste(x, collapse = "\n") else
+    as.character(jsonlite::toJSON(
+      x, auto_unbox = TRUE, null = "null", na = "null"))
+  if (!nzchar(json))
+    return(NULL)
+  d <- tryCatch(sf::read_sf(json, quiet = TRUE), error = function(e) NULL)
+  if (is.null(d) || nrow(d) == 0)
+    return(NULL)
+  if (is.na(sf::st_crs(d)))
+    sf::st_crs(d) <- 4326
+  d
+}
+
 utils::globalVariables(c(
   "xmin", "xmax", "ymin", "ymax", "tooltip",
   "sp_cat", "sp_common", "sp_scientific", "taxon_id", "taxon_authority",
