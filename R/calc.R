@@ -311,15 +311,28 @@ scores_for_cells <- function(con, cells,
   # `tiles` prunes to the relevant partitions — pass it whenever the cell ids are
   # known up front.
   if (use_cm) {
-    # the subquery below exposes exactly these names, so nothing needs resolving
-    k$mkey <- "mdl_key"
-    k$val  <- "val"
+    k$val <- "val"
     tile_clause <- if (is.null(tiles)) "" else
       glue::glue(" WHERE tile IN ({paste(tiles, collapse = ', ')})")
-    mc_from <- glue::glue(
-      "(SELECT cm.cell_id, cm.val, mo.mdl_key FROM cell_model cm",
-      " JOIN model mo USING (mdl_id)",
-      "{tile_clause}) mc")
+    # cell_model stores whichever model id its generation uses, and they differ:
+    # v8 stores the compact integer `mdl_id` (join `model` back to the STABLE
+    # mdl_key that taxon carries), v7 stores `mdl_seq`, which taxon already joins
+    # on directly. Assuming v8's shape made the v7 surface fail outright with
+    # `Binder Error: Column "mdl_id" does not exist on left side of join`.
+    cm_cols <- DBI::dbListFields(con, "cell_model")
+    if ("mdl_id" %in% cm_cols) {
+      k$mkey  <- "mdl_key"
+      mc_from <- glue::glue(
+        "(SELECT cm.cell_id, cm.val, mo.mdl_key FROM cell_model cm",
+        " JOIN model mo USING (mdl_id)",
+        "{tile_clause}) mc")
+    } else {
+      k$mkey  <- pick_cm <- if ("mdl_key" %in% cm_cols) "mdl_key" else
+        if ("mdl_seq" %in% cm_cols) "mdl_seq" else
+          stop("cell_model has no recognizable model id column", call. = FALSE)
+      mc_from <- glue::glue(
+        "(SELECT cm.cell_id, cm.val, cm.{pick_cm} FROM cell_model cm{tile_clause}) mc")
+    }
   } else {
     mc_from <- "model_cell mc"
   }

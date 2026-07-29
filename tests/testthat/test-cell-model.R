@@ -95,3 +95,50 @@ test_that("cell_grid_ncol reads the sidecar table, else falls back to 7200", {
   DBI::dbWriteTable(con, "cell_grid", data.frame(ncol = 3103L))
   expect_equal(cell_grid_ncol(con), 3103L)
 })
+
+# --- cell_model model-id column differs by generation -----------------------
+
+# Minimal fixture per GENERATION — each carries only that schema's columns,
+# because .sdm_cols() resolves by first match and a hybrid taxon would silently
+# pick the wrong key (v7 mdl_seq is an int, v8 ms_merge_key/mdl_key a string).
+.cm_fixture <- function(gen) {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  base <- data.frame(
+    sp_cat = "fish", common_name = "Test", scientific_name = "Testus testus",
+    taxon_id = 1L, taxon_authority = "worms", extrisk_code = "IUCN:LC",
+    er_score = 10, is_mmpa = FALSE, is_mbta = FALSE, is_marine = TRUE)
+  # tile MUST come from the same formula the reader uses — hard-coding it is how
+  # a fixture silently tests nothing (pruning excludes the row: 0 species, no error)
+  tile <- cell_model_tiles(101L)
+  DBI::dbWriteTable(con, "cell", data.frame(cell_id = 101L, area_km2 = 10))
+
+  if (gen == "v7") {                    # cell_model stores mdl_seq; no join needed
+    DBI::dbWriteTable(con, "taxon", cbind(base, data.frame(mdl_seq = 7L, is_ok = TRUE)))
+    DBI::dbWriteTable(con, "cell_model",
+      data.frame(tile = tile, mdl_seq = 7L, cell_id = 101L, val = 50))
+  } else {                              # v8: stores mdl_id, join model -> mdl_key
+    DBI::dbWriteTable(con, "taxon",
+      cbind(base, data.frame(ms_merge_key = "ms_merge|X", is_valid_usa = TRUE)))
+    DBI::dbWriteTable(con, "cell_model",
+      data.frame(tile = tile, mdl_id = 7L, cell_id = 101L, val = 50))
+    DBI::dbWriteTable(con, "model", data.frame(mdl_id = 7L, mdl_key = "ms_merge|X"))
+  }
+  con
+}
+
+test_that("species_for_cells reads a v7-shaped cell_model (mdl_seq)", {
+  # REGRESSION: the use_cm branch joined `model USING (mdl_id)` unconditionally —
+  # v8's shape. Against v7's cell_model, which stores mdl_seq and needs no join,
+  # that failed outright: Binder Error: Column "mdl_id" does not exist.
+  con <- .cm_fixture("v7"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d <- species_for_cells(con, tibble::tibble(cell_id = 101L, pct_covered = 100))
+  expect_equal(nrow(d), 1)
+  expect_equal(d$sp_scientific, "Testus testus")
+})
+
+test_that("species_for_cells still reads a v8-shaped cell_model (mdl_id)", {
+  con <- .cm_fixture("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d <- species_for_cells(con, tibble::tibble(cell_id = 101L, pct_covered = 100))
+  expect_equal(nrow(d), 1)
+  expect_equal(d$sp_scientific, "Testus testus")
+})

@@ -1,3 +1,13 @@
+# msens 0.13.1
+
+* **`species_for_cells()` reads a `cell_model` of either generation.** The `use_cm` branch joined
+  `model USING (mdl_id)` unconditionally — v8's shape. v7's `cell_model` stores `mdl_seq`, which
+  `taxon` already joins on directly, so the v7 surface failed outright with
+  `Binder Error: Column "mdl_id" does not exist on left side of join`. The model-id column is now
+  resolved from `cell_model` itself (`mdl_id` → join `model`; `mdl_key`/`mdl_seq` → use directly).
+  Regression-tested against both shapes, with generation-accurate fixtures — a hybrid `taxon`
+  carrying both keys makes `.sdm_cols()` pick the wrong one and hides the bug.
+
 # msens 0.13.0
 
 *The `cell_model` tile key stops assuming one grid*
