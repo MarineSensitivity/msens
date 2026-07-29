@@ -8,7 +8,7 @@ when reading.
 ## Usage
 
 ``` r
-cell_model_tile_sql(col = "cell_id")
+cell_model_tile_sql(col = "cell_id", ncol = .CELL_GRID_NCOL)
 ```
 
 ## Arguments
@@ -16,6 +16,11 @@ cell_model_tile_sql(col = "cell_id")
 - col:
 
   SQL expression giving the cell id, e.g. `"c.cell_id"`
+
+- ncol:
+
+  grid width in columns (default v8's 7200; v7 is 3103 — see
+  [`cell_grid_ncol()`](http://marinesensitivity.org/msens/reference/cell_grid_ncol.md))
 
 ## Value
 
@@ -32,4 +37,6 @@ partition per cell) if used here by mistake.
 ``` r
 cell_model_tile_sql("cell_id")
 #> (((cell_id-1)//7200)//50)*144 + (((cell_id-1)%7200)//50)
+cell_model_tile_sql("cell_id", ncol = 3103)   # v7 grid
+#> (((cell_id-1)//3103)//50)*62 + (((cell_id-1)%3103)//50)
 ```

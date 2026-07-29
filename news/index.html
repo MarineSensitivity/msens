@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.13.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,15 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.13.0" id="msens-0130">msens 0.13.0<a class="anchor" aria-label="anchor" href="#msens-0130"></a></h2>
+<p><em>The <code>cell_model</code> tile key stops assuming one grid</em></p>
+<ul><li>
+<strong><code>cell_model_tile_sql(col, ncol)</code> and <code>cell_model_tiles(cell_id, ncol)</code> take the grid width</strong>, and <strong><code>cell_grid_ncol(con)</code></strong> resolves it from the database being read (a <code>cell_grid</code> sidecar table, else the 7200 default). v8’s global grid is 7200 columns; <strong>v7’s is 3103</strong> (the regional 0-360 bio-oracle raster, 3103 x 2006). Applying 7200 to v7 ids partitions consistently, so nothing errors — the tiles simply stop corresponding to contiguous ground and a compact polygon scatters across many of them, losing the pruning <code>cell_model</code> exists to provide.</li>
+<li>
+<strong><code><a href="../reference/species_for_cells.html">species_for_cells()</a></code> now resolves the width from its connection</strong> instead of assuming 7200. Every v8 database predates the <code>cell_grid</code> table and falls back to the default, so v8 behavior is unchanged.</li>
+<li>Regression-tested on both grids, including that the two widths yield <em>different</em> tiles — the silent-failure mode, since a wrong tile id is still a valid tile id.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.2" id="msens-0122">msens 0.12.2<a class="anchor" aria-label="anchor" href="#msens-0122"></a></h2>
 <ul><li>

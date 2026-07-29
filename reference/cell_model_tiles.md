@@ -9,7 +9,7 @@ whole problem `cell_model` exists to solve.
 ## Usage
 
 ``` r
-cell_model_tiles(cell_id)
+cell_model_tiles(cell_id, ncol = .CELL_GRID_NCOL)
 ```
 
 ## Arguments
@@ -17,6 +17,11 @@ cell_model_tiles(cell_id)
 - cell_id:
 
   integer vector of cell ids
+
+- ncol:
+
+  grid width in columns; MUST match what the writer used. Pass
+  `cell_grid_ncol(con)` when reading a database rather than assuming.
 
 ## Value
 

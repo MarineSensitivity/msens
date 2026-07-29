@@ -1,5 +1,26 @@
 # Changelog
 
+## msens 0.13.0
+
+*The `cell_model` tile key stops assuming one grid*
+
+- **`cell_model_tile_sql(col, ncol)` and
+  `cell_model_tiles(cell_id, ncol)` take the grid width**, and
+  **`cell_grid_ncol(con)`** resolves it from the database being read (a
+  `cell_grid` sidecar table, else the 7200 default). v8’s global grid is
+  7200 columns; **v7’s is 3103** (the regional 0-360 bio-oracle raster,
+  3103 x 2006). Applying 7200 to v7 ids partitions consistently, so
+  nothing errors — the tiles simply stop corresponding to contiguous
+  ground and a compact polygon scatters across many of them, losing the
+  pruning `cell_model` exists to provide.
+- **[`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
+  now resolves the width from its connection** instead of assuming 7200.
+  Every v8 database predates the `cell_grid` table and falls back to the
+  default, so v8 behavior is unchanged.
+- Regression-tested on both grids, including that the two widths yield
+  *different* tiles — the silent-failure mode, since a wrong tile id is
+  still a valid tile id.
+
 ## msens 0.12.2
 
 - **The v7 (raster) branch of

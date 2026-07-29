@@ -16,7 +16,7 @@ partition, which is the whole problem cell_model exists to solve."><script async
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.13.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,7 +51,7 @@ partition</strong>, which is the whole problem <code>cell_model</code> exists to
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cell_model_tiles</span><span class="op">(</span><span class="va">cell_id</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cell_model_tiles</span><span class="op">(</span><span class="va">cell_id</span>, ncol <span class="op">=</span> <span class="va">.CELL_GRID_NCOL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -60,6 +60,11 @@ partition</strong>, which is the whole problem <code>cell_model</code> exists to
 
 <dl><dt id="arg-cell-id">cell_id<a class="anchor" aria-label="anchor" href="#arg-cell-id"></a></dt>
 <dd><p>integer vector of cell ids</p></dd>
+
+
+<dt id="arg-ncol">ncol<a class="anchor" aria-label="anchor" href="#arg-ncol"></a></dt>
+<dd><p>grid width in columns; MUST match what the writer used. Pass
+<code>cell_grid_ncol(con)</code> when reading a database rather than assuming.</p></dd>
 
 </dl></div>
     <div class="section level2">
