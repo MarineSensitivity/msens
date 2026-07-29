@@ -72,6 +72,43 @@ test_that("REGRESSION: a v8 connection never yields v7 0-360 raster ids", {
   expect_true(all(row >= floor((90 - 35.5) / 0.05) & row <= floor((90 - 34) / 0.05)))
 })
 
+test_that("the raster path reads only the polygon window and keeps coverage", {
+  # v7 grid shape: 0-360 longitudes, pixel values ARE the cell ids
+  r <- terra::rast(
+    xmin = 230, xmax = 250, ymin = 30, ymax = 40, resolution = 1, crs = "EPSG:4326")
+  terra::values(r) <- seq_len(terra::ncell(r))
+  names(r) <- "cell_id"
+
+  # 2x2-degree square on cell boundaries, given in [-180,180] as callers do
+  # (-122 -> 238); the function shifts it to 0-360 internally
+  d <- .cells_in_polygon_raster(sq(-122, -120, 34, 36), r)
+
+  expect_equal(nrow(d), 4)
+  expect_true(all(d$pct_covered == 100))
+  # ids must match what the raster itself reports for those centres
+  expect_setequal(
+    d$cell_id,
+    terra::extract(r, cbind(c(238.5, 239.5, 238.5, 239.5),
+                            c(34.5, 34.5, 35.5, 35.5)))[[1]])
+})
+
+test_that("the raster path reports partial coverage and drops non-overlaps", {
+  r <- terra::rast(
+    xmin = 230, xmax = 250, ymin = 30, ymax = 40, resolution = 1, crs = "EPSG:4326")
+  terra::values(r) <- seq_len(terra::ncell(r))
+  names(r) <- "cell_id"
+
+  # half of one cell (238..239 x 34..35) -> 50%
+  d <- .cells_in_polygon_raster(sq(-122, -121.5, 34, 35), r)
+  expect_equal(nrow(d), 1)
+  expect_equal(d$pct_covered, 50)
+
+  # entirely off the raster -> empty, correctly shaped
+  d0 <- .cells_in_polygon_raster(sq(-10, -9, 0, 1), r)
+  expect_equal(nrow(d0), 0)
+  expect_named(d0, c("cell_id", "pct_covered"))
+})
+
 test_that(".lon_ranges splits an antimeridian-crossing span", {
   expect_equal(.lon_ranges(-121, -119), list(c(-121, -119)))
   expect_equal(.lon_ranges(170, 190),   list(c(170, 180), c(-180, -170)))

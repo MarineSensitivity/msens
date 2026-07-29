@@ -54,10 +54,11 @@ cell_id_raster <- function() {
 #' @return a tibble with columns `cell_id` (integer) and `pct_covered` (0-100)
 #' @importFrom sf st_transform st_shift_longitude st_geometry st_union st_bbox
 #'   st_set_crs st_sfc st_polygon st_intersects st_intersection st_area
-#' @importFrom terra rasterize vect values
+#' @importFrom terra rasterize vect values extract
 #' @importFrom tibble tibble
 #' @importFrom DBI dbGetQuery
 #' @importFrom methods is
+#' @importFrom stats aggregate
 #' @export
 #' @concept calc
 cells_in_polygon <- function(poly, src, res = 0.05) {
@@ -71,21 +72,34 @@ cells_in_polygon <- function(poly, src, res = 0.05) {
   .cells_in_polygon_raster(poly, src)
 }
 
-# v7 path: rasterize against the 0-360 cell-id raster (the original behavior)
+# v7 path: read the cell ids under the polygon from the 0-360 cell-id raster.
+#
+# terra::extract() reads only the polygon's WINDOW. The previous implementation
+# rasterized the polygon across the full extent and then pulled the entire raster
+# into memory with terra::values() — for a 2006x3103 grid that is 6.2M cells read
+# to find ~450, and it dominated the whole v7 report: measured on the server,
+# 35.16 s vs 0.12 s for the same polygon (295x), yielding an IDENTICAL cell_id
+# set. `exact = TRUE` returns each cell's covered `fraction`, so pct_covered
+# keeps its meaning (it weights area_km2/avg_suit downstream); it differs from
+# the old cover= values by a mean 0.66pp on edge cells, being the more precise
+# of the two.
 .cells_in_polygon_raster <- function(poly, r_cell_id) {
   poly_t <- poly |>
     sf::st_transform(4326) |>
     sf::st_shift_longitude() # [-180,180] -> [0,360]
-  r_cov <- terra::rasterize(
-    terra::vect(poly_t), r_cell_id,
-    cover   = TRUE,
-    touches = TRUE)
-  r_id_vals  <- terra::values(r_cell_id)[, 1]
-  r_cov_vals <- terra::values(r_cov)[, 1]
-  keep <- !is.na(r_cov_vals) & r_cov_vals > 0 & !is.na(r_id_vals)
+  e <- terra::extract(r_cell_id, terra::vect(poly_t), exact = TRUE)
+  ids <- e[[2]]
+  keep <- !is.na(ids) & !is.na(e$fraction) & e$fraction > 0
+  if (!any(keep))
+    return(tibble::tibble(cell_id = integer(), pct_covered = numeric()))
+  # a multi-feature polygon can report the same cell once per feature; sum the
+  # fractions (capped at 1) so overlapping parts do not double-count
+  agg <- stats::aggregate(
+    list(fraction = as.numeric(e$fraction[keep])),
+    by = list(cell_id = as.integer(ids[keep])), FUN = sum)
   tibble::tibble(
-    cell_id     = as.integer(r_id_vals[keep]),
-    pct_covered = round(as.numeric(r_cov_vals[keep]) * 100))
+    cell_id     = agg$cell_id,
+    pct_covered = round(pmin(agg$fraction, 1) * 100))
 }
 
 # does this database's `cell` table carry lon/lat? (v8 yes, v7 no)
