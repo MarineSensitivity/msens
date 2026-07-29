@@ -383,7 +383,11 @@ species_for_cells <- function(con, cells) {
     sprintf("(%d, %s)", as.integer(cells$cell_id), as.numeric(cells$pct_covered)),
     collapse = ", ")
   cells_sql <- glue::glue("SELECT * FROM (VALUES {vals}) AS v(cell_id, pct_covered)")
-  DBI::dbGetQuery(con, .species_sql(con, cells_sql, tiles = cell_model_tiles(cells$cell_id))) |>
+  # resolve the tile width from THIS database — v7 and v8 tile on different grids,
+  # and a mismatch prunes away the very rows being sought, silently (a wrong tile
+  # id is still a valid tile id, so the query just returns fewer/no species)
+  tiles <- cell_model_tiles(cells$cell_id, ncol = cell_grid_ncol(con))
+  DBI::dbGetQuery(con, .species_sql(con, cells_sql, tiles = tiles)) |>
     dplyr::as_tibble() |>
     .species_shares()
 }

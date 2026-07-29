@@ -4,10 +4,13 @@
 \alias{cell_model_tiles}
 \title{Spatial tile ids covering a set of cells}
 \usage{
-cell_model_tiles(cell_id)
+cell_model_tiles(cell_id, ncol = .CELL_GRID_NCOL)
 }
 \arguments{
 \item{cell_id}{integer vector of cell ids}
+
+\item{ncol}{grid width in columns; MUST match what the writer used. Pass
+\code{cell_grid_ncol(con)} when reading a database rather than assuming.}
 }
 \value{
 sorted unique integer tile ids

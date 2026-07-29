@@ -60,3 +60,38 @@ test_that("a round trip through a partitioned dataset finds the right rows", {
   expect_equal(sort(unique(got$cell_id)), want)
   expect_equal(nrow(got), 4L)          # 2 cells x 2 models
 })
+
+# --- grid-aware tiling (v7 uses a 3103-wide grid, v8 a 7200-wide one) --------
+
+test_that("writer and reader agree on tiles for a NON-default grid", {
+  # the existing agreement test covers the 7200 default; v7's grid is 3103, and a
+  # writer/reader mismatch would prune away the very rows sought — silently,
+  # because a wrong tile id is still a valid tile id
+  ncol <- 3103L
+  ids  <- c(1L, 990L, 3103L, 3104L, 155150L, 6222562L)
+
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "c", data.frame(cell_id = ids))
+  sql <- DBI::dbGetQuery(con, sprintf(
+    "SELECT cell_id, %s AS tile FROM c ORDER BY cell_id",
+    cell_model_tile_sql("cell_id", ncol = ncol)))
+
+  expect_equal(sort(unique(sql$tile)), cell_model_tiles(ids, ncol = ncol))
+})
+
+test_that("the wrong grid width yields DIFFERENT tiles — the silent-failure mode", {
+  ids <- c(990L, 3103L, 3104L, 155150L)
+  expect_false(identical(
+    cell_model_tiles(ids, ncol = 3103L),
+    cell_model_tiles(ids, ncol = 7200L)))
+})
+
+test_that("cell_grid_ncol reads the sidecar table, else falls back to 7200", {
+  expect_equal(cell_grid_ncol(NULL), 7200L)
+
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  expect_equal(cell_grid_ncol(con), 7200L)          # no cell_grid table (every v8 db)
+
+  DBI::dbWriteTable(con, "cell_grid", data.frame(ncol = 3103L))
+  expect_equal(cell_grid_ncol(con), 3103L)
+})

@@ -4,10 +4,13 @@
 \alias{cell_model_tile_sql}
 \title{SQL expression for a cell's spatial tile id}
 \usage{
-cell_model_tile_sql(col = "cell_id")
+cell_model_tile_sql(col = "cell_id", ncol = .CELL_GRID_NCOL)
 }
 \arguments{
 \item{col}{SQL expression giving the cell id, e.g. \code{"c.cell_id"}}
+
+\item{ncol}{grid width in columns (default v8's 7200; v7 is 3103 — see
+\code{\link[=cell_grid_ncol]{cell_grid_ncol()}})}
 }
 \value{
 character SQL expression
@@ -23,5 +26,6 @@ cell) if used here by mistake.
 }
 \examples{
 cell_model_tile_sql("cell_id")
+cell_model_tile_sql("cell_id", ncol = 3103)   # v7 grid
 }
 \concept{calc}
