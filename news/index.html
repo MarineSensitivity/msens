@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.12.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.12.2" id="msens-0122">msens 0.12.2<a class="anchor" aria-label="anchor" href="#msens-0122"></a></h2>
+<ul><li>
+<strong>The v7 (raster) branch of <code><a href="../reference/cells_in_polygon.html">cells_in_polygon()</a></code> reads only the polygon’s window</strong> — <code>terra::extract(..., exact = TRUE)</code> instead of <code><a href="https://rspatial.github.io/terra/reference/rasterize.html" class="external-link">terra::rasterize()</a></code> followed by <code><a href="https://rspatial.github.io/terra/reference/values.html" class="external-link">terra::values()</a></code> over the whole grid. The old form pulled 6.2M cells into memory to find ~450 and dominated the entire v7 report. Measured on the server for the same polygon: <strong>35.16 s → 0.12 s (295x)</strong>, with an <strong>identical <code>cell_id</code> set</strong>. <code>exact = TRUE</code> yields each cell’s covered <code>fraction</code>, so <code>pct_covered</code> keeps its meaning (it weights <code>area_km2</code>/<code>avg_suit</code>); it differs from the old <code>cover=</code> values by a mean 0.66pp on edge cells, being the more precise of the two. Overlapping features of a multi-part polygon now sum their fractions (capped at 100) rather than double-counting a cell.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.1" id="msens-0121">msens 0.12.1<a class="anchor" aria-label="anchor" href="#msens-0121"></a></h2>
 <ul><li>

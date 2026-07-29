@@ -1,5 +1,24 @@
 # Changelog
 
+## msens 0.12.2
+
+- **The v7 (raster) branch of
+  [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
+  reads only the polygon’s window** —
+  `terra::extract(..., exact = TRUE)` instead of
+  [`terra::rasterize()`](https://rspatial.github.io/terra/reference/rasterize.html)
+  followed by
+  [`terra::values()`](https://rspatial.github.io/terra/reference/values.html)
+  over the whole grid. The old form pulled 6.2M cells into memory to
+  find ~450 and dominated the entire v7 report. Measured on the server
+  for the same polygon: **35.16 s → 0.12 s (295x)**, with an **identical
+  `cell_id` set**. `exact = TRUE` yields each cell’s covered `fraction`,
+  so `pct_covered` keeps its meaning (it weights `area_km2`/`avg_suit`);
+  it differs from the old `cover=` values by a mean 0.66pp on edge
+  cells, being the more precise of the two. Overlapping features of a
+  multi-part polygon now sum their fractions (capped at 100) rather than
+  double-counting a cell.
+
 ## msens 0.12.1
 
 - **[`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
