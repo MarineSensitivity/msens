@@ -30,6 +30,9 @@ every version instead of a forked app per release
 - [`validate_manifest()`](http://marinesensitivity.org/msens/reference/validate_manifest.md)
   : Validate a version manifest
 
+- [`version_picker_html()`](http://marinesensitivity.org/msens/reference/version_picker_html.md)
+  : HTML for the version picker
+
 - [`cell_lonlat()`](http://marinesensitivity.org/msens/reference/cell_lonlat.md)
   : Longitude/latitude of cell centers on a grid
 
