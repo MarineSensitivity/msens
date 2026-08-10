@@ -123,6 +123,52 @@ validate_zone_sets <- function(d) {
   invisible(d)
 }
 
+#' Cells covered by each zone, on a given grid
+#'
+#' The (zone × grid) intersection — which is a function of **geometry and grid
+#' alone**, not of any release. `score_zones.qmd` recomputes it per version, so
+#' the six releases sharing `programarea_2026-03` each paid for the same
+#' `exactextractr` pass; keyed on `(zone_set_key, grid_id)` it is computed once.
+#'
+#' Reads the grid's **cell-id COG**, whose pixel VALUES are cell ids (a lookup
+#' image — see `grid.R`), so the returned ids are in that grid's id-space
+#' whatever frame the raster itself uses.
+#'
+#' Semantics deliberately match the per-version implementation this replaces, so
+#' relocating it cannot move any score: coverage is rounded to whole percent and
+#' anything rounding to zero is dropped.
+#'
+#' @param ply an `sf` of zone polygons
+#' @param cellid_tif path to that grid's cell-id COG
+#' @param key_col column of `ply` holding the zone key
+#' @return a data frame with `zone_key`, `cell_id`, `pct_covered` (1-100)
+#' @importFrom sf st_make_valid st_transform st_geometry
+#' @export
+#' @concept zone_set
+zone_cells <- function(ply, cellid_tif, key_col) {
+  if (!requireNamespace("exactextractr", quietly = TRUE))
+    stop("zone_cells() needs the exactextractr package", call. = FALSE)
+  if (!key_col %in% names(ply))
+    stop(sprintf("`%s` not a column of ply", key_col), call. = FALSE)
+
+  r   <- terra::rast(cellid_tif)
+  ply <- sf::st_transform(sf::st_make_valid(ply), 4326)
+
+  out <- lapply(seq_len(nrow(ply)), function(i) {
+    d <- exactextractr::exact_extract(r, ply[i, ], progress = FALSE)[[1]]
+    d <- d[!is.na(d$value) & d$coverage_fraction > 0, , drop = FALSE]
+    if (!nrow(d)) return(NULL)
+    pct <- as.integer(round(d$coverage_fraction * 100))
+    keep <- pct > 0                      # a sliver rounding to 0% is not coverage
+    if (!any(keep)) return(NULL)
+    data.frame(zone_key    = as.character(ply[[key_col]][i]),
+               cell_id     = as.integer(d$value[keep]),
+               pct_covered = pct[keep],
+               stringsAsFactors = FALSE)
+  })
+  do.call(rbind, out)
+}
+
 #' Group zone layers into distinct vintages by geometry
 #'
 #' Takes the fingerprints of many candidate layers and reports how many genuinely

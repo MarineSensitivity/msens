@@ -94,3 +94,51 @@ test_that("zone_set_group collapses identical layers and flags unlabelled ones",
   g2 <- zone_set_group(x, vintage_of = c(old = "2026-01"))
   expect_true(all(is.na(g2$zone_set_key[g2$geom_hash == "new"])))
 })
+
+# --- zone_cells: the (zone x grid) intersection --------------------------------
+# These pin the ROUNDING and DROP semantics, because relocating this computation
+# out of the per-version pipeline must not move a single score.
+
+test_that("zone_cells returns whole-percent coverage per zone", {
+  skip_if_no_sf(); skip_if_not_installed("exactextractr"); skip_if_not_installed("terra")
+
+  # 4x4 cell-id raster over [0,4]x[0,4]; pixel VALUE is the cell id (lookup image)
+  f <- withr::local_tempfile(fileext = ".tif")
+  r <- terra::rast(nrows = 4, ncols = 4, xmin = 0, xmax = 4, ymin = 0, ymax = 4,
+                   crs = "EPSG:4326", vals = 1:16)
+  terra::writeRaster(r, f, overwrite = TRUE)
+
+  # a polygon covering exactly cells in the top-left 2x2 block
+  sq <- sf::st_polygon(list(cbind(c(0, 2, 2, 0, 0), c(2, 2, 4, 4, 2))))
+  ply <- sf::st_sf(zk = "A", geometry = sf::st_sfc(sq, crs = 4326))
+
+  z <- zone_cells(ply, f, "zk")
+  expect_equal(unique(z$zone_key), "A")
+  expect_equal(sort(z$cell_id), c(1L, 2L, 5L, 6L))   # top-left 2x2, row-major ids
+  expect_true(all(z$pct_covered == 100L))
+})
+
+test_that("partial coverage rounds to whole percent, and 0% slivers are dropped", {
+  skip_if_no_sf(); skip_if_not_installed("exactextractr"); skip_if_not_installed("terra")
+  f <- withr::local_tempfile(fileext = ".tif")
+  terra::writeRaster(terra::rast(nrows = 2, ncols = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2,
+                                 crs = "EPSG:4326", vals = 1:4), f, overwrite = TRUE)
+
+  # covers half of the two left-hand cells
+  sq  <- sf::st_polygon(list(cbind(c(0, 0.5, 0.5, 0, 0), c(0, 0, 2, 2, 0))))
+  ply <- sf::st_sf(zk = "B", geometry = sf::st_sfc(sq, crs = 4326))
+  z   <- zone_cells(ply, f, "zk")
+  expect_true(all(z$pct_covered == 50L))
+
+  # a sliver thin enough to round to 0% must be DROPPED, not stored as 0
+  thin <- sf::st_polygon(list(cbind(c(0, 0.002, 0.002, 0, 0), c(0, 0, 2, 2, 0))))
+  z2   <- zone_cells(sf::st_sf(zk = "C", geometry = sf::st_sfc(thin, crs = 4326)), f, "zk")
+  expect_true(is.null(z2) || all(z2$pct_covered > 0))
+})
+
+test_that("zone_cells rejects a missing key column", {
+  skip_if_no_sf(); skip_if_not_installed("exactextractr")
+  ply <- sf::st_sf(other = "A", geometry = sf::st_sfc(
+    sf::st_polygon(list(cbind(c(0,1,1,0,0), c(0,0,1,1,0)))), crs = 4326))
+  expect_error(zone_cells(ply, tempfile(), "zk"), "not a column")
+})
