@@ -69,6 +69,8 @@ used it, so one Program Area is comparable across versions
 
 - [`validate_zone_sets()`](http://marinesensitivity.org/msens/reference/validate_zone_sets.md)
   : Validate a zone-set registry table
+- [`zone_cells()`](http://marinesensitivity.org/msens/reference/zone_cells.md)
+  : Cells covered by each zone, on a given grid
 - [`zone_geom_hash()`](http://marinesensitivity.org/msens/reference/zone_geom_hash.md)
   : Order-invariant geometry fingerprint of a zone layer
 - [`zone_set_group()`](http://marinesensitivity.org/msens/reference/zone_set_group.md)
