@@ -32,6 +32,11 @@ score_delta <- function(df_a, df_b, key = "programarea_key", value = "score",
   stopifnot(all(c(key, value) %in% names(df_a)),
             all(c(key, value) %in% names(df_b)),
             length(labels) == 2)
+  # identical labels collide into one column and surface as an opaque rlang
+  # data-pronoun error from the mutate() below, several frames from the cause
+  if (identical(labels[1], labels[2]))
+    stop(sprintf("`labels` must differ (both are '%s'); they name the two columns compared",
+                 labels[1]), call. = FALSE)
   va <- paste0(value, "_", labels[1])
   vb <- paste0(value, "_", labels[2])
   a <- df_a[, c(key, value)]; names(a) <- c(key, va)

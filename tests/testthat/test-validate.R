@@ -144,3 +144,11 @@ test_that("naming a zone set the release does not have is an error, not an empty
 test_that("without zone_set_key the fld filter is used, as before", {
   expect_equal(nrow(pra_score_delta(mk_scored(), mk_scored())), 2L)
 })
+
+test_that("identical labels are refused with a message about labels", {
+  # they collide into one column and otherwise surface as an opaque rlang
+  # data-pronoun error several frames from the cause
+  d <- data.frame(programarea_key = "A", score = 1)
+  expect_error(score_delta(d, d, labels = c("v8", "v8")), "`labels` must differ")
+  expect_no_error(score_delta(d, d, labels = c("v8a", "v8b")))
+})
