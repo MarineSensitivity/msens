@@ -152,9 +152,19 @@ mass_conservation <- function(total_source, total_hex, tol = 0.1) {
 #' [.value_col()] rather than hard-coded — otherwise a v7↔v8 (or v8↔v8) comparison
 #' errors with "Table z does not have a column named value".
 #'
+#' Pass `zone_set_key` to pin the comparison to ONE spatial unit. Without it the
+#' query selects `fld = 'programarea_key'` from each database and trusts that the
+#' two releases meant the same polygons. Measured across every published gpkg,
+#' they do — every program-area layer from v2 through v8 is one geometry — but
+#' that is a fact about the data, not a guarantee, and BOEM's planning units keep
+#' changing. Naming the zone set makes the assumption explicit and checkable;
+#' databases predating the column (v1–v7) fall back to the `fld` filter.
+#'
 #' @param con_a,con_b DBI connections to the two versions' `sdm.duckdb`
 #' @param metric_key composite metric key (default [METRIC_SCORE_DEFAULT])
 #' @param labels length-2 version labels (default `c("v7","v8")`)
+#' @param zone_set_key optional `{zone_type}_{YYYY-MM}` to pin the spatial unit;
+#'   errors if a connection carries the column but not that value
 #' @return a tibble from [score_delta()] keyed by `programarea_key`
 #' @export
 #' @concept validate
@@ -162,19 +172,31 @@ mass_conservation <- function(total_source, total_hex, tol = 0.1) {
 #' @importFrom glue glue
 pra_score_delta <- function(con_a, con_b,
                             metric_key = METRIC_SCORE_DEFAULT,
-                            labels = c("v7", "v8")) {
-  q <- function(con) {
+                            labels = c("v7", "v8"),
+                            zone_set_key = NULL) {
+  q <- function(con, lbl) {
     zc <- .value_col(con, "zone")           # programarea_key string
     mc <- .value_col(con, "zone_metric")    # numeric score
+    # pin to a zone set when both asked for and available; a release predating
+    # the column keeps the fld filter rather than silently comparing nothing
+    has_zs <- "zone_set_key" %in%
+      DBI::dbGetQuery(con, "PRAGMA table_info('zone')")$name
+    where <- if (!is.null(zone_set_key) && has_zs) {
+      n <- DBI::dbGetQuery(con, glue::glue(
+        "SELECT count(*) n FROM zone WHERE zone_set_key = '{zone_set_key}'"))$n
+      if (!n) stop(sprintf("%s: no zones for zone_set_key '%s'", lbl, zone_set_key),
+                   call. = FALSE)
+      glue::glue("z.zone_set_key = '{zone_set_key}'")
+    } else glue::glue("z.fld = 'programarea_key'")
     glue::glue("
       SELECT z.{zc} AS programarea_key, zm.{mc} AS score
       FROM zone z
       JOIN zone_metric zm USING(zone_seq)
       JOIN metric m USING(metric_seq)
-      WHERE z.fld = 'programarea_key' AND m.metric_key = '{metric_key}'")
+      WHERE {where} AND m.metric_key = '{metric_key}'")
   }
   score_delta(
-    DBI::dbGetQuery(con_a, q(con_a)),
-    DBI::dbGetQuery(con_b, q(con_b)),
+    DBI::dbGetQuery(con_a, q(con_a, labels[1])),
+    DBI::dbGetQuery(con_b, q(con_b, labels[2])),
     key = "programarea_key", value = "score", labels = labels)
 }

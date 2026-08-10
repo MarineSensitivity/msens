@@ -99,3 +99,48 @@ test_that("pra_score_delta adapts to val vs value schema (v8<->v7 rename)", {
   d2 <- pra_score_delta(con_v8, con_v8b, metric_key = metric, labels = c("a", "b"))
   expect_equal(d2[d2$programarea_key == "ALA", ]$delta, 0.05, tolerance = 1e-9)
 })
+
+# --- pinning the comparison to one spatial unit --------------------------------
+
+mk_scored <- function(env = parent.frame(), with_zs = TRUE, zsk = "programarea_2026-01",
+                      scores = c(A = 50, B = 60)) {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE), envir = env)
+  zs <- if (with_zs) ", zone_set_key VARCHAR" else ""
+  DBI::dbExecute(con, sprintf("CREATE TABLE zone (zone_seq INTEGER, fld VARCHAR, val VARCHAR%s)", zs))
+  for (i in seq_along(scores)) {
+    v <- if (with_zs) sprintf("(%d,'programarea_key','%s','%s')", i, names(scores)[i], zsk)
+         else         sprintf("(%d,'programarea_key','%s')",      i, names(scores)[i])
+    DBI::dbExecute(con, paste("INSERT INTO zone VALUES", v))
+  }
+  DBI::dbExecute(con, "CREATE TABLE metric (metric_seq INTEGER, metric_key VARCHAR)")
+  DBI::dbExecute(con, sprintf("INSERT INTO metric VALUES (1,'%s')", METRIC_SCORE_DEFAULT))
+  DBI::dbExecute(con, "CREATE TABLE zone_metric (zone_seq INTEGER, metric_seq INTEGER, val DOUBLE)")
+  for (i in seq_along(scores))
+    DBI::dbExecute(con, sprintf("INSERT INTO zone_metric VALUES (%d,1,%f)", i, scores[[i]]))
+  con
+}
+
+test_that("pra_score_delta pins to a zone set when asked", {
+  a <- mk_scored(); b <- mk_scored(scores = c(A = 50, B = 60))
+  d <- pra_score_delta(a, b, zone_set_key = "programarea_2026-01")
+  expect_equal(nrow(d), 2L)
+  expect_true(all(abs(d[[grep("^d", names(d), value = TRUE)[1]]]) < 1e-9))
+})
+
+test_that("a database predating zone_set_key still compares, via the fld filter", {
+  # v1-v7 have no such column; pinning must degrade, not return nothing
+  old <- mk_scored(with_zs = FALSE)
+  new <- mk_scored()
+  expect_equal(nrow(pra_score_delta(old, new, zone_set_key = "programarea_2026-01")), 2L)
+})
+
+test_that("naming a zone set the release does not have is an error, not an empty join", {
+  a <- mk_scored(); b <- mk_scored()
+  expect_error(pra_score_delta(a, b, zone_set_key = "programarea_1999-01"),
+               "no zones for zone_set_key")
+})
+
+test_that("without zone_set_key the fld filter is used, as before", {
+  expect_equal(nrow(pra_score_delta(mk_scored(), mk_scored())), 2L)
+})
