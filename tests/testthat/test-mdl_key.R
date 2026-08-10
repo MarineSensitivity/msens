@@ -32,3 +32,13 @@ test_that("mdl_key_parse round-trips the composers", {
   expect_equal(p$taxon_authority, "BOTW")
   expect_equal(p$taxon_id, "22694927")
 })
+
+test_that("mdl_key_raw is vectorised, like mdl_key_merged", {
+  # a backfill mints tens of thousands of keys at once; the scalar-only form
+  # failed inside mutate() with an opaque stopifnot
+  expect_equal(mdl_key_raw("am", c("Fis-1", "Fis-2")), c("am|Fis-1", "am|Fis-2"))
+  expect_equal(mdl_key_raw(c("am", "bl"), c("Fis-1", "2269")), c("am|Fis-1", "bl|2269"))
+  expect_equal(mdl_key_raw("am", "Fis-1"), "am|Fis-1")            # scalar unchanged
+  expect_error(mdl_key_raw(c("a|b", "c"), c("1", "2")), "separator|grepl")
+  expect_error(mdl_key_raw(c("a", "b", "c"), c("1", "2")))        # length mismatch
+})

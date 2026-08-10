@@ -33,9 +33,13 @@
 #' @export
 #' @concept mdl_key
 mdl_key_raw <- function(dataset_key, sp_id, interval = NULL) {
+  # vectorised, like mdl_key_merged(): a backfill mints tens of thousands of keys
+  # at once, and the scalar-only form failed inside mutate() with an opaque
+  # stopifnot rather than saying it wanted one value.
   stopifnot(
-    length(dataset_key) == 1L, nzchar(dataset_key),
-    !grepl("|", dataset_key, fixed = TRUE))   # dataset_key must not contain the separator
+    length(dataset_key) == 1L || length(dataset_key) == length(sp_id),
+    all(nzchar(dataset_key)),
+    !any(grepl("|", dataset_key, fixed = TRUE)))   # must not contain the separator
   key <- paste(dataset_key, sp_id, sep = .MDL_KEY_SEP)
   if (!is.null(interval)) key <- paste(key, interval, sep = .MDL_KEY_SEP)
   key
