@@ -400,8 +400,23 @@ cog_tile_url <- function(
     cog_url,
     colormap = "spectral_r", rescale = c(1, 100),
     base = "https://titiler-v8.marinesensitivity.org",
-    tms  = "WebMercatorQuad") {
+    tms  = "WebMercatorQuad",
+    color = NULL) {
   stopifnot(is.character(cog_url), length(cog_url) == 1, nchar(cog_url) > 0)
+  # `color` renders a BINARY mask in one flat colour — the stock-titiler
+  # equivalent of the custom factory's `color=` param, which is the last thing
+  # the scores app needed the factory for (its "cells outside Program Areas"
+  # overlay). Expressed as an explicit value->RGBA colormap, since
+  # `colormap_name` only names built-in ramps.
+  if (!is.null(color)) {
+    stopifnot(is.character(color), length(color) == 1)
+    rgb <- grDevices::col2rgb(color)
+    params <- c(url = utils::URLencode(cog_url, reserved = TRUE),
+                colormap = utils::URLencode(
+                  sprintf('{"1":[%d,%d,%d,255]}', rgb[1], rgb[2], rgb[3]), reserved = TRUE))
+    qs <- paste0(names(params), "=", unname(params), collapse = "&")
+    return(sprintf("%s/cog/tiles/%s/{z}/{x}/{y}.png?%s", sub("/$", "", base), tms, qs))
+  }
   params <- c(url = utils::URLencode(cog_url, reserved = TRUE),
               colormap_name = colormap)
   if (!is.null(rescale)) {

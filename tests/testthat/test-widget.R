@@ -26,3 +26,15 @@ test_that("widget_png screenshots a widget to a real PNG", {
   # PNG magic bytes
   expect_equal(as.integer(readBin(png, "raw", 4)), c(137L, 80L, 78L, 71L))
 })
+
+test_that("cog_tile_url renders a flat mask via an explicit colormap", {
+  # the stock-titiler replacement for the custom factory's `color=` flat render,
+  # which the scores app's "outside Program Areas" overlay is the last user of
+  u <- cog_tile_url("https://x/y.tif", color = "#222222")
+  expect_match(u, "colormap=", fixed = TRUE)
+  expect_match(u, "34%2C34%2C34", fixed = TRUE)   # 0x22 = 34, URL-encoded commas
+  expect_false(grepl("colormap_name", u))
+  expect_false(grepl("rescale", u))
+  # the ordinary ramp path is untouched
+  expect_match(cog_tile_url("https://x/y.tif"), "colormap_name=spectral_r", fixed = TRUE)
+})

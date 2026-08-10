@@ -9,7 +9,8 @@ cog_tile_url(
   colormap = "spectral_r",
   rescale = c(1, 100),
   base = "https://titiler-v8.marinesensitivity.org",
-  tms = "WebMercatorQuad"
+  tms = "WebMercatorQuad",
+  color = NULL
 )
 }
 \arguments{
