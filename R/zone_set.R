@@ -1,0 +1,146 @@
+# zone_set.R — spatial units as VINTAGES, independent of MST version
+#
+# BOEM's planning units keep morphing, and every release so far baked its own
+# copy into a version-suffixed file (ply_programareas_2026_v3.gpkg ... _v8.gpkg)
+# and its own `zone_cell`. That makes the interesting question — how did THIS
+# Program Area's score change from v3 to v8? — unanswerable, because nothing
+# guarantees the two releases meant the same polygon.
+#
+# A zone set is therefore identified by its GEOMETRY, not by the release that
+# happened to use it:
+#
+#   zone_set_key = {zone_type}_{YYYY-MM}    e.g. "programarea_2026-03"
+#
+# Measured across every published gpkg (2026-08-10), the per-version files are
+# mostly the same layer copied forward:
+#
+#   programarea   8 files -> 2 distinct geometries (v2 alone; v3-v8 IDENTICAL)
+#   ecoregion    10 files -> 2 distinct (v1-v8 identical, + one standalone)
+#   planarea      3 files -> 3 distinct
+#
+# So `zone_cell` — which depends only on (geometry x grid) — is computed ONCE per
+# (zone_set_key, grid_id) and reused by every release on that grid, instead of
+# being re-extracted per version as score_zones.qmd does today.
+#
+# CAVEAT on the hash: it is exact-WKB, so a re-export at different coordinate
+# precision reads as a NEW vintage even if the polygons are cartographically the
+# same. In practice that has not bitten (the six v3-v8 program-area files were
+# written on six different dates and hash identically), but when two hashes
+# differ and a human believes they are the same unit, that is a CURATION call —
+# record it in the registry, do not loosen the hash.
+
+.ZONE_TYPES <- c("planarea", "programarea", "ecoregion", "subregion")
+
+#' Order-invariant geometry fingerprint of a zone layer
+#'
+#' Hashes each feature's WKB, ordered by the zone key (not by row order), so a
+#' layer re-saved with features shuffled fingerprints identically while any real
+#' change to a boundary does not.
+#'
+#' @param x an `sf` object, or a path to a vector file (e.g. `.gpkg`)
+#' @param key_col column holding the zone key; by default the first column whose
+#'   name ends in `key`, else row order
+#' @param layer layer name when `x` is a multi-layer file (default: the first)
+#' @return a list with `n`, `key_col`, `keys` and a 16-char `geom_hash`
+#' @importFrom sf st_read st_layers st_geometry st_as_binary
+#' @importFrom digest digest
+#' @export
+#' @concept zone_set
+zone_geom_hash <- function(x, key_col = NULL, layer = NULL) {
+  if (is.character(x)) {
+    if (!file.exists(x)) stop(sprintf("no such file: %s", x), call. = FALSE)
+    if (is.null(layer)) layer <- sf::st_layers(x)$name[1]
+    x <- sf::st_read(x, layer = layer, quiet = TRUE)
+  }
+  if (is.null(key_col)) {
+    kc <- grep("key$", names(x), value = TRUE)
+    key_col <- if (length(kc)) kc[1] else NA_character_
+  }
+  k <- if (!is.na(key_col) && key_col %in% names(x))
+    as.character(x[[key_col]]) else as.character(seq_len(nrow(x)))
+  o <- order(k)
+  list(n = nrow(x), key_col = key_col, keys = sort(k),
+       geom_hash = substr(digest::digest(
+         lapply(sf::st_as_binary(sf::st_geometry(x)[o]), as.vector),
+         algo = "xxhash64"), 1, 16))
+}
+
+#' Compose (and validate) a zone-set key
+#'
+#' @param zone_type one of `planarea`, `programarea`, `ecoregion`, `subregion`
+#' @param vintage `YYYY-MM`
+#' @return `"{zone_type}_{YYYY-MM}"`
+#' @export
+#' @concept zone_set
+zone_set_key <- function(zone_type, vintage) {
+  if (any(bad <- !zone_type %in% .ZONE_TYPES))
+    stop(sprintf("unknown zone_type %s; known: %s",
+                 paste(sQuote(unique(zone_type[bad])), collapse = ", "),
+                 paste(.ZONE_TYPES, collapse = ", ")), call. = FALSE)
+  if (any(!grepl("^[0-9]{4}-[0-9]{2}$", vintage)))
+    stop("vintage must be YYYY-MM", call. = FALSE)
+  sprintf("%s_%s", zone_type, vintage)
+}
+
+#' Validate a zone-set registry table
+#'
+#' Enforces the two invariants that make cross-version comparison meaningful:
+#' one key names exactly one geometry, and one geometry carries exactly one key.
+#' Without the second, the same polygons published under two keys would be scored
+#' twice and compared as though they were different places.
+#'
+#' @param d data frame with `zone_set_key`, `zone_type`, `vintage`, `geom_hash`,
+#'   `n_zones`
+#' @return `d`, invisibly
+#' @export
+#' @concept zone_set
+validate_zone_sets <- function(d) {
+  req <- c("zone_set_key", "zone_type", "vintage", "geom_hash", "n_zones")
+  if (length(miss <- setdiff(req, names(d))))
+    stop(sprintf("zone-set registry missing column(s): %s", paste(miss, collapse = ", ")),
+         call. = FALSE)
+  if (any(dup <- duplicated(d$zone_set_key)))
+    stop(sprintf("duplicate zone_set_key: %s",
+                 paste(unique(d$zone_set_key[dup]), collapse = ", ")), call. = FALSE)
+
+  # one key -> one geometry
+  by_key <- tapply(d$geom_hash, d$zone_set_key, function(z) length(unique(z)))
+  if (any(by_key > 1))
+    stop(sprintf("zone_set_key(s) map to >1 geometry: %s",
+                 paste(names(by_key)[by_key > 1], collapse = ", ")), call. = FALSE)
+
+  # one geometry -> one key (else the same polygons get scored twice)
+  by_geom <- tapply(d$zone_set_key, d$geom_hash, function(z) length(unique(z)))
+  if (any(by_geom > 1)) {
+    h <- names(by_geom)[by_geom > 1][1]
+    stop(sprintf("geometry %s is published under >1 key (%s); collapse them to one vintage",
+                 h, paste(unique(d$zone_set_key[d$geom_hash == h]), collapse = ", ")),
+         call. = FALSE)
+  }
+  invisible(zone_set_key(d$zone_type, d$vintage) -> k) # re-validates type + vintage
+  if (!identical(as.character(k), as.character(d$zone_set_key)))
+    stop("zone_set_key does not match its zone_type/vintage columns", call. = FALSE)
+  invisible(d)
+}
+
+#' Group zone layers into distinct vintages by geometry
+#'
+#' Takes the fingerprints of many candidate layers and reports how many genuinely
+#' distinct geometries they contain — the measurement that decides how many zone
+#' sets must be scored, rather than assuming one per release.
+#'
+#' @param x data frame with `source`, `zone_type` and `geom_hash`
+#' @param vintage_of named character mapping `geom_hash` -> `YYYY-MM`; hashes not
+#'   named here are left `NA` for a human to label
+#' @return `x` with `zone_set_key` and `vintage` columns
+#' @export
+#' @concept zone_set
+zone_set_group <- function(x, vintage_of = character()) {
+  if (!all(c("zone_type", "geom_hash") %in% names(x)))
+    stop("need `zone_type` and `geom_hash` columns", call. = FALSE)
+  x$vintage <- unname(vintage_of[x$geom_hash])
+  ok <- !is.na(x$vintage)
+  x$zone_set_key <- NA_character_
+  if (any(ok)) x$zone_set_key[ok] <- zone_set_key(x$zone_type[ok], x$vintage[ok])
+  x
+}

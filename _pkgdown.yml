@@ -29,6 +29,12 @@ reference:
   - has_concept("version")
   - has_concept("grid")
   - has_concept("cog_store")
+- title: Spatial units
+  desc: >
+    Identify a zone layer by its geometry rather than by the release that used
+    it, so one Program Area is comparable across versions
+  contents:
+  - has_concept("zone_set")
 - title: Atlas & database
   desc: Attach the released marine-atlas Parquet on S3, and open a version's DuckDB
   contents:
@@ -94,7 +100,7 @@ reference:
 - title: Other
   desc: Other functions not defined by the concepts above
   contents:
-  - lacks_concepts(c("version", "grid", "cog_store", "atlas", "db",
+  - lacks_concepts(c("version", "grid", "cog_store", "zone_set", "atlas", "db",
                      "ingest", "merge", "mdl_key", "taxa", "listings",
                      "calc", "viz", "publish", "stac", "report",
                      "workflow", "manifest", "parquet", "validate",
