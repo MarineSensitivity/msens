@@ -61,6 +61,24 @@ forked app per release.*
   `hash()` returns to R as a double, truncating to ~15 digits and
   aliasing distinct models onto one COG.
 
+- **New zone-set registry** —
+  [`zone_geom_hash()`](http://marinesensitivity.org/msens/reference/zone_geom_hash.md),
+  [`zone_set_key()`](http://marinesensitivity.org/msens/reference/zone_set_key.md),
+  [`zone_set_group()`](http://marinesensitivity.org/msens/reference/zone_set_group.md),
+  [`validate_zone_sets()`](http://marinesensitivity.org/msens/reference/validate_zone_sets.md).
+  A spatial unit is identified by its **geometry**
+  (`{zone_type}_{YYYY-MM}`), not by the release that used it, so one
+  Program Area is comparable across versions and `zone_cell` — which
+  depends only on (geometry × grid) — is computed once per
+  `(zone_set_key, grid_id)` rather than re-extracted per release.
+  Measured across every published gpkg: `programarea` is 8 files but
+  only **2** distinct geometries (v2 alone; v3–v8 byte-identical),
+  `ecoregion` 10 files → 2, `planarea` 3 → 3.
+  [`validate_zone_sets()`](http://marinesensitivity.org/msens/reference/validate_zone_sets.md)
+  enforces both directions — one key names one geometry, and one
+  geometry carries one key, since the same polygons published under two
+  keys would be scored twice and compared as different places.
+
 - **The reference index now reflects the package.** It had drifted
   badly: two of its five sections (`analyze`, and a `Read` holding one
   topic) keyed on concepts that no functions carry — the analysis

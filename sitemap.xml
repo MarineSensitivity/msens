@@ -130,9 +130,13 @@
 <url><loc>http://marinesensitivity.org/msens/reference/tbl_species.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/turtle_sql.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/validate_manifest.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/validate_zone_sets.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/widget_png.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/wm_rest.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/write_atlas_parquet.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/write_manifest.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/zone_geom_hash.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/zone_set_group.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/zone_set_key.html</loc></url>
 </urlset>
 

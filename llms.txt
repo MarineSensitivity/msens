@@ -106,6 +106,20 @@ every version instead of a forked app per release
 - [`content_url()`](http://marinesensitivity.org/msens/reference/content_url.md)
   : Public URL of a stored COG
 
+## Spatial units
+
+Identify a zone layer by its geometry rather than by the release that
+used it, so one Program Area is comparable across versions
+
+- [`validate_zone_sets()`](http://marinesensitivity.org/msens/reference/validate_zone_sets.md)
+  : Validate a zone-set registry table
+- [`zone_geom_hash()`](http://marinesensitivity.org/msens/reference/zone_geom_hash.md)
+  : Order-invariant geometry fingerprint of a zone layer
+- [`zone_set_group()`](http://marinesensitivity.org/msens/reference/zone_set_group.md)
+  : Group zone layers into distinct vintages by geometry
+- [`zone_set_key()`](http://marinesensitivity.org/msens/reference/zone_set_key.md)
+  : Compose (and validate) a zone-set key
+
 ## Atlas & database
 
 Attach the released marine-atlas Parquet on S3, and open a version’s
@@ -502,6 +516,22 @@ re-testing.
 ## Other
 
 Other functions not defined by the concepts above
+
+- [`HEX_RES`](http://marinesensitivity.org/msens/reference/HEX_RES.md) :
+  H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
+- [`hex_add_membership()`](http://marinesensitivity.org/msens/reference/hex_add_membership.md)
+  : Flag hexes inside a polygon (H3 polyfill membership)
+- [`hex_centroids()`](http://marinesensitivity.org/msens/reference/hex_centroids.md)
+  : Centroids (lon/lat) for BIGINT H3 ids
+- [`hex_id_from_lonlat()`](http://marinesensitivity.org/msens/reference/hex_id_from_lonlat.md)
+  : H3 cell ids for lon/lat points
+- [`hex_id_to_string()`](http://marinesensitivity.org/msens/reference/hex_id_to_string.md)
+  : Hex-string form of BIGINT H3 ids (for display)
+- [`hex_interp_idw()`](http://marinesensitivity.org/msens/reference/hex_interp_idw.md)
+  : Interpolate source values onto hex centroids (inverse-distance
+  weighting)
+- [`hex_ocean()`](http://marinesensitivity.org/msens/reference/hex_ocean.md)
+  : Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)
 
 # Articles
 
