@@ -50,6 +50,9 @@ every version instead of a forked app per release
 - [`cog_store_index()`](http://marinesensitivity.org/msens/reference/cog_store_index.md)
   : Index the existing COG store
 
+- [`content_hash_encoded()`](http://marinesensitivity.org/msens/reference/content_hash_encoded.md)
+  : Fold the raster ENCODING into a payload hash
+
 - [`content_hash_sql()`](http://marinesensitivity.org/msens/reference/content_hash_sql.md)
   : Grouped content-fingerprint SQL
 
