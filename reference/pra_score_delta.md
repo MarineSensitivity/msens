@@ -14,7 +14,8 @@ pra_score_delta(
   con_a,
   con_b,
   metric_key = METRIC_SCORE_DEFAULT,
-  labels = c("v7", "v8")
+  labels = c("v7", "v8"),
+  zone_set_key = NULL
 )
 ```
 
@@ -32,6 +33,11 @@ pra_score_delta(
 
   length-2 version labels (default `c("v7","v8")`)
 
+- zone_set_key:
+
+  optional `{zone_type}_{YYYY-MM}` to pin the spatial unit; errors if a
+  connection carries the column but not that value
+
 ## Value
 
 a tibble from
@@ -46,3 +52,12 @@ connection via
 [`.value_col()`](http://marinesensitivity.org/msens/reference/dot-value_col.md)
 rather than hard-coded — otherwise a v7↔v8 (or v8↔v8) comparison errors
 with "Table z does not have a column named value".
+
+Pass `zone_set_key` to pin the comparison to ONE spatial unit. Without
+it the query selects `fld = 'programarea_key'` from each database and
+trusts that the two releases meant the same polygons. Measured across
+every published gpkg, they do — every program-area layer from v2 through
+v8 is one geometry — but that is a fact about the data, not a guarantee,
+and BOEM's planning units keep changing. Naming the zone set makes the
+assumption explicit and checkable; databases predating the column
+(v1–v7) fall back to the `fld` filter.
