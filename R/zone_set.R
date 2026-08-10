@@ -31,6 +31,31 @@
 
 .ZONE_TYPES <- c("planarea", "programarea", "ecoregion", "subregion")
 
+#' The key column for a zone type
+#'
+#' A zone gpkg typically carries SEVERAL `*_key` columns — the program-area
+#' layer has `region_key`, `planarea_key` and `programarea_key` — so "the first
+#' column ending in key" picks the wrong one. That is not a cosmetic error:
+#' taking `region_key` (3 values) for the program-area layer yields 3 zones
+#' instead of 20, and, because the ordering it induces is not total, leaves ties
+#' whose order depends on the file's feature order — so two byte-identical
+#' layers saved in different order could fingerprint differently.
+#'
+#' @param zone_type one of [zone_set_key()]'s types
+#' @param nms column names of the layer
+#' @return the matching column name
+#' @export
+#' @concept zone_set
+zone_key_col <- function(zone_type, nms) {
+  want <- paste0(zone_type, "_key")
+  if (want %in% nms) return(want)
+  alt <- grep("key$", nms, value = TRUE)
+  if (!length(alt))
+    stop(sprintf("no `%s` and no *_key column among: %s", want,
+                 paste(nms, collapse = ", ")), call. = FALSE)
+  alt[1]
+}
+
 #' Order-invariant geometry fingerprint of a zone layer
 #'
 #' Hashes each feature's WKB, ordered by the zone key (not by row order), so a
@@ -38,23 +63,27 @@
 #' change to a boundary does not.
 #'
 #' @param x an `sf` object, or a path to a vector file (e.g. `.gpkg`)
-#' @param key_col column holding the zone key; by default the first column whose
-#'   name ends in `key`, else row order
+#' @param key_col column holding the zone key; resolved from `zone_type` when
+#'   given, else the first column whose name ends in `key`, else row order
+#' @param zone_type when given, resolves `key_col` via [zone_key_col()] — the
+#'   correct choice when a layer carries several `*_key` columns
 #' @param layer layer name when `x` is a multi-layer file (default: the first)
 #' @return a list with `n`, `key_col`, `keys` and a 16-char `geom_hash`
 #' @importFrom sf st_read st_layers st_geometry st_as_binary
 #' @importFrom digest digest
 #' @export
 #' @concept zone_set
-zone_geom_hash <- function(x, key_col = NULL, layer = NULL) {
+zone_geom_hash <- function(x, key_col = NULL, zone_type = NULL, layer = NULL) {
   if (is.character(x)) {
     if (!file.exists(x)) stop(sprintf("no such file: %s", x), call. = FALSE)
     if (is.null(layer)) layer <- sf::st_layers(x)$name[1]
     x <- sf::st_read(x, layer = layer, quiet = TRUE)
   }
   if (is.null(key_col)) {
-    kc <- grep("key$", names(x), value = TRUE)
-    key_col <- if (length(kc)) kc[1] else NA_character_
+    key_col <- if (!is.null(zone_type)) zone_key_col(zone_type, names(x)) else {
+      kc <- grep("key$", names(x), value = TRUE)
+      if (length(kc)) kc[1] else NA_character_
+    }
   }
   k <- if (!is.na(key_col) && key_col %in% names(x))
     as.character(x[[key_col]]) else as.character(seq_len(nrow(x)))

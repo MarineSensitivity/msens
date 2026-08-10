@@ -4,13 +4,16 @@
 \alias{zone_geom_hash}
 \title{Order-invariant geometry fingerprint of a zone layer}
 \usage{
-zone_geom_hash(x, key_col = NULL, layer = NULL)
+zone_geom_hash(x, key_col = NULL, zone_type = NULL, layer = NULL)
 }
 \arguments{
 \item{x}{an \code{sf} object, or a path to a vector file (e.g. \code{.gpkg})}
 
-\item{key_col}{column holding the zone key; by default the first column whose
-name ends in \code{key}, else row order}
+\item{key_col}{column holding the zone key; resolved from \code{zone_type} when
+given, else the first column whose name ends in \code{key}, else row order}
+
+\item{zone_type}{when given, resolves \code{key_col} via \code{\link[=zone_key_col]{zone_key_col()}} — the
+correct choice when a layer carries several \verb{*_key} columns}
 
 \item{layer}{layer name when \code{x} is a multi-layer file (default: the first)}
 }

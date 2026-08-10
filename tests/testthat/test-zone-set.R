@@ -142,3 +142,29 @@ test_that("zone_cells rejects a missing key column", {
     sf::st_polygon(list(cbind(c(0,1,1,0,0), c(0,0,1,1,0)))), crs = 4326))
   expect_error(zone_cells(ply, tempfile(), "zk"), "not a column")
 })
+
+test_that("zone_key_col picks the type's own key, not merely the first *_key", {
+  # the real program-area gpkg carries all three; region_key has 3 values for 20
+  # features, so picking it yields 3 zones instead of 20
+  nms <- c("programarea_id", "region_key", "planarea_key", "programarea_key", "geom")
+  expect_equal(zone_key_col("programarea", nms), "programarea_key")
+  expect_equal(zone_key_col("planarea",    nms), "planarea_key")
+  # ecoregion layers carry region_key AND ecoregion_key
+  expect_equal(zone_key_col("ecoregion", c("region_key", "ecoregion_key")), "ecoregion_key")
+  # fall back only when the type's own key is absent
+  expect_equal(zone_key_col("subregion", c("region_key")), "region_key")
+  expect_error(zone_key_col("programarea", c("id", "geom")), "no *_key column|no `programarea_key`")
+})
+
+test_that("zone_geom_hash honours zone_type when several *_key columns exist", {
+  skip_if_no_sf()
+  x <- mk_sf()
+  x$region_key <- "R"                      # a coarser key, first in name order
+  x <- x[, c("region_key", "programarea_key", "geometry")]
+  # with a non-unique ordering key the tie order depends on feature order, so a
+  # shuffled copy can hash differently -- the type's own key makes it total
+  y <- x[c(2, 1), ]
+  expect_equal(zone_geom_hash(x, zone_type = "programarea")$key_col, "programarea_key")
+  expect_equal(zone_geom_hash(x, zone_type = "programarea")$geom_hash,
+               zone_geom_hash(y, zone_type = "programarea")$geom_hash)
+})
