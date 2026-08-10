@@ -35,4 +35,5 @@ exploded with \code{ST_Dump} because \code{h3_polygon_wkb_to_cells} takes single
 polygons. Cost is polygon-driven (fixed) rather than grid-driven, so it is the
 same whether the grid is a region or the whole globe.
 }
+\concept{dormant}
 \concept{hex}

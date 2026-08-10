@@ -38,3 +38,4 @@ Loads \code{httpfs} (+ \code{aws} for credentialed listing), sets path-style add
 region, and (unless \code{anon}) creates a credential-chain S3 secret. Returns the
 connection with the atlas base URL stored in \code{attr(con, "atlas_base")}.
 }
+\concept{atlas}

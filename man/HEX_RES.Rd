@@ -13,5 +13,6 @@ HEX_RES
 \description{
 H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
 }
+\concept{dormant}
 \concept{hex}
 \keyword{datasets}

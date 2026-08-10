@@ -14,28 +14,89 @@ template:
         gtag('js', new Date());
         gtag('config', 'G-9HW6L751XG', { content_group: 'msens' });
       </script>
+# Sections follow the roxygen2 `@concept` on each topic, so the index is
+# maintained where the function is — add `@concept x` and it lands here.
+# `Other` is the catch-all and must stay in sync: any concept given its own
+# section below MUST also be listed in that section's lacks_concepts(), or the
+# topic appears twice. `pkgdown::check_pkgdown()` enforces exactly-once.
 reference:
-- title: Read
-  desc: Fetch data, spatial and non-spatial, especially from APIs
+- title: Versioning
+  desc: >
+    Resolve which MST release to render, on which cell grid, and where its
+    content-addressed COGs live — the registries that let ONE app serve every
+    version instead of a forked app per release
   contents:
-  - has_concept("read")
+  - has_concept("version")
+  - has_concept("grid")
+  - has_concept("cog_store")
+- title: Atlas & database
+  desc: Attach the released marine-atlas Parquet on S3, and open a version's DuckDB
+  contents:
+  - has_concept("atlas")
+  - has_concept("db")
+- title: Ingest & merge
+  desc: >
+    Bring source distributions onto the cell grid, mint stable model ids, and
+    merge per-dataset surfaces into one surface per taxon
+  contents:
+  - has_concept("ingest")
+  - has_concept("merge")
+  - has_concept("mdl_key")
 - title: Taxonomic
   desc: Match taxa from APIs, especially World Register of Marine Species (WoRMS)
   contents:
   - has_concept("taxa")
+  - has_concept("listings")
 - title: Analyze
-  desc: Analyses
+  desc: Score cells and zones, and summarize species for an area
   contents:
-  - has_concept("analyze")
+  - has_concept("calc")
 - title: Visualize
-  desc: Plot and map Seascapes
+  desc: Map cell surfaces and COGs, and build the report widgets
   contents:
   - has_concept("viz")
+- title: Publish & serve
+  desc: Write COGs and PMTiles, build the STAC catalog, render reports
+  contents:
+  - has_concept("publish")
+  - has_concept("stac")
+  - has_concept("report")
+- title: Pipeline
+  desc: >
+    The targets DAG, content-addressed target manifests, Parquet staging and the
+    version-equivalence gate
+  contents:
+  - has_concept("workflow")
+  - has_concept("manifest")
+  - has_concept("parquet")
+  - has_concept("validate")
+- title: Read
+  desc: Fetch data, spatial and non-spatial, especially from APIs
+  contents:
+  - has_concept("read")
+- title: Analytics
+  desc: Usage logging shared across the apps, docs and workflows sites
+  contents:
+  - has_concept("analytics")
 - title: Data
   desc: Lookups for easy reference
   contents:
   - has_concept("data")
+- title: Dormant
+  desc: >
+    Retained but NOT part of the current pipeline. The H3 hexagon grid and its
+    IDW interpolation were built for a v8 direction that was rolled back to the
+    global 0.05 degree raster cell grid; nothing in workflows or apps calls
+    them, and their SQL is stale under DuckDB 1.5 (their tests skip). Kept for
+    a possible return to hexes — do not build on them without re-testing.
+  contents:
+  - has_concept("dormant")
 - title: Other
   desc: Other functions not defined by the concepts above
   contents:
-  - lacks_concepts(c("read", "analyze", "viz", "data", "taxa"))
+  - lacks_concepts(c("version", "grid", "cog_store", "atlas", "db",
+                     "ingest", "merge", "mdl_key", "taxa", "listings",
+                     "calc", "viz", "publish", "stac", "report",
+                     "workflow", "manifest", "parquet", "validate",
+                     "read", "analytics", "data", "dormant",
+                     "hex", "interp"))

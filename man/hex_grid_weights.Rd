@@ -48,4 +48,5 @@ kd-tree) whose weights are reused by every model on that source grid. Writes
 (hex_id, w_total) = the IDW denominator (sum of w over the k neighbours,
 constant per hex regardless of model).
 }
+\concept{dormant}
 \concept{interp}

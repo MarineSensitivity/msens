@@ -23,4 +23,5 @@ reserves bit 63, so it fits in signed 64-bit, and BIGINT matches the OBIS
 \code{h3t} store (\code{idx_h3.cell_id}) for cast-free joins. Use \code{\link[=hex_id_to_string]{hex_id_to_string()}}
 for the hex-string form.
 }
+\concept{dormant}
 \concept{hex}

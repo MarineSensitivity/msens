@@ -58,15 +58,31 @@ publish_cog <- function(cell_id, val, out_tif, grid,
   cell_id <- as.double(cell_id[ok]); val <- val[ok]
   if (!length(cell_id)) return(NULL)
 
-  # row/col of each cell in the global grid (row-major, top-left origin)
+  # row/col of each cell in the source grid (row-major, top-left origin)
   row <- ((cell_id - 1) %/% grid$nc) + 1
   col <- ((cell_id - 1) %%  grid$nc) + 1
+
+  # A 0-360 grid (usa05: xmin 141.10, running east ACROSS the antimeridian to
+  # 296.25) cannot be written as-is: x > 180 is out of domain for EPSG:4326, so
+  # web tilers misplace it. Re-index columns onto the global -180..180 lattice —
+  # the two lattices align exactly, since 141.10 - (-180) = 6422 * 0.05. A model
+  # spanning Alaska and the East Coast then occupies a near-full-width window,
+  # which is cheap: sparse + NoData + DEFLATE (the 662k-cell usa05 id raster is
+  # 124 KB at INT4U over 14.4M pixels).
+  ox <- grid$xmin
+  if (isTRUE(grid$lon360)) {
+    lon <- grid$xmin + (col - 1) * grid$resx          # left edge of each cell
+    lon <- ifelse(lon >= 180, lon - 360, lon)
+    col <- round((lon + 180) / grid$resx) + 1
+    ox  <- -180
+  }
+
   r0 <- min(row); r1 <- max(row); c0 <- min(col); c1 <- max(col)
   wnc <- c1 - c0 + 1; wnr <- r1 - r0 + 1
 
   # geographic extent of the crop window (top-left origin -> y decreases w/ row)
-  xmn <- grid$xmin + (c0 - 1) * grid$resx
-  xmx <- grid$xmin +  c1      * grid$resx
+  xmn <- ox + (c0 - 1) * grid$resx
+  xmx <- ox +  c1      * grid$resx
   ymx <- grid$ymax - (r0 - 1) * grid$resy
   ymn <- grid$ymax -  r1      * grid$resy
   r <- terra::rast(nrows = wnr, ncols = wnc, xmin = xmn, xmax = xmx,

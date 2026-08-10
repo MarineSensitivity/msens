@@ -17,3 +17,4 @@ an \verb{s3://…} string
 \description{
 Path to a release component under the atlas base
 }
+\concept{atlas}

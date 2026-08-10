@@ -31,4 +31,5 @@ each ocean pixel (non-NA in \code{mask_layer}) is polyfilled into the hexes whos
 gap-free, overlap-free tiling). Values are attached afterwards with
 \code{\link[=hex_interp_idw]{hex_interp_idw()}} from the source centroids.
 }
+\concept{dormant}
 \concept{hex}

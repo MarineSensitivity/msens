@@ -39,6 +39,7 @@
 #' @return integer cell index (1-based, row-major from top-left)
 #' @export
 #' @concept interp
+#' @concept dormant
 cell_i_grid <- function(lon, lat, res = 0.5) {
   ncol <- as.integer(round(360 / res))
   col  <- pmin(ncol - 1L, floor((lon + 180) / res))
@@ -70,6 +71,7 @@ cell_i_grid <- function(lon, lat, res = 0.5) {
 #' @return invisibly, `out_tbl`
 #' @export
 #' @concept interp
+#' @concept dormant
 #' @importFrom glue glue
 hex_grid_weights <- function(con, hex_tbl, src, k = 8L, power = 2,
                              where = NULL, radius_km = NULL,
@@ -127,6 +129,7 @@ hex_grid_weights <- function(con, hex_tbl, src, k = 8L, power = 2,
 #' @return a tibble(mdl_seq, hex_id, value)
 #' @export
 #' @concept interp
+#' @concept dormant
 #' @importFrom glue glue
 #' @importFrom tibble as_tibble
 model_hex_from_weights <- function(con, model_vals, mdl_seq, threshold = 0,

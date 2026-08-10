@@ -18,3 +18,4 @@ a \code{dplyr} tbl over the remote Parquet
 \description{
 Read a released derived table (\verb{tables/<name>.parquet}) as a lazy relation
 }
+\concept{atlas}

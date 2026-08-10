@@ -19,4 +19,5 @@ A stable integer id for a point's cell in the global 0.5 degree grid
 (\verb{ext -180,180,-90,90}), so HCAF cells and per-species rasters on that grid
 share one \code{src_i} key.
 }
+\concept{dormant}
 \concept{interp}

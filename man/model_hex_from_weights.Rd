@@ -33,4 +33,5 @@ Applies \code{\link[=hex_grid_weights]{hex_grid_weights()}} output to a model's 
 source cells contribute 0 to the numerator but are still counted in \code{w_total},
 so the interpolated surface decays smoothly to 0 beyond the model's footprint.
 }
+\concept{dormant}
 \concept{interp}

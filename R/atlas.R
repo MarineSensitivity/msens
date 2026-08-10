@@ -24,6 +24,7 @@
 #' @return the (configured) DuckDB connection, with the atlas base URL in
 #'   `attr(con, "atlas_base")` and (unless `views = FALSE`) the atlas table views
 #' @importFrom DBI dbConnect dbExecute
+#' @concept atlas
 #' @export
 attach_atlas <- function(con = NULL, version = "v8", anon = FALSE, views = TRUE,
                          bucket = "s3://oceanmetrics.io-public/marine-atlas",
@@ -61,6 +62,7 @@ attach_atlas <- function(con = NULL, version = "v8", anon = FALSE, views = TRUE,
 #' @param anon  if `TRUE`, skip the credentialed `model_cell` glob view
 #' @return `con`, invisibly
 #' @importFrom DBI dbExecute
+#' @concept atlas
 #' @export
 atlas_views <- function(con, base = attr(con, "atlas_base"),
                         region = "us-east-1", anon = FALSE) {
@@ -91,6 +93,7 @@ atlas_views <- function(con, base = attr(con, "atlas_base"),
 #' @param con connection from [attach_atlas()]
 #' @param ... path parts under the version root, e.g. `"tables"`, `"taxon.parquet"`
 #' @return an `s3://…` string
+#' @concept atlas
 #' @export
 atlas_path <- function(con, ...) {
   base <- attr(con, "atlas_base")
@@ -105,6 +108,7 @@ atlas_path <- function(con, ...) {
 #'   `zone`, `zone_cell`, `zone_metric`, `metric`)
 #' @return a `dplyr` tbl over the remote Parquet
 #' @importFrom dplyr tbl
+#' @concept atlas
 #' @export
 atlas_tbl <- function(con, name) {
   dplyr::tbl(con, glue::glue("read_parquet('{atlas_path(con, \"tables\", paste0(name, \".parquet\"))}')"))

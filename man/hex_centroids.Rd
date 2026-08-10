@@ -17,4 +17,5 @@ tibble(hex_id, lon, lat)
 \description{
 Centroids (lon/lat) for BIGINT H3 ids
 }
+\concept{dormant}
 \concept{hex}

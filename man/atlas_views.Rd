@@ -34,3 +34,4 @@ under \verb{serve/} and its glob needs S3 LIST, so it is created only when
 the stable \code{mdl_key}, not the volatile \code{mdl_id}. The scoring tables store the
 metric in \code{val}; a \verb{val AS value} alias is exposed for back-compat.
 }
+\concept{atlas}

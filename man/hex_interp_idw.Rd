@@ -46,4 +46,5 @@ For a regular-grid source this reproduces a bilinear-style interpolation; for
 scattered sources it is classic IDW. This is the ONLY sanctioned way to move
 values onto hexes — never inherit a containing pixel's value.
 }
+\concept{dormant}
 \concept{hex}

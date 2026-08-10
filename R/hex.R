@@ -28,6 +28,7 @@
 #' H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
 #' @export
 #' @concept hex
+#' @concept dormant
 HEX_RES <- 7L
 
 # ensure the DuckDB h3 (and optionally spatial) extension is loaded ----
@@ -64,6 +65,7 @@ HEX_RES <- 7L
 #' @return an `integer64` vector of H3 ids, aligned to the inputs
 #' @export
 #' @concept hex
+#' @concept dormant
 #' @importFrom glue glue
 hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
   stopifnot(length(lon) == length(lat))
@@ -85,6 +87,7 @@ hex_id_from_lonlat <- function(lon, lat, res = HEX_RES, con = NULL) {
 #' @return character vector of H3 strings (e.g. "8729a411cffffff")
 #' @export
 #' @concept hex
+#' @concept dormant
 hex_id_to_string <- function(hex_id, con = NULL) {
   .with_con(con, function(con) {
     .load_hex_ext(con)
@@ -103,6 +106,7 @@ hex_id_to_string <- function(hex_id, con = NULL) {
 #' @return tibble(hex_id, lon, lat)
 #' @export
 #' @concept hex
+#' @concept dormant
 #' @importFrom tibble as_tibble
 hex_centroids <- function(hex_id, con = NULL) {
   .with_con(con, function(con) {
@@ -138,6 +142,7 @@ hex_centroids <- function(hex_id, con = NULL) {
 #' @return invisibly, `out_tbl`
 #' @export
 #' @concept hex
+#' @concept dormant
 #' @importFrom glue glue
 hex_ocean <- function(r, con, res = HEX_RES, mask_layer = names(r)[1],
                       out_tbl = "hex") {
@@ -191,6 +196,7 @@ hex_ocean <- function(r, con, res = HEX_RES, mask_layer = names(r)[1],
 #' @return invisibly, `hex_tbl`
 #' @export
 #' @concept hex
+#' @concept dormant
 #' @importFrom glue glue
 hex_interp_idw <- function(con, src, hex_tbl, val_cols, k = 8L, power = 2,
                            lon = "lon", lat = "lat", chunk = 5e6L) {
@@ -265,6 +271,7 @@ hex_interp_idw <- function(con, src, hex_tbl, val_cols, k = 8L, power = 2,
 #' @return invisibly, `hex_tbl`
 #' @export
 #' @concept hex
+#' @concept dormant
 #' @importFrom glue glue
 hex_add_membership <- function(con, hex_tbl, poly, col, res = HEX_RES,
                                buffer = TRUE) {

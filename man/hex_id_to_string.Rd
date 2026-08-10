@@ -17,4 +17,5 @@ character vector of H3 strings (e.g. "8729a411cffffff")
 \description{
 Hex-string form of BIGINT H3 ids (for display)
 }
+\concept{dormant}
 \concept{hex}
