@@ -1,0 +1,75 @@
+# Build a version manifest from that release's database
+
+Introspects the release rather than being told about it, so a manifest
+cannot drift from the data it describes. Everything that differs between
+releases — which model id is public, which tables exist, which metrics
+are cell-level, which spatial units were scored — is *read*, not
+assumed.
+
+## Usage
+
+``` r
+manifest_build(
+  con,
+  ver,
+  status = "released",
+  grid_id = grid_for_ver(ver),
+  base = atlas_base_url(),
+  metrics = NULL,
+  capabilities = list(),
+  extra = list()
+)
+```
+
+## Arguments
+
+- con:
+
+  open DuckDB connection to that release's database
+
+- ver:
+
+  version label
+
+- status:
+
+  `released`, `prerelease` or `retired`
+
+- grid_id:
+
+  defaults to
+  [`grid_for_ver()`](http://marinesensitivity.org/msens/reference/grid_for_ver.md)
+
+- base:
+
+  atlas base URL from
+  [`atlas_base_url()`](http://marinesensitivity.org/msens/reference/atlas_base_url.md)
+
+- metrics:
+
+  optional data frame of published metric COGs to merge in
+  (`metric_key`, `subregion_key`, `cog`, `rescale_min`, `rescale_max`);
+  until score COGs are published the `score_cogs` capability stays FALSE
+
+- capabilities:
+
+  named logicals overriding the derived ones. Needed whenever a surface
+  is NOT a table in `con`: v8's `cell_model`, for instance, is published
+  as a Parquet directory beside the database, so deriving from `con`
+  alone would advertise `cell_species_list = FALSE` and switch off a
+  panel that works. Overrides must be justified by checking the RELEASE,
+  not by optimism.
+
+- extra:
+
+  named list merged into the manifest (e.g. `zone_sets`)
+
+## Value
+
+a validated manifest list
+
+## Details
+
+Capabilities are derived from presence, and default to **FALSE**: a
+release that lacks `cell_model` must not advertise a per-cell species
+list.

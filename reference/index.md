@@ -1,11 +1,134 @@
 # Package index
 
-## Read
+## Versioning
 
-Fetch data, spatial and non-spatial, especially from APIs
+Resolve which MST release to render, on which cell grid, and where its
+content-addressed COGs live — the registries that let ONE app serve
+every version instead of a forked app per release
 
-- [`get_species_by_feature()`](http://marinesensitivity.org/msens/reference/get_species_by_feature.md)
-  : Get species by feature
+- [`atlas_base_url()`](http://marinesensitivity.org/msens/reference/atlas_base_url.md)
+  : Base HTTPS URL of the marine-atlas release tree
+
+- [`atlas_latest()`](http://marinesensitivity.org/msens/reference/atlas_latest.md)
+  : The promoted (latest released) atlas version
+
+- [`atlas_manifest()`](http://marinesensitivity.org/msens/reference/atlas_manifest.md)
+  : A version's manifest — the contract between a release and the apps
+
+- [`atlas_resolve_ver()`](http://marinesensitivity.org/msens/reference/atlas_resolve_ver.md)
+  : Resolve a requested version to a real, published one
+
+- [`atlas_versions()`](http://marinesensitivity.org/msens/reference/atlas_versions.md)
+  : The atlas version registry
+
+- [`manifest_build()`](http://marinesensitivity.org/msens/reference/manifest_build.md)
+  : Build a version manifest from that release's database
+
+- [`manifest_can()`](http://marinesensitivity.org/msens/reference/manifest_can.md)
+  : Does this version support a named capability?
+
+- [`validate_manifest()`](http://marinesensitivity.org/msens/reference/validate_manifest.md)
+  : Validate a version manifest
+
+- [`cell_lonlat()`](http://marinesensitivity.org/msens/reference/cell_lonlat.md)
+  : Longitude/latitude of cell centers on a grid
+
+- [`grid_for_ver()`](http://marinesensitivity.org/msens/reference/grid_for_ver.md)
+  :
+
+  The grid a release's `cell_id` values index
+
+- [`grid_registry()`](http://marinesensitivity.org/msens/reference/grid_registry.md)
+  : The grid registry
+
+- [`grid_spec_for()`](http://marinesensitivity.org/msens/reference/grid_spec_for.md)
+  :
+
+  Grid spec by id, for
+  [`publish_cog()`](http://marinesensitivity.org/msens/reference/publish_cog.md)
+
+- [`cog_store_index()`](http://marinesensitivity.org/msens/reference/cog_store_index.md)
+  : Index the existing COG store
+
+- [`content_hash_sql()`](http://marinesensitivity.org/msens/reference/content_hash_sql.md)
+  : Grouped content-fingerprint SQL
+
+- [`content_hashes()`](http://marinesensitivity.org/msens/reference/content_hashes.md)
+  : Content fingerprint of every model in a surface table
+
+- [`content_key()`](http://marinesensitivity.org/msens/reference/content_key.md)
+  : Object key for a content-addressed COG
+
+- [`content_url()`](http://marinesensitivity.org/msens/reference/content_url.md)
+  : Public URL of a stored COG
+
+## Atlas & database
+
+Attach the released marine-atlas Parquet on S3, and open a version’s
+DuckDB
+
+- [`atlas_path()`](http://marinesensitivity.org/msens/reference/atlas_path.md)
+  : Path to a release component under the atlas base
+
+- [`atlas_tbl()`](http://marinesensitivity.org/msens/reference/atlas_tbl.md)
+  :
+
+  Read a released derived table (`tables/<name>.parquet`) as a lazy
+  relation
+
+- [`atlas_views()`](http://marinesensitivity.org/msens/reference/atlas_views.md)
+  : Create named views over the released atlas tables
+
+- [`attach_atlas()`](http://marinesensitivity.org/msens/reference/attach_atlas.md)
+  : Configure a DuckDB connection to read the marine-atlas release from
+  S3
+
+- [`require_duckdb()`](http://marinesensitivity.org/msens/reference/require_duckdb.md)
+  : Require a modern DuckDB (and optionally the spatial GEOMETRY
+  extension)
+
+- [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
+  : Connect to SDM DuckDB
+
+- [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)
+  : Path to SDM DuckDB
+
+- [`spp_db_con()`](http://marinesensitivity.org/msens/reference/spp_db_con.md)
+  : Connect to species taxonomy DuckDB
+
+## Ingest & merge
+
+Bring source distributions onto the cell grid, mint stable model ids,
+and merge per-dataset surfaces into one surface per taxon
+
+- [`cells_from_ranges()`](http://marinesensitivity.org/msens/reference/cells_from_ranges.md)
+  : Rasterize range polygons onto the global 0.05° cell grid (whole
+  range)
+
+- [`cells_from_raster()`](http://marinesensitivity.org/msens/reference/cells_from_raster.md)
+  : Resample a raster SDM onto the global 0.05° cell grid
+
+- [`cells_pct_marine()`](http://marinesensitivity.org/msens/reference/cells_pct_marine.md)
+  : Percent of a model's cells that are marine (ocean)
+
+- [`merge_sql()`](http://marinesensitivity.org/msens/reference/merge_sql.md)
+  : v8 per-taxon merge rules (single source of truth)
+
+- [`turtle_sql()`](http://marinesensitivity.org/msens/reference/turtle_sql.md)
+  : Turtle multiplicative merge rule
+
+- [`mdl_key_merged()`](http://marinesensitivity.org/msens/reference/mdl_key_merged.md)
+  :
+
+  Compose a merged (`ms_merge`) model key
+
+- [`mdl_key_parse()`](http://marinesensitivity.org/msens/reference/mdl_key_parse.md)
+  :
+
+  Parse `mdl_key`(s) into components
+
+- [`mdl_key_raw()`](http://marinesensitivity.org/msens/reference/mdl_key_raw.md)
+  : Compose a raw (per-dataset) model key
 
 ## Taxonomic
 
@@ -18,14 +141,58 @@ Match taxa from APIs, especially World Register of Marine Species
   : Match taxa to spp.duckdb via cascade
 - [`wm_rest()`](http://marinesensitivity.org/msens/reference/wm_rest.md)
   : Query WoRMS REST API with multiple requests
+- [`compute_er_score()`](http://marinesensitivity.org/msens/reference/compute_er_score.md)
+  : Compute extinction risk score from extrisk_code and flags
+- [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
+  : Parse NOAA protected_status field
 
 ## Analyze
 
-Analyses
+Score cells and zones, and summarize species for an area
+
+- [`build_zone_taxon()`](http://marinesensitivity.org/msens/reference/build_zone_taxon.md)
+  : Build the precomputed zone x taxon summary table
+
+- [`cell_grid_ncol()`](http://marinesensitivity.org/msens/reference/cell_grid_ncol.md)
+  :
+
+  Grid width (columns) a database's `cell_model` was tiled with
+
+- [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
+  :
+
+  Cell-ID SpatRaster (the **v7** grid)
+
+- [`cell_model_tile_sql()`](http://marinesensitivity.org/msens/reference/cell_model_tile_sql.md)
+  : SQL expression for a cell's spatial tile id
+
+- [`cell_model_tiles()`](http://marinesensitivity.org/msens/reference/cell_model_tiles.md)
+  : Spatial tile ids covering a set of cells
+
+- [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
+  : Cells intersecting a polygon
+
+- [`cells_in_pra()`](http://marinesensitivity.org/msens/reference/cells_in_pra.md)
+  : Cells belonging to a Program Area zone
+
+- [`mean_score()`](http://marinesensitivity.org/msens/reference/mean_score.md)
+  : Weighted mean of component scores
+
+- [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md)
+  : Aggregate component scores across a set of cells
+
+- [`scores_for_pra()`](http://marinesensitivity.org/msens/reference/scores_for_pra.md)
+  : Precomputed component scores for a Program Area
+
+- [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
+  : Species table aggregated across a set of cells
+
+- [`species_for_zone()`](http://marinesensitivity.org/msens/reference/species_for_zone.md)
+  : Species table aggregated across a zone
 
 ## Visualize
 
-Plot and map Seascapes
+Map cell surfaces and COGs, and build the report widgets
 
 - [`add_cell_tiles()`](http://marinesensitivity.org/msens/reference/add_cell_tiles.md)
   : Add an msens cell tile layer to a mapgl map
@@ -82,203 +249,12 @@ Plot and map Seascapes
 - [`widget_png()`](http://marinesensitivity.org/msens/reference/widget_png.md)
   : Render an htmlwidget to a static PNG
 
-## Data
+## Publish & serve
 
-Lookups for easy reference
-
-- [`ply_boemrgns`](http://marinesensitivity.org/msens/reference/ply_boemrgns.md)
-  : Polygons of BOEM Regions
-- [`ply_boemrgns_s05`](http://marinesensitivity.org/msens/reference/ply_boemrgns_s05.md)
-  : Polygons of BOEM Regions, simplified to 5%
-- [`ply_ecoareas`](http://marinesensitivity.org/msens/reference/ply_ecoareas.md)
-  : Polygons of EcoAreas
-- [`ply_ecoareas_s05`](http://marinesensitivity.org/msens/reference/ply_ecoareas_s05.md)
-  : Polygons of EcoAreas
-- [`ply_ecorgns`](http://marinesensitivity.org/msens/reference/ply_ecorgns.md)
-  : Polygons of Ecoregions
-- [`ply_ecorgns_s05`](http://marinesensitivity.org/msens/reference/ply_ecorgns_s05.md)
-  : Polygons of Ecoregions
-- [`ply_planareas`](http://marinesensitivity.org/msens/reference/ply_planareas.md)
-  : Polygons of Planning Areas
-- [`ply_planareas_s05`](http://marinesensitivity.org/msens/reference/ply_planareas_s05.md)
-  : Polygons of Planning Areas, simplified to 5%
-
-## Other
-
-Other functions not defined by the concepts above
-
-- [`HEX_RES`](http://marinesensitivity.org/msens/reference/HEX_RES.md) :
-  H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
-
-- [`assert_within_tolerance()`](http://marinesensitivity.org/msens/reference/assert_within_tolerance.md)
-  : Assert a delta table is within tolerance, else error (pure)
-
-- [`atlas_path()`](http://marinesensitivity.org/msens/reference/atlas_path.md)
-  : Path to a release component under the atlas base
-
-- [`atlas_tbl()`](http://marinesensitivity.org/msens/reference/atlas_tbl.md)
-  :
-
-  Read a released derived table (`tables/<name>.parquet`) as a lazy
-  relation
-
-- [`atlas_views()`](http://marinesensitivity.org/msens/reference/atlas_views.md)
-  : Create named views over the released atlas tables
-
-- [`attach_atlas()`](http://marinesensitivity.org/msens/reference/attach_atlas.md)
-  : Configure a DuckDB connection to read the marine-atlas release from
-  S3
-
-- [`build_targets_list()`](http://marinesensitivity.org/msens/reference/build_targets_list.md)
-  :
-
-  Build the targets list from `msens:` frontmatter
-
-- [`build_zone_taxon()`](http://marinesensitivity.org/msens/reference/build_zone_taxon.md)
-  : Build the precomputed zone x taxon summary table
-
-- [`cell_grid_ncol()`](http://marinesensitivity.org/msens/reference/cell_grid_ncol.md)
-  :
-
-  Grid width (columns) a database's `cell_model` was tiled with
-
-- [`cell_i_grid()`](http://marinesensitivity.org/msens/reference/cell_i_grid.md)
-  : Canonical global 0.5-degree cell index for lon/lat
-
-- [`cell_id_raster()`](http://marinesensitivity.org/msens/reference/cell_id_raster.md)
-  :
-
-  Cell-ID SpatRaster (the **v7** grid)
-
-- [`cell_model_tile_sql()`](http://marinesensitivity.org/msens/reference/cell_model_tile_sql.md)
-  : SQL expression for a cell's spatial tile id
-
-- [`cell_model_tiles()`](http://marinesensitivity.org/msens/reference/cell_model_tiles.md)
-  : Spatial tile ids covering a set of cells
-
-- [`cells_from_ranges()`](http://marinesensitivity.org/msens/reference/cells_from_ranges.md)
-  : Rasterize range polygons onto the global 0.05° cell grid (whole
-  range)
-
-- [`cells_from_raster()`](http://marinesensitivity.org/msens/reference/cells_from_raster.md)
-  : Resample a raster SDM onto the global 0.05° cell grid
-
-- [`cells_in_polygon()`](http://marinesensitivity.org/msens/reference/cells_in_polygon.md)
-  : Cells intersecting a polygon
-
-- [`cells_in_pra()`](http://marinesensitivity.org/msens/reference/cells_in_pra.md)
-  : Cells belonging to a Program Area zone
-
-- [`cells_pct_marine()`](http://marinesensitivity.org/msens/reference/cells_pct_marine.md)
-  : Percent of a model's cells that are marine (ocean)
-
-- [`compute_er_score()`](http://marinesensitivity.org/msens/reference/compute_er_score.md)
-  : Compute extinction risk score from extrisk_code and flags
-
-- [`copy_atlas_parquet()`](http://marinesensitivity.org/msens/reference/copy_atlas_parquet.md)
-  : COPY a DuckDB relation/query to Parquet with the standard v8 options
-
-- [`force_target()`](http://marinesensitivity.org/msens/reference/force_target.md)
-  : Should this target be forced to rebuild?
-
-- [`ga_head()`](http://marinesensitivity.org/msens/reference/ga_head.md)
-  :
-
-  Analytics `<head>` snippet as a Shiny tag
-
-- [`ga_js()`](http://marinesensitivity.org/msens/reference/ga_js.md) :
-
-  Analytics `<head>` snippet (GA4 + batched Sheet beacon)
+Write COGs and PMTiles, build the STAC catalog, render reports
 
 - [`grid_spec()`](http://marinesensitivity.org/msens/reference/grid_spec.md)
   : Grid spec for the global cell-id raster
-
-- [`hash_parquet()`](http://marinesensitivity.org/msens/reference/hash_parquet.md)
-  : Order-independent content fingerprint of Parquet file(s)
-
-- [`hash_query()`](http://marinesensitivity.org/msens/reference/hash_query.md)
-  : Order-independent content fingerprint of a DuckDB table/query
-
-- [`hex_add_membership()`](http://marinesensitivity.org/msens/reference/hex_add_membership.md)
-  : Flag hexes inside a polygon (H3 polyfill membership)
-
-- [`hex_centroids()`](http://marinesensitivity.org/msens/reference/hex_centroids.md)
-  : Centroids (lon/lat) for BIGINT H3 ids
-
-- [`hex_grid_weights()`](http://marinesensitivity.org/msens/reference/hex_grid_weights.md)
-  : Precompute IDW weights from a shared source grid to hex centroids
-
-- [`hex_id_from_lonlat()`](http://marinesensitivity.org/msens/reference/hex_id_from_lonlat.md)
-  : H3 cell ids for lon/lat points
-
-- [`hex_id_to_string()`](http://marinesensitivity.org/msens/reference/hex_id_to_string.md)
-  : Hex-string form of BIGINT H3 ids (for display)
-
-- [`hex_interp_idw()`](http://marinesensitivity.org/msens/reference/hex_interp_idw.md)
-  : Interpolate source values onto hex centroids (inverse-distance
-  weighting)
-
-- [`hex_ocean()`](http://marinesensitivity.org/msens/reference/hex_ocean.md)
-  : Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)
-
-- [`mass_conservation()`](http://marinesensitivity.org/msens/reference/mass_conservation.md)
-  : Mass-conservation ratio between a source model and its hex
-  interpolation (pure)
-
-- [`mdl_key_merged()`](http://marinesensitivity.org/msens/reference/mdl_key_merged.md)
-  :
-
-  Compose a merged (`ms_merge`) model key
-
-- [`mdl_key_parse()`](http://marinesensitivity.org/msens/reference/mdl_key_parse.md)
-  :
-
-  Parse `mdl_key`(s) into components
-
-- [`mdl_key_raw()`](http://marinesensitivity.org/msens/reference/mdl_key_raw.md)
-  : Compose a raw (per-dataset) model key
-
-- [`mean_score()`](http://marinesensitivity.org/msens/reference/mean_score.md)
-  : Weighted mean of component scores
-
-- [`merge_sql()`](http://marinesensitivity.org/msens/reference/merge_sql.md)
-  : v8 per-taxon merge rules (single source of truth)
-
-- [`model_hex_from_weights()`](http://marinesensitivity.org/msens/reference/model_hex_from_weights.md)
-  : Interpolate one model's source values onto hexes with precomputed
-  weights
-
-- [`ms_apps_script()`](http://marinesensitivity.org/msens/reference/ms_apps_script.md)
-  : Apps Script source for the usage-log Sheet
-
-- [`ms_client_ip()`](http://marinesensitivity.org/msens/reference/ms_client_ip.md)
-  : Best-effort client IP from a Shiny request
-
-- [`ms_event()`](http://marinesensitivity.org/msens/reference/ms_event.md)
-  : Build a tracking-event payload
-
-- [`ms_log_header()`](http://marinesensitivity.org/msens/reference/ms_log_header.md)
-  : Column header for the usage-log Sheet
-
-- [`ms_track()`](http://marinesensitivity.org/msens/reference/ms_track.md)
-  : Send a tracking event from the Shiny server to the browser
-
-- [`ms_track_query()`](http://marinesensitivity.org/msens/reference/ms_track_query.md)
-  : Time a query, log its shape, and re-raise any error
-
-- [`ms_track_session()`](http://marinesensitivity.org/msens/reference/ms_track_session.md)
-  : Hand the browser the session facts only the server knows
-
-- [`parse_noaa_status()`](http://marinesensitivity.org/msens/reference/parse_noaa_status.md)
-  : Parse NOAA protected_status field
-
-- [`parse_qmd_frontmatter()`](http://marinesensitivity.org/msens/reference/parse_qmd_frontmatter.md)
-  :
-
-  Parse `msens:` frontmatter from pipeline notebooks
-
-- [`pra_score_delta()`](http://marinesensitivity.org/msens/reference/pra_score_delta.md)
-  : Program-Area composite-score delta between two version databases
 
 - [`publish_cog()`](http://marinesensitivity.org/msens/reference/publish_cog.md)
   : Publish one model's cells as a COG
@@ -294,53 +270,10 @@ Other functions not defined by the concepts above
 
   Publish per-model PMTiles — one file per `mdl_key`
 
-- [`rarity_class()`](http://marinesensitivity.org/msens/reference/rarity_class.md)
-  : Rarity class from range size (pure)
-
-- [`report_parquet_summary()`](http://marinesensitivity.org/msens/reference/report_parquet_summary.md)
-  :
-
-  Summarize a set of atlas Parquet files for a notebook's `## Outputs`
-  section
-
-- [`report_table()`](http://marinesensitivity.org/msens/reference/report_table.md)
-  : House-style table for pipeline reports
-
-- [`require_duckdb()`](http://marinesensitivity.org/msens/reference/require_duckdb.md)
-  : Require a modern DuckDB (and optionally the spatial GEOMETRY
-  extension)
-
-- [`score_delta()`](http://marinesensitivity.org/msens/reference/score_delta.md)
-  : Join two versions' scores and compute per-key deltas (pure)
-
-- [`score_delta_summary()`](http://marinesensitivity.org/msens/reference/score_delta_summary.md)
-  : Summary statistics for a delta table (pure)
-
-- [`scores_for_cells()`](http://marinesensitivity.org/msens/reference/scores_for_cells.md)
-  : Aggregate component scores across a set of cells
-
-- [`scores_for_pra()`](http://marinesensitivity.org/msens/reference/scores_for_pra.md)
-  : Precomputed component scores for a Program Area
-
-- [`sdm_db_con()`](http://marinesensitivity.org/msens/reference/sdm_db_con.md)
-  : Connect to SDM DuckDB
-
-- [`sdm_db_path()`](http://marinesensitivity.org/msens/reference/sdm_db_path.md)
-  : Path to SDM DuckDB
-
 - [`sdm_sql_b64()`](http://marinesensitivity.org/msens/reference/sdm_sql_b64.md)
   :
 
   Encode SQL as urlsafe base64 for the TiTiler `sql=` query parameter
-
-- [`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
-  : Species table aggregated across a set of cells
-
-- [`species_for_zone()`](http://marinesensitivity.org/msens/reference/species_for_zone.md)
-  : Species table aggregated across a zone
-
-- [`spp_db_con()`](http://marinesensitivity.org/msens/reference/spp_db_con.md)
-  : Connect to species taxonomy DuckDB
 
 - [`stac_build()`](http://marinesensitivity.org/msens/reference/stac_build.md)
   : Build the full static STAC catalog for a version
@@ -366,12 +299,162 @@ Other functions not defined by the concepts above
 - [`stac_version_collection()`](http://marinesensitivity.org/msens/reference/stac_version_collection.md)
   : Version Collection node (parent of the dataset Collections)
 
-- [`turtle_sql()`](http://marinesensitivity.org/msens/reference/turtle_sql.md)
-  : Turtle multiplicative merge rule
+- [`report_parquet_summary()`](http://marinesensitivity.org/msens/reference/report_parquet_summary.md)
+  :
+
+  Summarize a set of atlas Parquet files for a notebook's `## Outputs`
+  section
+
+- [`report_table()`](http://marinesensitivity.org/msens/reference/report_table.md)
+  : House-style table for pipeline reports
+
+## Pipeline
+
+The targets DAG, content-addressed target manifests, Parquet staging and
+the version-equivalence gate
+
+- [`build_targets_list()`](http://marinesensitivity.org/msens/reference/build_targets_list.md)
+  :
+
+  Build the targets list from `msens:` frontmatter
+
+- [`parse_qmd_frontmatter()`](http://marinesensitivity.org/msens/reference/parse_qmd_frontmatter.md)
+  :
+
+  Parse `msens:` frontmatter from pipeline notebooks
+
+- [`force_target()`](http://marinesensitivity.org/msens/reference/force_target.md)
+  : Should this target be forced to rebuild?
+
+- [`hash_parquet()`](http://marinesensitivity.org/msens/reference/hash_parquet.md)
+  : Order-independent content fingerprint of Parquet file(s)
+
+- [`hash_query()`](http://marinesensitivity.org/msens/reference/hash_query.md)
+  : Order-independent content fingerprint of a DuckDB table/query
+
+- [`write_manifest()`](http://marinesensitivity.org/msens/reference/write_manifest.md)
+  : Write a deterministic, content-addressed target manifest
+
+- [`copy_atlas_parquet()`](http://marinesensitivity.org/msens/reference/copy_atlas_parquet.md)
+  : COPY a DuckDB relation/query to Parquet with the standard v8 options
 
 - [`write_atlas_parquet()`](http://marinesensitivity.org/msens/reference/write_atlas_parquet.md)
   : Write an atlas surface to Parquet (arrow path) with the standard v8
   options
 
-- [`write_manifest()`](http://marinesensitivity.org/msens/reference/write_manifest.md)
-  : Write a deterministic, content-addressed target manifest
+- [`assert_within_tolerance()`](http://marinesensitivity.org/msens/reference/assert_within_tolerance.md)
+  : Assert a delta table is within tolerance, else error (pure)
+
+- [`mass_conservation()`](http://marinesensitivity.org/msens/reference/mass_conservation.md)
+  : Mass-conservation ratio between a source model and its hex
+  interpolation (pure)
+
+- [`pra_score_delta()`](http://marinesensitivity.org/msens/reference/pra_score_delta.md)
+  : Program-Area composite-score delta between two version databases
+
+- [`rarity_class()`](http://marinesensitivity.org/msens/reference/rarity_class.md)
+  : Rarity class from range size (pure)
+
+- [`score_delta()`](http://marinesensitivity.org/msens/reference/score_delta.md)
+  : Join two versions' scores and compute per-key deltas (pure)
+
+- [`score_delta_summary()`](http://marinesensitivity.org/msens/reference/score_delta_summary.md)
+  : Summary statistics for a delta table (pure)
+
+## Read
+
+Fetch data, spatial and non-spatial, especially from APIs
+
+- [`get_species_by_feature()`](http://marinesensitivity.org/msens/reference/get_species_by_feature.md)
+  : Get species by feature
+
+## Analytics
+
+Usage logging shared across the apps, docs and workflows sites
+
+- [`ga_head()`](http://marinesensitivity.org/msens/reference/ga_head.md)
+  :
+
+  Analytics `<head>` snippet as a Shiny tag
+
+- [`ga_js()`](http://marinesensitivity.org/msens/reference/ga_js.md) :
+
+  Analytics `<head>` snippet (GA4 + batched Sheet beacon)
+
+- [`ms_apps_script()`](http://marinesensitivity.org/msens/reference/ms_apps_script.md)
+  : Apps Script source for the usage-log Sheet
+
+- [`ms_client_ip()`](http://marinesensitivity.org/msens/reference/ms_client_ip.md)
+  : Best-effort client IP from a Shiny request
+
+- [`ms_event()`](http://marinesensitivity.org/msens/reference/ms_event.md)
+  : Build a tracking-event payload
+
+- [`ms_log_header()`](http://marinesensitivity.org/msens/reference/ms_log_header.md)
+  : Column header for the usage-log Sheet
+
+- [`ms_track()`](http://marinesensitivity.org/msens/reference/ms_track.md)
+  : Send a tracking event from the Shiny server to the browser
+
+- [`ms_track_query()`](http://marinesensitivity.org/msens/reference/ms_track_query.md)
+  : Time a query, log its shape, and re-raise any error
+
+- [`ms_track_session()`](http://marinesensitivity.org/msens/reference/ms_track_session.md)
+  : Hand the browser the session facts only the server knows
+
+## Data
+
+Lookups for easy reference
+
+- [`ply_boemrgns`](http://marinesensitivity.org/msens/reference/ply_boemrgns.md)
+  : Polygons of BOEM Regions
+- [`ply_boemrgns_s05`](http://marinesensitivity.org/msens/reference/ply_boemrgns_s05.md)
+  : Polygons of BOEM Regions, simplified to 5%
+- [`ply_ecoareas`](http://marinesensitivity.org/msens/reference/ply_ecoareas.md)
+  : Polygons of EcoAreas
+- [`ply_ecoareas_s05`](http://marinesensitivity.org/msens/reference/ply_ecoareas_s05.md)
+  : Polygons of EcoAreas
+- [`ply_ecorgns`](http://marinesensitivity.org/msens/reference/ply_ecorgns.md)
+  : Polygons of Ecoregions
+- [`ply_ecorgns_s05`](http://marinesensitivity.org/msens/reference/ply_ecorgns_s05.md)
+  : Polygons of Ecoregions
+- [`ply_planareas`](http://marinesensitivity.org/msens/reference/ply_planareas.md)
+  : Polygons of Planning Areas
+- [`ply_planareas_s05`](http://marinesensitivity.org/msens/reference/ply_planareas_s05.md)
+  : Polygons of Planning Areas, simplified to 5%
+
+## Dormant
+
+Retained but NOT part of the current pipeline. The H3 hexagon grid and
+its IDW interpolation were built for a v8 direction that was rolled back
+to the global 0.05 degree raster cell grid; nothing in workflows or apps
+calls them, and their SQL is stale under DuckDB 1.5 (their tests skip).
+Kept for a possible return to hexes — do not build on them without
+re-testing.
+
+- [`HEX_RES`](http://marinesensitivity.org/msens/reference/HEX_RES.md) :
+  H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
+- [`cell_i_grid()`](http://marinesensitivity.org/msens/reference/cell_i_grid.md)
+  : Canonical global 0.5-degree cell index for lon/lat
+- [`hex_add_membership()`](http://marinesensitivity.org/msens/reference/hex_add_membership.md)
+  : Flag hexes inside a polygon (H3 polyfill membership)
+- [`hex_centroids()`](http://marinesensitivity.org/msens/reference/hex_centroids.md)
+  : Centroids (lon/lat) for BIGINT H3 ids
+- [`hex_grid_weights()`](http://marinesensitivity.org/msens/reference/hex_grid_weights.md)
+  : Precompute IDW weights from a shared source grid to hex centroids
+- [`hex_id_from_lonlat()`](http://marinesensitivity.org/msens/reference/hex_id_from_lonlat.md)
+  : H3 cell ids for lon/lat points
+- [`hex_id_to_string()`](http://marinesensitivity.org/msens/reference/hex_id_to_string.md)
+  : Hex-string form of BIGINT H3 ids (for display)
+- [`hex_interp_idw()`](http://marinesensitivity.org/msens/reference/hex_interp_idw.md)
+  : Interpolate source values onto hex centroids (inverse-distance
+  weighting)
+- [`hex_ocean()`](http://marinesensitivity.org/msens/reference/hex_ocean.md)
+  : Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)
+- [`model_hex_from_weights()`](http://marinesensitivity.org/msens/reference/model_hex_from_weights.md)
+  : Interpolate one model's source values onto hexes with precomputed
+  weights
+
+## Other
+
+Other functions not defined by the concepts above

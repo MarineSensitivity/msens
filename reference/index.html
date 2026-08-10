@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.13.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.14.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -25,7 +25,7 @@
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/MarineSensitivities/msens/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/MarineSensitivity/msens/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul></div>
 
 
@@ -38,9 +38,9 @@
     </div>
 
     <div class="section level2">
-      <h2 id="read">Read<a class="anchor" aria-label="anchor" href="#read"></a></h2>
+      <h2 id="versioning">Versioning<a class="anchor" aria-label="anchor" href="#versioning"></a></h2>
 
-      <div class="section-desc"><p>Fetch data, spatial and non-spatial, especially from APIs</p></div>
+      <div class="section-desc"><p>Resolve which MST release to render, on which cell grid, and where its content-addressed COGs live — the registries that let ONE app serve every version instead of a forked app per release</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -49,10 +49,252 @@
 
       <dl><dt>
 
-          <code><a href="get_species_by_feature.html">get_species_by_feature()</a></code>
+          <code><a href="atlas_base_url.html">atlas_base_url()</a></code>
 
         </dt>
-        <dd>Get species by feature</dd>
+        <dd>Base HTTPS URL of the marine-atlas release tree</dd>
+
+        <dt>
+
+          <code><a href="atlas_latest.html">atlas_latest()</a></code>
+
+        </dt>
+        <dd>The promoted (latest released) atlas version</dd>
+
+        <dt>
+
+          <code><a href="atlas_manifest.html">atlas_manifest()</a></code>
+
+        </dt>
+        <dd>A version's manifest — the contract between a release and the apps</dd>
+
+        <dt>
+
+          <code><a href="atlas_resolve_ver.html">atlas_resolve_ver()</a></code>
+
+        </dt>
+        <dd>Resolve a requested version to a real, published one</dd>
+
+        <dt>
+
+          <code><a href="atlas_versions.html">atlas_versions()</a></code>
+
+        </dt>
+        <dd>The atlas version registry</dd>
+
+        <dt>
+
+          <code><a href="manifest_build.html">manifest_build()</a></code>
+
+        </dt>
+        <dd>Build a version manifest from that release's database</dd>
+
+        <dt>
+
+          <code><a href="manifest_can.html">manifest_can()</a></code>
+
+        </dt>
+        <dd>Does this version support a named capability?</dd>
+
+        <dt>
+
+          <code><a href="validate_manifest.html">validate_manifest()</a></code>
+
+        </dt>
+        <dd>Validate a version manifest</dd>
+
+        <dt>
+
+          <code><a href="cell_lonlat.html">cell_lonlat()</a></code>
+
+        </dt>
+        <dd>Longitude/latitude of cell centers on a grid</dd>
+
+        <dt>
+
+          <code><a href="grid_for_ver.html">grid_for_ver()</a></code>
+
+        </dt>
+        <dd>The grid a release's <code>cell_id</code> values index</dd>
+
+        <dt>
+
+          <code><a href="grid_registry.html">grid_registry()</a></code>
+
+        </dt>
+        <dd>The grid registry</dd>
+
+        <dt>
+
+          <code><a href="grid_spec_for.html">grid_spec_for()</a></code>
+
+        </dt>
+        <dd>Grid spec by id, for <code><a href="../reference/publish_cog.html">publish_cog()</a></code></dd>
+
+        <dt>
+
+          <code><a href="cog_store_index.html">cog_store_index()</a></code>
+
+        </dt>
+        <dd>Index the existing COG store</dd>
+
+        <dt>
+
+          <code><a href="content_hash_sql.html">content_hash_sql()</a></code>
+
+        </dt>
+        <dd>Grouped content-fingerprint SQL</dd>
+
+        <dt>
+
+          <code><a href="content_hashes.html">content_hashes()</a></code>
+
+        </dt>
+        <dd>Content fingerprint of every model in a surface table</dd>
+
+        <dt>
+
+          <code><a href="content_key.html">content_key()</a></code>
+
+        </dt>
+        <dd>Object key for a content-addressed COG</dd>
+
+        <dt>
+
+          <code><a href="content_url.html">content_url()</a></code>
+
+        </dt>
+        <dd>Public URL of a stored COG</dd>
+      </dl></div><div class="section level2">
+      <h2 id="atlas-database">Atlas &amp; database<a class="anchor" aria-label="anchor" href="#atlas-database"></a></h2>
+
+      <div class="section-desc"><p>Attach the released marine-atlas Parquet on S3, and open a version’s DuckDB</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="atlas_path.html">atlas_path()</a></code>
+
+        </dt>
+        <dd>Path to a release component under the atlas base</dd>
+
+        <dt>
+
+          <code><a href="atlas_tbl.html">atlas_tbl()</a></code>
+
+        </dt>
+        <dd>Read a released derived table (<code>tables/&lt;name&gt;.parquet</code>) as a lazy relation</dd>
+
+        <dt>
+
+          <code><a href="atlas_views.html">atlas_views()</a></code>
+
+        </dt>
+        <dd>Create named views over the released atlas tables</dd>
+
+        <dt>
+
+          <code><a href="attach_atlas.html">attach_atlas()</a></code>
+
+        </dt>
+        <dd>Configure a DuckDB connection to read the marine-atlas release from S3</dd>
+
+        <dt>
+
+          <code><a href="require_duckdb.html">require_duckdb()</a></code>
+
+        </dt>
+        <dd>Require a modern DuckDB (and optionally the spatial GEOMETRY extension)</dd>
+
+        <dt>
+
+          <code><a href="sdm_db_con.html">sdm_db_con()</a></code>
+
+        </dt>
+        <dd>Connect to SDM DuckDB</dd>
+
+        <dt>
+
+          <code><a href="sdm_db_path.html">sdm_db_path()</a></code>
+
+        </dt>
+        <dd>Path to SDM DuckDB</dd>
+
+        <dt>
+
+          <code><a href="spp_db_con.html">spp_db_con()</a></code>
+
+        </dt>
+        <dd>Connect to species taxonomy DuckDB</dd>
+      </dl></div><div class="section level2">
+      <h2 id="ingest-merge">Ingest &amp; merge<a class="anchor" aria-label="anchor" href="#ingest-merge"></a></h2>
+
+      <div class="section-desc"><p>Bring source distributions onto the cell grid, mint stable model ids, and merge per-dataset surfaces into one surface per taxon</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="cells_from_ranges.html">cells_from_ranges()</a></code>
+
+        </dt>
+        <dd>Rasterize range polygons onto the global 0.05° cell grid (whole range)</dd>
+
+        <dt>
+
+          <code><a href="cells_from_raster.html">cells_from_raster()</a></code>
+
+        </dt>
+        <dd>Resample a raster SDM onto the global 0.05° cell grid</dd>
+
+        <dt>
+
+          <code><a href="cells_pct_marine.html">cells_pct_marine()</a></code>
+
+        </dt>
+        <dd>Percent of a model's cells that are marine (ocean)</dd>
+
+        <dt>
+
+          <code><a href="merge_sql.html">merge_sql()</a></code>
+
+        </dt>
+        <dd>v8 per-taxon merge rules (single source of truth)</dd>
+
+        <dt>
+
+          <code><a href="turtle_sql.html">turtle_sql()</a></code>
+
+        </dt>
+        <dd>Turtle multiplicative merge rule</dd>
+
+        <dt>
+
+          <code><a href="mdl_key_merged.html">mdl_key_merged()</a></code>
+
+        </dt>
+        <dd>Compose a merged (<code>ms_merge</code>) model key</dd>
+
+        <dt>
+
+          <code><a href="mdl_key_parse.html">mdl_key_parse()</a></code>
+
+        </dt>
+        <dd>Parse <code>mdl_key</code>(s) into components</dd>
+
+        <dt>
+
+          <code><a href="mdl_key_raw.html">mdl_key_raw()</a></code>
+
+        </dt>
+        <dd>Compose a raw (per-dataset) model key</dd>
       </dl></div><div class="section level2">
       <h2 id="taxonomic">Taxonomic<a class="anchor" aria-label="anchor" href="#taxonomic"></a></h2>
 
@@ -83,20 +325,117 @@
 
         </dt>
         <dd>Query WoRMS REST API with multiple requests</dd>
+
+        <dt>
+
+          <code><a href="compute_er_score.html">compute_er_score()</a></code>
+
+        </dt>
+        <dd>Compute extinction risk score from extrisk_code and flags</dd>
+
+        <dt>
+
+          <code><a href="parse_noaa_status.html">parse_noaa_status()</a></code>
+
+        </dt>
+        <dd>Parse NOAA protected_status field</dd>
       </dl></div><div class="section level2">
       <h2 id="analyze">Analyze<a class="anchor" aria-label="anchor" href="#analyze"></a></h2>
 
-      <div class="section-desc"><p>Analyses</p></div>
+      <div class="section-desc"><p>Score cells and zones, and summarize species for an area</p></div>
 
       <dl></dl></div><div class="section level2">
 
 
 
 
-      <dl></dl></div><div class="section level2">
+      <dl><dt>
+
+          <code><a href="build_zone_taxon.html">build_zone_taxon()</a></code>
+
+        </dt>
+        <dd>Build the precomputed zone x taxon summary table</dd>
+
+        <dt>
+
+          <code><a href="cell_grid_ncol.html">cell_grid_ncol()</a></code>
+
+        </dt>
+        <dd>Grid width (columns) a database's <code>cell_model</code> was tiled with</dd>
+
+        <dt>
+
+          <code><a href="cell_id_raster.html">cell_id_raster()</a></code>
+
+        </dt>
+        <dd>Cell-ID SpatRaster (the <strong>v7</strong> grid)</dd>
+
+        <dt>
+
+          <code><a href="cell_model_tile_sql.html">cell_model_tile_sql()</a></code>
+
+        </dt>
+        <dd>SQL expression for a cell's spatial tile id</dd>
+
+        <dt>
+
+          <code><a href="cell_model_tiles.html">cell_model_tiles()</a></code>
+
+        </dt>
+        <dd>Spatial tile ids covering a set of cells</dd>
+
+        <dt>
+
+          <code><a href="cells_in_polygon.html">cells_in_polygon()</a></code>
+
+        </dt>
+        <dd>Cells intersecting a polygon</dd>
+
+        <dt>
+
+          <code><a href="cells_in_pra.html">cells_in_pra()</a></code>
+
+        </dt>
+        <dd>Cells belonging to a Program Area zone</dd>
+
+        <dt>
+
+          <code><a href="mean_score.html">mean_score()</a></code>
+
+        </dt>
+        <dd>Weighted mean of component scores</dd>
+
+        <dt>
+
+          <code><a href="scores_for_cells.html">scores_for_cells()</a></code>
+
+        </dt>
+        <dd>Aggregate component scores across a set of cells</dd>
+
+        <dt>
+
+          <code><a href="scores_for_pra.html">scores_for_pra()</a></code>
+
+        </dt>
+        <dd>Precomputed component scores for a Program Area</dd>
+
+        <dt>
+
+          <code><a href="species_for_cells.html">species_for_cells()</a></code>
+
+        </dt>
+        <dd>Species table aggregated across a set of cells</dd>
+
+        <dt>
+
+          <code><a href="species_for_zone.html">species_for_zone()</a></code>
+
+        </dt>
+        <dd>Species table aggregated across a zone</dd>
+      </dl></div><div class="section level2">
       <h2 id="visualize">Visualize<a class="anchor" aria-label="anchor" href="#visualize"></a></h2>
 
-      <div class="section-desc"><p>Plot and map Seascapes</p></div>
+      <div class="section-desc"><p>Map cell surfaces and COGs, and build the report widgets</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -222,6 +561,322 @@
         </dt>
         <dd>Render an htmlwidget to a static PNG</dd>
       </dl></div><div class="section level2">
+      <h2 id="publish-serve">Publish &amp; serve<a class="anchor" aria-label="anchor" href="#publish-serve"></a></h2>
+
+      <div class="section-desc"><p>Write COGs and PMTiles, build the STAC catalog, render reports</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="grid_spec.html">grid_spec()</a></code>
+
+        </dt>
+        <dd>Grid spec for the global cell-id raster</dd>
+
+        <dt>
+
+          <code><a href="publish_cog.html">publish_cog()</a></code>
+
+        </dt>
+        <dd>Publish one model's cells as a COG</dd>
+
+        <dt>
+
+          <code><a href="publish_pmtiles.html">publish_pmtiles()</a></code>
+
+        </dt>
+        <dd>Publish vector features as PMTiles (tippecanoe)</dd>
+
+        <dt>
+
+          <code><a href="publish_pmtiles_from_gpkg.html">publish_pmtiles_from_gpkg()</a></code>
+
+        </dt>
+        <dd>Publish per-model PMTiles from an indexed GeoPackage</dd>
+
+        <dt>
+
+          <code><a href="publish_pmtiles_models.html">publish_pmtiles_models()</a></code>
+
+        </dt>
+        <dd>Publish per-model PMTiles — one file per <code>mdl_key</code></dd>
+
+        <dt>
+
+          <code><a href="sdm_sql_b64.html">sdm_sql_b64()</a></code>
+
+        </dt>
+        <dd>Encode SQL as urlsafe base64 for the TiTiler <code>sql=</code> query parameter</dd>
+
+        <dt>
+
+          <code><a href="stac_build.html">stac_build()</a></code>
+
+        </dt>
+        <dd>Build the full static STAC catalog for a version</dd>
+
+        <dt>
+
+          <code><a href="stac_cfg.html">stac_cfg()</a></code>
+
+        </dt>
+        <dd>Default configuration (base URLs) for STAC generation</dd>
+
+        <dt>
+
+          <code><a href="stac_dataset_collection.html">stac_dataset_collection()</a></code>
+
+        </dt>
+        <dd>Dataset Collection node</dd>
+
+        <dt>
+
+          <code><a href="stac_model_cell_item.html">stac_model_cell_item()</a></code>
+
+        </dt>
+        <dd>Model-surface Item for a (DuckDB-backed) dataset</dd>
+
+        <dt>
+
+          <code><a href="stac_root_catalog.html">stac_root_catalog()</a></code>
+
+        </dt>
+        <dd>Root Catalog node</dd>
+
+        <dt>
+
+          <code><a href="stac_sdm_props.html">stac_sdm_props()</a></code>
+
+        </dt>
+        <dd>Build the SDM properties block shared by Collections and Items</dd>
+
+        <dt>
+
+          <code><a href="stac_season_cog_item.html">stac_season_cog_item()</a></code>
+
+        </dt>
+        <dd>Seasonal per-species Item from the NCCOS season-COG metadata</dd>
+
+        <dt>
+
+          <code><a href="stac_version_collection.html">stac_version_collection()</a></code>
+
+        </dt>
+        <dd>Version Collection node (parent of the dataset Collections)</dd>
+
+        <dt>
+
+          <code><a href="report_parquet_summary.html">report_parquet_summary()</a></code>
+
+        </dt>
+        <dd>Summarize a set of atlas Parquet files for a notebook's <code>## Outputs</code> section</dd>
+
+        <dt>
+
+          <code><a href="report_table.html">report_table()</a></code>
+
+        </dt>
+        <dd>House-style table for pipeline reports</dd>
+      </dl></div><div class="section level2">
+      <h2 id="pipeline">Pipeline<a class="anchor" aria-label="anchor" href="#pipeline"></a></h2>
+
+      <div class="section-desc"><p>The targets DAG, content-addressed target manifests, Parquet staging and the version-equivalence gate</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="build_targets_list.html">build_targets_list()</a></code>
+
+        </dt>
+        <dd>Build the targets list from <code>msens:</code> frontmatter</dd>
+
+        <dt>
+
+          <code><a href="parse_qmd_frontmatter.html">parse_qmd_frontmatter()</a></code>
+
+        </dt>
+        <dd>Parse <code>msens:</code> frontmatter from pipeline notebooks</dd>
+
+        <dt>
+
+          <code><a href="force_target.html">force_target()</a></code>
+
+        </dt>
+        <dd>Should this target be forced to rebuild?</dd>
+
+        <dt>
+
+          <code><a href="hash_parquet.html">hash_parquet()</a></code>
+
+        </dt>
+        <dd>Order-independent content fingerprint of Parquet file(s)</dd>
+
+        <dt>
+
+          <code><a href="hash_query.html">hash_query()</a></code>
+
+        </dt>
+        <dd>Order-independent content fingerprint of a DuckDB table/query</dd>
+
+        <dt>
+
+          <code><a href="write_manifest.html">write_manifest()</a></code>
+
+        </dt>
+        <dd>Write a deterministic, content-addressed target manifest</dd>
+
+        <dt>
+
+          <code><a href="copy_atlas_parquet.html">copy_atlas_parquet()</a></code>
+
+        </dt>
+        <dd>COPY a DuckDB relation/query to Parquet with the standard v8 options</dd>
+
+        <dt>
+
+          <code><a href="write_atlas_parquet.html">write_atlas_parquet()</a></code>
+
+        </dt>
+        <dd>Write an atlas surface to Parquet (arrow path) with the standard v8 options</dd>
+
+        <dt>
+
+          <code><a href="assert_within_tolerance.html">assert_within_tolerance()</a></code>
+
+        </dt>
+        <dd>Assert a delta table is within tolerance, else error (pure)</dd>
+
+        <dt>
+
+          <code><a href="mass_conservation.html">mass_conservation()</a></code>
+
+        </dt>
+        <dd>Mass-conservation ratio between a source model and its hex interpolation (pure)</dd>
+
+        <dt>
+
+          <code><a href="pra_score_delta.html">pra_score_delta()</a></code>
+
+        </dt>
+        <dd>Program-Area composite-score delta between two version databases</dd>
+
+        <dt>
+
+          <code><a href="rarity_class.html">rarity_class()</a></code>
+
+        </dt>
+        <dd>Rarity class from range size (pure)</dd>
+
+        <dt>
+
+          <code><a href="score_delta.html">score_delta()</a></code>
+
+        </dt>
+        <dd>Join two versions' scores and compute per-key deltas (pure)</dd>
+
+        <dt>
+
+          <code><a href="score_delta_summary.html">score_delta_summary()</a></code>
+
+        </dt>
+        <dd>Summary statistics for a delta table (pure)</dd>
+      </dl></div><div class="section level2">
+      <h2 id="read">Read<a class="anchor" aria-label="anchor" href="#read"></a></h2>
+
+      <div class="section-desc"><p>Fetch data, spatial and non-spatial, especially from APIs</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="get_species_by_feature.html">get_species_by_feature()</a></code>
+
+        </dt>
+        <dd>Get species by feature</dd>
+      </dl></div><div class="section level2">
+      <h2 id="analytics">Analytics<a class="anchor" aria-label="anchor" href="#analytics"></a></h2>
+
+      <div class="section-desc"><p>Usage logging shared across the apps, docs and workflows sites</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="ga_head.html">ga_head()</a></code>
+
+        </dt>
+        <dd>Analytics <code>&lt;head&gt;</code> snippet as a Shiny tag</dd>
+
+        <dt>
+
+          <code><a href="ga_js.html">ga_js()</a></code>
+
+        </dt>
+        <dd>Analytics <code>&lt;head&gt;</code> snippet (GA4 + batched Sheet beacon)</dd>
+
+        <dt>
+
+          <code><a href="ms_apps_script.html">ms_apps_script()</a></code>
+
+        </dt>
+        <dd>Apps Script source for the usage-log Sheet</dd>
+
+        <dt>
+
+          <code><a href="ms_client_ip.html">ms_client_ip()</a></code>
+
+        </dt>
+        <dd>Best-effort client IP from a Shiny request</dd>
+
+        <dt>
+
+          <code><a href="ms_event.html">ms_event()</a></code>
+
+        </dt>
+        <dd>Build a tracking-event payload</dd>
+
+        <dt>
+
+          <code><a href="ms_log_header.html">ms_log_header()</a></code>
+
+        </dt>
+        <dd>Column header for the usage-log Sheet</dd>
+
+        <dt>
+
+          <code><a href="ms_track.html">ms_track()</a></code>
+
+        </dt>
+        <dd>Send a tracking event from the Shiny server to the browser</dd>
+
+        <dt>
+
+          <code><a href="ms_track_query.html">ms_track_query()</a></code>
+
+        </dt>
+        <dd>Time a query, log its shape, and re-raise any error</dd>
+
+        <dt>
+
+          <code><a href="ms_track_session.html">ms_track_session()</a></code>
+
+        </dt>
+        <dd>Hand the browser the session facts only the server knows</dd>
+      </dl></div><div class="section level2">
       <h2 id="data">Data<a class="anchor" aria-label="anchor" href="#data"></a></h2>
 
       <div class="section-desc"><p>Lookups for easy reference</p></div>
@@ -287,9 +942,9 @@
         </dt>
         <dd>Polygons of Planning Areas, simplified to 5%</dd>
       </dl></div><div class="section level2">
-      <h2 id="other">Other<a class="anchor" aria-label="anchor" href="#other"></a></h2>
+      <h2 id="dormant">Dormant<a class="anchor" aria-label="anchor" href="#dormant"></a></h2>
 
-      <div class="section-desc"><p>Other functions not defined by the concepts above</p></div>
+      <div class="section-desc"><p>Retained but NOT part of the current pipeline. The H3 hexagon grid and its IDW interpolation were built for a v8 direction that was rolled back to the global 0.05 degree raster cell grid; nothing in workflows or apps calls them, and their SQL is stale under DuckDB 1.5 (their tests skip). Kept for a possible return to hexes — do not build on them without re-testing.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -305,178 +960,10 @@
 
         <dt>
 
-          <code><a href="assert_within_tolerance.html">assert_within_tolerance()</a></code>
-
-        </dt>
-        <dd>Assert a delta table is within tolerance, else error (pure)</dd>
-
-        <dt>
-
-          <code><a href="atlas_path.html">atlas_path()</a></code>
-
-        </dt>
-        <dd>Path to a release component under the atlas base</dd>
-
-        <dt>
-
-          <code><a href="atlas_tbl.html">atlas_tbl()</a></code>
-
-        </dt>
-        <dd>Read a released derived table (<code>tables/&lt;name&gt;.parquet</code>) as a lazy relation</dd>
-
-        <dt>
-
-          <code><a href="atlas_views.html">atlas_views()</a></code>
-
-        </dt>
-        <dd>Create named views over the released atlas tables</dd>
-
-        <dt>
-
-          <code><a href="attach_atlas.html">attach_atlas()</a></code>
-
-        </dt>
-        <dd>Configure a DuckDB connection to read the marine-atlas release from S3</dd>
-
-        <dt>
-
-          <code><a href="build_targets_list.html">build_targets_list()</a></code>
-
-        </dt>
-        <dd>Build the targets list from <code>msens:</code> frontmatter</dd>
-
-        <dt>
-
-          <code><a href="build_zone_taxon.html">build_zone_taxon()</a></code>
-
-        </dt>
-        <dd>Build the precomputed zone x taxon summary table</dd>
-
-        <dt>
-
-          <code><a href="cell_grid_ncol.html">cell_grid_ncol()</a></code>
-
-        </dt>
-        <dd>Grid width (columns) a database's <code>cell_model</code> was tiled with</dd>
-
-        <dt>
-
           <code><a href="cell_i_grid.html">cell_i_grid()</a></code>
 
         </dt>
         <dd>Canonical global 0.5-degree cell index for lon/lat</dd>
-
-        <dt>
-
-          <code><a href="cell_id_raster.html">cell_id_raster()</a></code>
-
-        </dt>
-        <dd>Cell-ID SpatRaster (the <strong>v7</strong> grid)</dd>
-
-        <dt>
-
-          <code><a href="cell_model_tile_sql.html">cell_model_tile_sql()</a></code>
-
-        </dt>
-        <dd>SQL expression for a cell's spatial tile id</dd>
-
-        <dt>
-
-          <code><a href="cell_model_tiles.html">cell_model_tiles()</a></code>
-
-        </dt>
-        <dd>Spatial tile ids covering a set of cells</dd>
-
-        <dt>
-
-          <code><a href="cells_from_ranges.html">cells_from_ranges()</a></code>
-
-        </dt>
-        <dd>Rasterize range polygons onto the global 0.05° cell grid (whole range)</dd>
-
-        <dt>
-
-          <code><a href="cells_from_raster.html">cells_from_raster()</a></code>
-
-        </dt>
-        <dd>Resample a raster SDM onto the global 0.05° cell grid</dd>
-
-        <dt>
-
-          <code><a href="cells_in_polygon.html">cells_in_polygon()</a></code>
-
-        </dt>
-        <dd>Cells intersecting a polygon</dd>
-
-        <dt>
-
-          <code><a href="cells_in_pra.html">cells_in_pra()</a></code>
-
-        </dt>
-        <dd>Cells belonging to a Program Area zone</dd>
-
-        <dt>
-
-          <code><a href="cells_pct_marine.html">cells_pct_marine()</a></code>
-
-        </dt>
-        <dd>Percent of a model's cells that are marine (ocean)</dd>
-
-        <dt>
-
-          <code><a href="compute_er_score.html">compute_er_score()</a></code>
-
-        </dt>
-        <dd>Compute extinction risk score from extrisk_code and flags</dd>
-
-        <dt>
-
-          <code><a href="copy_atlas_parquet.html">copy_atlas_parquet()</a></code>
-
-        </dt>
-        <dd>COPY a DuckDB relation/query to Parquet with the standard v8 options</dd>
-
-        <dt>
-
-          <code><a href="force_target.html">force_target()</a></code>
-
-        </dt>
-        <dd>Should this target be forced to rebuild?</dd>
-
-        <dt>
-
-          <code><a href="ga_head.html">ga_head()</a></code>
-
-        </dt>
-        <dd>Analytics <code>&lt;head&gt;</code> snippet as a Shiny tag</dd>
-
-        <dt>
-
-          <code><a href="ga_js.html">ga_js()</a></code>
-
-        </dt>
-        <dd>Analytics <code>&lt;head&gt;</code> snippet (GA4 + batched Sheet beacon)</dd>
-
-        <dt>
-
-          <code><a href="grid_spec.html">grid_spec()</a></code>
-
-        </dt>
-        <dd>Grid spec for the global cell-id raster</dd>
-
-        <dt>
-
-          <code><a href="hash_parquet.html">hash_parquet()</a></code>
-
-        </dt>
-        <dd>Order-independent content fingerprint of Parquet file(s)</dd>
-
-        <dt>
-
-          <code><a href="hash_query.html">hash_query()</a></code>
-
-        </dt>
-        <dd>Order-independent content fingerprint of a DuckDB table/query</dd>
 
         <dt>
 
@@ -529,326 +1016,21 @@
 
         <dt>
 
-          <code><a href="mass_conservation.html">mass_conservation()</a></code>
-
-        </dt>
-        <dd>Mass-conservation ratio between a source model and its hex interpolation (pure)</dd>
-
-        <dt>
-
-          <code><a href="mdl_key_merged.html">mdl_key_merged()</a></code>
-
-        </dt>
-        <dd>Compose a merged (<code>ms_merge</code>) model key</dd>
-
-        <dt>
-
-          <code><a href="mdl_key_parse.html">mdl_key_parse()</a></code>
-
-        </dt>
-        <dd>Parse <code>mdl_key</code>(s) into components</dd>
-
-        <dt>
-
-          <code><a href="mdl_key_raw.html">mdl_key_raw()</a></code>
-
-        </dt>
-        <dd>Compose a raw (per-dataset) model key</dd>
-
-        <dt>
-
-          <code><a href="mean_score.html">mean_score()</a></code>
-
-        </dt>
-        <dd>Weighted mean of component scores</dd>
-
-        <dt>
-
-          <code><a href="merge_sql.html">merge_sql()</a></code>
-
-        </dt>
-        <dd>v8 per-taxon merge rules (single source of truth)</dd>
-
-        <dt>
-
           <code><a href="model_hex_from_weights.html">model_hex_from_weights()</a></code>
 
         </dt>
         <dd>Interpolate one model's source values onto hexes with precomputed weights</dd>
+      </dl></div><div class="section level2">
+      <h2 id="other">Other<a class="anchor" aria-label="anchor" href="#other"></a></h2>
 
-        <dt>
+      <div class="section-desc"><p>Other functions not defined by the concepts above</p></div>
 
-          <code><a href="ms_apps_script.html">ms_apps_script()</a></code>
+      <dl></dl></div><div class="section level2">
 
-        </dt>
-        <dd>Apps Script source for the usage-log Sheet</dd>
 
-        <dt>
 
-          <code><a href="ms_client_ip.html">ms_client_ip()</a></code>
 
-        </dt>
-        <dd>Best-effort client IP from a Shiny request</dd>
-
-        <dt>
-
-          <code><a href="ms_event.html">ms_event()</a></code>
-
-        </dt>
-        <dd>Build a tracking-event payload</dd>
-
-        <dt>
-
-          <code><a href="ms_log_header.html">ms_log_header()</a></code>
-
-        </dt>
-        <dd>Column header for the usage-log Sheet</dd>
-
-        <dt>
-
-          <code><a href="ms_track.html">ms_track()</a></code>
-
-        </dt>
-        <dd>Send a tracking event from the Shiny server to the browser</dd>
-
-        <dt>
-
-          <code><a href="ms_track_query.html">ms_track_query()</a></code>
-
-        </dt>
-        <dd>Time a query, log its shape, and re-raise any error</dd>
-
-        <dt>
-
-          <code><a href="ms_track_session.html">ms_track_session()</a></code>
-
-        </dt>
-        <dd>Hand the browser the session facts only the server knows</dd>
-
-        <dt>
-
-          <code><a href="parse_noaa_status.html">parse_noaa_status()</a></code>
-
-        </dt>
-        <dd>Parse NOAA protected_status field</dd>
-
-        <dt>
-
-          <code><a href="parse_qmd_frontmatter.html">parse_qmd_frontmatter()</a></code>
-
-        </dt>
-        <dd>Parse <code>msens:</code> frontmatter from pipeline notebooks</dd>
-
-        <dt>
-
-          <code><a href="pra_score_delta.html">pra_score_delta()</a></code>
-
-        </dt>
-        <dd>Program-Area composite-score delta between two version databases</dd>
-
-        <dt>
-
-          <code><a href="publish_cog.html">publish_cog()</a></code>
-
-        </dt>
-        <dd>Publish one model's cells as a COG</dd>
-
-        <dt>
-
-          <code><a href="publish_pmtiles.html">publish_pmtiles()</a></code>
-
-        </dt>
-        <dd>Publish vector features as PMTiles (tippecanoe)</dd>
-
-        <dt>
-
-          <code><a href="publish_pmtiles_from_gpkg.html">publish_pmtiles_from_gpkg()</a></code>
-
-        </dt>
-        <dd>Publish per-model PMTiles from an indexed GeoPackage</dd>
-
-        <dt>
-
-          <code><a href="publish_pmtiles_models.html">publish_pmtiles_models()</a></code>
-
-        </dt>
-        <dd>Publish per-model PMTiles — one file per <code>mdl_key</code></dd>
-
-        <dt>
-
-          <code><a href="rarity_class.html">rarity_class()</a></code>
-
-        </dt>
-        <dd>Rarity class from range size (pure)</dd>
-
-        <dt>
-
-          <code><a href="report_parquet_summary.html">report_parquet_summary()</a></code>
-
-        </dt>
-        <dd>Summarize a set of atlas Parquet files for a notebook's <code>## Outputs</code> section</dd>
-
-        <dt>
-
-          <code><a href="report_table.html">report_table()</a></code>
-
-        </dt>
-        <dd>House-style table for pipeline reports</dd>
-
-        <dt>
-
-          <code><a href="require_duckdb.html">require_duckdb()</a></code>
-
-        </dt>
-        <dd>Require a modern DuckDB (and optionally the spatial GEOMETRY extension)</dd>
-
-        <dt>
-
-          <code><a href="score_delta.html">score_delta()</a></code>
-
-        </dt>
-        <dd>Join two versions' scores and compute per-key deltas (pure)</dd>
-
-        <dt>
-
-          <code><a href="score_delta_summary.html">score_delta_summary()</a></code>
-
-        </dt>
-        <dd>Summary statistics for a delta table (pure)</dd>
-
-        <dt>
-
-          <code><a href="scores_for_cells.html">scores_for_cells()</a></code>
-
-        </dt>
-        <dd>Aggregate component scores across a set of cells</dd>
-
-        <dt>
-
-          <code><a href="scores_for_pra.html">scores_for_pra()</a></code>
-
-        </dt>
-        <dd>Precomputed component scores for a Program Area</dd>
-
-        <dt>
-
-          <code><a href="sdm_db_con.html">sdm_db_con()</a></code>
-
-        </dt>
-        <dd>Connect to SDM DuckDB</dd>
-
-        <dt>
-
-          <code><a href="sdm_db_path.html">sdm_db_path()</a></code>
-
-        </dt>
-        <dd>Path to SDM DuckDB</dd>
-
-        <dt>
-
-          <code><a href="sdm_sql_b64.html">sdm_sql_b64()</a></code>
-
-        </dt>
-        <dd>Encode SQL as urlsafe base64 for the TiTiler <code>sql=</code> query parameter</dd>
-
-        <dt>
-
-          <code><a href="species_for_cells.html">species_for_cells()</a></code>
-
-        </dt>
-        <dd>Species table aggregated across a set of cells</dd>
-
-        <dt>
-
-          <code><a href="species_for_zone.html">species_for_zone()</a></code>
-
-        </dt>
-        <dd>Species table aggregated across a zone</dd>
-
-        <dt>
-
-          <code><a href="spp_db_con.html">spp_db_con()</a></code>
-
-        </dt>
-        <dd>Connect to species taxonomy DuckDB</dd>
-
-        <dt>
-
-          <code><a href="stac_build.html">stac_build()</a></code>
-
-        </dt>
-        <dd>Build the full static STAC catalog for a version</dd>
-
-        <dt>
-
-          <code><a href="stac_cfg.html">stac_cfg()</a></code>
-
-        </dt>
-        <dd>Default configuration (base URLs) for STAC generation</dd>
-
-        <dt>
-
-          <code><a href="stac_dataset_collection.html">stac_dataset_collection()</a></code>
-
-        </dt>
-        <dd>Dataset Collection node</dd>
-
-        <dt>
-
-          <code><a href="stac_model_cell_item.html">stac_model_cell_item()</a></code>
-
-        </dt>
-        <dd>Model-surface Item for a (DuckDB-backed) dataset</dd>
-
-        <dt>
-
-          <code><a href="stac_root_catalog.html">stac_root_catalog()</a></code>
-
-        </dt>
-        <dd>Root Catalog node</dd>
-
-        <dt>
-
-          <code><a href="stac_sdm_props.html">stac_sdm_props()</a></code>
-
-        </dt>
-        <dd>Build the SDM properties block shared by Collections and Items</dd>
-
-        <dt>
-
-          <code><a href="stac_season_cog_item.html">stac_season_cog_item()</a></code>
-
-        </dt>
-        <dd>Seasonal per-species Item from the NCCOS season-COG metadata</dd>
-
-        <dt>
-
-          <code><a href="stac_version_collection.html">stac_version_collection()</a></code>
-
-        </dt>
-        <dd>Version Collection node (parent of the dataset Collections)</dd>
-
-        <dt>
-
-          <code><a href="turtle_sql.html">turtle_sql()</a></code>
-
-        </dt>
-        <dd>Turtle multiplicative merge rule</dd>
-
-        <dt>
-
-          <code><a href="write_atlas_parquet.html">write_atlas_parquet()</a></code>
-
-        </dt>
-        <dd>Write an atlas surface to Parquet (arrow path) with the standard v8 options</dd>
-
-        <dt>
-
-          <code><a href="write_manifest.html">write_manifest()</a></code>
-
-        </dt>
-        <dd>Write a deterministic, content-addressed target manifest</dd>
-      </dl></div>
+      <dl></dl></div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

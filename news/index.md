@@ -1,5 +1,89 @@
 # Changelog
 
+## msens 0.14.0
+
+*Foundations for one app serving every MST version (v1–v8), instead of a
+forked app per release.*
+
+- **New version registry** —
+  [`atlas_base_url()`](http://marinesensitivity.org/msens/reference/atlas_base_url.md),
+  [`atlas_latest()`](http://marinesensitivity.org/msens/reference/atlas_latest.md),
+  [`atlas_versions()`](http://marinesensitivity.org/msens/reference/atlas_versions.md),
+  [`atlas_resolve_ver()`](http://marinesensitivity.org/msens/reference/atlas_resolve_ver.md),
+  [`atlas_manifest()`](http://marinesensitivity.org/msens/reference/atlas_manifest.md),
+  [`validate_manifest()`](http://marinesensitivity.org/msens/reference/validate_manifest.md),
+  [`manifest_can()`](http://marinesensitivity.org/msens/reference/manifest_can.md).
+  Resolves `?ver=` (or `"latest"`) against the published `latest.txt` /
+  `versions.json`, and reads a release’s `manifest.json` — the contract
+  that lets an app render a version it has no code for. Resolution
+  **never falls back to a hardcoded version** (a plausible-but-wrong
+  default renders the wrong science under the right label), a
+  **pre-release is reachable only by name**, and a manifest **missing
+  its `capabilities` block is an error** rather than an implicit
+  “everything supported”.
+
+- **New grid registry** —
+  [`grid_registry()`](http://marinesensitivity.org/msens/reference/grid_registry.md),
+  [`grid_for_ver()`](http://marinesensitivity.org/msens/reference/grid_for_ver.md),
+  [`grid_spec_for()`](http://marinesensitivity.org/msens/reference/grid_spec_for.md),
+  [`cell_lonlat()`](http://marinesensitivity.org/msens/reference/cell_lonlat.md).
+  Two incompatible grids exist and `cell_id` names a different place on
+  each, so every cell id, content hash and COG now carries a `grid_id`:
+
+  - `usa05` (v1–v7): 3103 × 2006 at 0.05°, **longitude 0–360** — the
+    frame runs 141.10°E east *across the antimeridian* to 296.25 (=
+    63.75°W), so Alaska/the Aleutians and the East Coast sit in one
+    contiguous raster.
+  - `global05` (v8): 7200 × 3600 at 0.05°, −180..180.
+
+- **[`publish_cog()`](http://marinesensitivity.org/msens/reference/publish_cog.md)
+  handles a 0–360 grid.** Previously it painted cells straight into the
+  source frame, which for `usa05` yields x \> 180 — out of domain for
+  EPSG:4326, so web tilers misplace the raster. Columns are now
+  re-indexed onto the −180..180 lattice (they align exactly: 141.10 −
+  (−180) = 6422 × 0.05). v8 (`global05`) behavior is unchanged.
+
+- **New content-addressed COG store** —
+  [`content_hash_sql()`](http://marinesensitivity.org/msens/reference/content_hash_sql.md),
+  [`content_hashes()`](http://marinesensitivity.org/msens/reference/content_hashes.md),
+  [`content_key()`](http://marinesensitivity.org/msens/reference/content_key.md),
+  [`content_url()`](http://marinesensitivity.org/msens/reference/content_url.md),
+  [`cog_store_index()`](http://marinesensitivity.org/msens/reference/cog_store_index.md).
+  A model’s COG is stored under a hash of its **payload**, not of the
+  `.tif` (a GeoTIFF is not byte-reproducible — GDAL stamps
+  `TIFFTAG_DATETIME`/`SOFTWARE` and the COG driver’s IFD layout varies —
+  so a file digest would change every rebuild and defeat dedup). The
+  reduction is order-independent (count + `bit_xor` + `sum`), one pass
+  and no sort. Measured: a full release (1.18B rows, 30,061 models)
+  hashes in 19–28 s, and dedup across v3/v5/v6/v7 is 120,974 model-rows
+  → 19,766 unique surfaces (**6.12×**; v6↔︎v7 is 30,061/30,061
+  identical). Guarded against the silent failure where DuckDB’s UBIGINT
+  `hash()` returns to R as a double, truncating to ~15 digits and
+  aliasing distinct models onto one COG.
+
+- **The reference index now reflects the package.** It had drifted
+  badly: two of its five sections (`analyze`, and a `Read` holding one
+  topic) keyed on concepts that no functions carry — the analysis
+  concept is `calc` — so ~90 of 126 topics fell into one
+  undifferentiated “Other”. Twelve purpose-based sections now key on the
+  `@concept` tags that actually exist, and
+  [`pkgdown::check_pkgdown()`](https://pkgdown.r-lib.org/reference/check_pkgdown.html)
+  passes, so every topic is listed exactly once. `atlas.R`’s four
+  exported functions gained the `atlas` concept they were missing.
+
+- **New `Dormant` section.** The H3 hexagon grid (`hex.R`) and its IDW
+  interpolation (`interp.R`) — 10 exported functions — were built for a
+  v8 direction that was rolled back to the global 0.05° raster cell
+  grid. Nothing in `workflows` or `apps` calls them and their SQL is
+  stale under DuckDB 1.5 (their tests skip), so they are now tagged
+  `@concept dormant` and grouped under a section that says so, rather
+  than sitting in “Other” looking current.
+
+- **Fixed the package URLs.** `URL:` and `BugReports:` pointed at
+  `MarineSensitiviti**es**` — a nonexistent GitHub org and domain (the
+  real ones are `MarineSensitivity` / `marinesensitivity.org`), so every
+  “source”/“report a bug” link in the docs was broken.
+
 ## msens 0.13.1
 
 - **[`species_for_cells()`](http://marinesensitivity.org/msens/reference/species_for_cells.md)
@@ -123,7 +207,7 @@
   install from GitHub resolved this field and silently overwrote the
   fork that the rstudio image pins — which is how the h3-db globe went
   back to showing a gap at the antimeridian. Revert to `walkerke/mapgl`
-  once [\#211](https://github.com/MarineSensitivities/msens/issues/211)
+  once [\#211](https://github.com/MarineSensitivity/msens/issues/211)
   merges.
 
 ## msens 0.10.0

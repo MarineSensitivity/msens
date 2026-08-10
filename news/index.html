@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.13.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.14.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -25,7 +25,7 @@
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/MarineSensitivities/msens/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/MarineSensitivity/msens/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul></div>
 
 
@@ -35,9 +35,26 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/MarineSensitivities/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.14.0" id="msens-0140">msens 0.14.0<a class="anchor" aria-label="anchor" href="#msens-0140"></a></h2>
+<p><em>Foundations for one app serving every MST version (v1–v8), instead of a forked app per release.</em></p>
+<ul><li><p><strong>New version registry</strong> — <code><a href="../reference/atlas_base_url.html">atlas_base_url()</a></code>, <code><a href="../reference/atlas_latest.html">atlas_latest()</a></code>, <code><a href="../reference/atlas_versions.html">atlas_versions()</a></code>, <code><a href="../reference/atlas_resolve_ver.html">atlas_resolve_ver()</a></code>, <code><a href="../reference/atlas_manifest.html">atlas_manifest()</a></code>, <code><a href="../reference/validate_manifest.html">validate_manifest()</a></code>, <code><a href="../reference/manifest_can.html">manifest_can()</a></code>. Resolves <code>?ver=</code> (or <code>"latest"</code>) against the published <code>latest.txt</code> / <code>versions.json</code>, and reads a release’s <code>manifest.json</code> — the contract that lets an app render a version it has no code for. Resolution <strong>never falls back to a hardcoded version</strong> (a plausible-but-wrong default renders the wrong science under the right label), a <strong>pre-release is reachable only by name</strong>, and a manifest <strong>missing its <code>capabilities</code> block is an error</strong> rather than an implicit “everything supported”.</p></li>
+<li>
+<p><strong>New grid registry</strong> — <code><a href="../reference/grid_registry.html">grid_registry()</a></code>, <code><a href="../reference/grid_for_ver.html">grid_for_ver()</a></code>, <code><a href="../reference/grid_spec_for.html">grid_spec_for()</a></code>, <code><a href="../reference/cell_lonlat.html">cell_lonlat()</a></code>. Two incompatible grids exist and <code>cell_id</code> names a different place on each, so every cell id, content hash and COG now carries a <code>grid_id</code>:</p>
+<ul><li>
+<code>usa05</code> (v1–v7): 3103 × 2006 at 0.05°, <strong>longitude 0–360</strong> — the frame runs 141.10°E east <em>across the antimeridian</em> to 296.25 (= 63.75°W), so Alaska/the Aleutians and the East Coast sit in one contiguous raster.</li>
+<li>
+<code>global05</code> (v8): 7200 × 3600 at 0.05°, −180..180.</li>
+</ul></li>
+<li><p><strong><code><a href="../reference/publish_cog.html">publish_cog()</a></code> handles a 0–360 grid.</strong> Previously it painted cells straight into the source frame, which for <code>usa05</code> yields x &gt; 180 — out of domain for EPSG:4326, so web tilers misplace the raster. Columns are now re-indexed onto the −180..180 lattice (they align exactly: 141.10 − (−180) = 6422 × 0.05). v8 (<code>global05</code>) behavior is unchanged.</p></li>
+<li><p><strong>New content-addressed COG store</strong> — <code><a href="../reference/content_hash_sql.html">content_hash_sql()</a></code>, <code><a href="../reference/content_hashes.html">content_hashes()</a></code>, <code><a href="../reference/content_key.html">content_key()</a></code>, <code><a href="../reference/content_url.html">content_url()</a></code>, <code><a href="../reference/cog_store_index.html">cog_store_index()</a></code>. A model’s COG is stored under a hash of its <strong>payload</strong>, not of the <code>.tif</code> (a GeoTIFF is not byte-reproducible — GDAL stamps <code>TIFFTAG_DATETIME</code>/<code>SOFTWARE</code> and the COG driver’s IFD layout varies — so a file digest would change every rebuild and defeat dedup). The reduction is order-independent (count + <code>bit_xor</code> + <code>sum</code>), one pass and no sort. Measured: a full release (1.18B rows, 30,061 models) hashes in 19–28 s, and dedup across v3/v5/v6/v7 is 120,974 model-rows → 19,766 unique surfaces (<strong>6.12×</strong>; v6↔︎v7 is 30,061/30,061 identical). Guarded against the silent failure where DuckDB’s UBIGINT <code>hash()</code> returns to R as a double, truncating to ~15 digits and aliasing distinct models onto one COG.</p></li>
+<li><p><strong>The reference index now reflects the package.</strong> It had drifted badly: two of its five sections (<code>analyze</code>, and a <code>Read</code> holding one topic) keyed on concepts that no functions carry — the analysis concept is <code>calc</code> — so ~90 of 126 topics fell into one undifferentiated “Other”. Twelve purpose-based sections now key on the <code>@concept</code> tags that actually exist, and <code><a href="https://pkgdown.r-lib.org/reference/check_pkgdown.html" class="external-link">pkgdown::check_pkgdown()</a></code> passes, so every topic is listed exactly once. <code>atlas.R</code>’s four exported functions gained the <code>atlas</code> concept they were missing.</p></li>
+<li><p><strong>New <code>Dormant</code> section.</strong> The H3 hexagon grid (<code>hex.R</code>) and its IDW interpolation (<code>interp.R</code>) — 10 exported functions — were built for a v8 direction that was rolled back to the global 0.05° raster cell grid. Nothing in <code>workflows</code> or <code>apps</code> calls them and their SQL is stale under DuckDB 1.5 (their tests skip), so they are now tagged <code>@concept dormant</code> and grouped under a section that says so, rather than sitting in “Other” looking current.</p></li>
+<li><p><strong>Fixed the package URLs.</strong> <code>URL:</code> and <code>BugReports:</code> pointed at <code>MarineSensitiviti**es**</code> — a nonexistent GitHub org and domain (the real ones are <code>MarineSensitivity</code> / <code>marinesensitivity.org</code>), so every “source”/“report a bug” link in the docs was broken.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.13.1" id="msens-0131">msens 0.13.1<a class="anchor" aria-label="anchor" href="#msens-0131"></a></h2>
 <ul><li>
@@ -82,7 +99,7 @@
 <strong><code><a href="../reference/drawn_features_sf.html">drawn_features_sf()</a></code></strong> — turns the raw <code>input$&lt;map_id&gt;_drawn_features</code> value from a mapgl draw control into <code>sf</code> (EPSG:4326), or <code>NULL</code> when nothing is drawn. Accepts <strong>both</strong> payload shapes: the character GeoJSON older mapgl stringified, and the object current mapgl (<code>_mapglSyncDrawnFeatures</code>, &gt;= 0.5.0) sends, which Shiny delivers as a nested list.</li>
 <li>Fixes the scores Report tab (“Add drawn polygon” answering <em>“Draw a polygon on the map first.”</em> for every polygon drawn) in <strong>both</strong> the v7 and v8 apps, which gated on <code><a href="https://rdrr.io/r/base/character.html" class="external-link">is.character()</a></code> and so discarded every payload from the newer mapgl. Regression-tested against both shapes.</li>
 <li>
-<strong><code>Remotes:</code> now points at the antimeridian-fixed mapgl fork</strong> (<code>bbest/mapgl@484e869f</code> = walkerke/mapgl <code>main</code> + walkerke/mapgl#211), not <code>walkerke/mapgl</code>. Twelve Shiny apps <code>librarian::shelf(MarineSensitivity/msens)</code> at startup, so every msens install from GitHub resolved this field and silently overwrote the fork that the rstudio image pins — which is how the h3-db globe went back to showing a gap at the antimeridian. Revert to <code>walkerke/mapgl</code> once <a href="https://github.com/MarineSensitivities/msens/issues/211" class="external-link">#211</a> merges.</li>
+<strong><code>Remotes:</code> now points at the antimeridian-fixed mapgl fork</strong> (<code>bbest/mapgl@484e869f</code> = walkerke/mapgl <code>main</code> + walkerke/mapgl#211), not <code>walkerke/mapgl</code>. Twelve Shiny apps <code>librarian::shelf(MarineSensitivity/msens)</code> at startup, so every msens install from GitHub resolved this field and silently overwrote the fork that the rstudio image pins — which is how the h3-db globe went back to showing a gap at the antimeridian. Revert to <code>walkerke/mapgl</code> once <a href="https://github.com/MarineSensitivity/msens/issues/211" class="external-link">#211</a> merges.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.10.0" id="msens-0100">msens 0.10.0<a class="anchor" aria-label="anchor" href="#msens-0100"></a></h2>

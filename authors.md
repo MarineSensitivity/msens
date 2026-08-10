@@ -8,16 +8,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/MarineSensitivities/msens/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/MarineSensitivity/msens/blob/main/DESCRIPTION)
 
 Best B (2026). *msens: R library of functions for mapping marine
-sensitivities, sponsored by BOEM*. R package version 0.13.1,
-<https://github.com/MarineSensitivities/msens>.
+sensitivities, sponsored by BOEM*. R package version 0.14.0,
+<https://github.com/MarineSensitivity/msens>.
 
     @Manual{,
       title = {msens: R library of functions for mapping marine sensitivities, sponsored by BOEM},
       author = {Ben Best},
       year = {2026},
-      note = {R package version 0.13.1},
-      url = {https://github.com/MarineSensitivities/msens},
+      note = {R package version 0.14.0},
+      url = {https://github.com/MarineSensitivity/msens},
     }
