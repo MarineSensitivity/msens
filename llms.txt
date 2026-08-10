@@ -117,6 +117,8 @@ used it, so one Program Area is comparable across versions
   : Cells covered by each zone, on a given grid
 - [`zone_geom_hash()`](http://marinesensitivity.org/msens/reference/zone_geom_hash.md)
   : Order-invariant geometry fingerprint of a zone layer
+- [`zone_key_col()`](http://marinesensitivity.org/msens/reference/zone_key_col.md)
+  : The key column for a zone type
 - [`zone_set_group()`](http://marinesensitivity.org/msens/reference/zone_set_group.md)
   : Group zone layers into distinct vintages by geometry
 - [`zone_set_key()`](http://marinesensitivity.org/msens/reference/zone_set_key.md)

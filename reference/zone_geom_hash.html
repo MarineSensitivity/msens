@@ -51,7 +51,7 @@ change to a boundary does not.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">zone_geom_hash</span><span class="op">(</span><span class="va">x</span>, key_col <span class="op">=</span> <span class="cn">NULL</span>, layer <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">zone_geom_hash</span><span class="op">(</span><span class="va">x</span>, key_col <span class="op">=</span> <span class="cn">NULL</span>, zone_type <span class="op">=</span> <span class="cn">NULL</span>, layer <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -63,8 +63,13 @@ change to a boundary does not.</p>
 
 
 <dt id="arg-key-col">key_col<a class="anchor" aria-label="anchor" href="#arg-key-col"></a></dt>
-<dd><p>column holding the zone key; by default the first column whose
-name ends in <code>key</code>, else row order</p></dd>
+<dd><p>column holding the zone key; resolved from <code>zone_type</code> when
+given, else the first column whose name ends in <code>key</code>, else row order</p></dd>
+
+
+<dt id="arg-zone-type">zone_type<a class="anchor" aria-label="anchor" href="#arg-zone-type"></a></dt>
+<dd><p>when given, resolves <code>key_col</code> via <code><a href="zone_key_col.html">zone_key_col()</a></code> — the
+correct choice when a layer carries several <code>*_key</code> columns</p></dd>
 
 
 <dt id="arg-layer">layer<a class="anchor" aria-label="anchor" href="#arg-layer"></a></dt>

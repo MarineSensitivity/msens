@@ -7,7 +7,7 @@ while any real change to a boundary does not.
 ## Usage
 
 ``` r
-zone_geom_hash(x, key_col = NULL, layer = NULL)
+zone_geom_hash(x, key_col = NULL, zone_type = NULL, layer = NULL)
 ```
 
 ## Arguments
@@ -18,8 +18,14 @@ zone_geom_hash(x, key_col = NULL, layer = NULL)
 
 - key_col:
 
-  column holding the zone key; by default the first column whose name
-  ends in `key`, else row order
+  column holding the zone key; resolved from `zone_type` when given,
+  else the first column whose name ends in `key`, else row order
+
+- zone_type:
+
+  when given, resolves `key_col` via
+  [`zone_key_col()`](http://marinesensitivity.org/msens/reference/zone_key_col.md)
+  — the correct choice when a layer carries several `*_key` columns
 
 - layer:
 
