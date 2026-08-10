@@ -79,3 +79,18 @@ test_that("object keys are namespaced by grid, since cell_id needs one to mean a
   expect_match(content_url("usa05", "abc123", base = "https://x/marine-atlas"),
                "^https://x/marine-atlas/cog/usa05/abc123\\.tif$")
 })
+
+test_that("an empty store is empty, not an error", {
+  # `aws s3 ls` exits 1 with no output when the prefix does not exist yet -- the
+  # normal state before the first publish. Treating that as a failure made the
+  # first run warn and fall back, publishing everything as if nothing existed.
+  fake <- withr::local_tempfile(fileext = ".sh")
+  writeLines(c("#!/bin/sh", "exit 1"), fake); Sys.chmod(fake, "0755")
+  expect_equal(cog_store_index("global05", aws = fake), character())
+
+  # a non-zero exit that actually SAID something is still an error
+  noisy <- withr::local_tempfile(fileext = ".sh")
+  writeLines(c("#!/bin/sh", "echo 'An error occurred (AccessDenied)' >&2", "exit 1"), noisy)
+  Sys.chmod(noisy, "0755")
+  expect_error(cog_store_index("global05", aws = noisy), "failed")
+})

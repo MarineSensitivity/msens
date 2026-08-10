@@ -120,9 +120,16 @@ cog_store_index <- function(grid_id = NULL,
   pre <- if (is.null(grid_id)) sprintf("%s/cog/", bucket) else sprintf("%s/cog/%s/", bucket, grid_id)
   out <- suppressWarnings(system2(aws, c("s3", "ls", "--recursive", shQuote(pre)),
                                   stdout = TRUE, stderr = TRUE))
-  if (!is.null(attr(out, "status")) && attr(out, "status") != 0)
-    stop(sprintf("listing '%s' failed: %s", pre, paste(utils::tail(out, 3), collapse = " ")),
-         call. = FALSE)
+  # `aws s3 ls` exits 1 with NO output when the prefix simply does not exist yet,
+  # which is the normal state before the first publish -- an empty store, not a
+  # failure. Only a non-zero exit that actually said something is an error.
+  txt <- out[nzchar(trimws(out))]
+  if (!is.null(attr(out, "status")) && attr(out, "status") != 0) {
+    if (length(txt))
+      stop(sprintf("listing '%s' failed: %s", pre, paste(utils::tail(txt, 3), collapse = " ")),
+           call. = FALSE)
+    return(character())
+  }
   keys <- sub("^.*\\s+", "", out[nzchar(out)])
   unique(sub("\\.[^.]*$", "", basename(keys[grepl("\\.tif$", keys)])))
 }
