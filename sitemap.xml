@@ -23,6 +23,7 @@
 <url><loc>http://marinesensitivity.org/msens/reference/atlas_versions.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/atlas_views.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/attach_atlas.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/build_storage_index.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/build_targets_list.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/build_zone_taxon.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/cell_grid_ncol.html</loc></url>
@@ -110,6 +111,7 @@
 <url><loc>http://marinesensitivity.org/msens/reference/report_parquet_summary.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/report_table.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/require_duckdb.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/s3_list_all.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/score_delta.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/score_delta_summary.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/scores_for_cells.html</loc></url>
@@ -128,6 +130,7 @@
 <url><loc>http://marinesensitivity.org/msens/reference/stac_sdm_props.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/stac_season_cog_item.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/stac_version_collection.html</loc></url>
+<url><loc>http://marinesensitivity.org/msens/reference/storage_page.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/tbl_species.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/turtle_sql.html</loc></url>
 <url><loc>http://marinesensitivity.org/msens/reference/validate_manifest.html</loc></url>

@@ -529,6 +529,8 @@ Other functions not defined by the concepts above
 
 - [`HEX_RES`](http://marinesensitivity.org/msens/reference/HEX_RES.md) :
   H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)
+- [`build_storage_index()`](http://marinesensitivity.org/msens/reference/build_storage_index.md)
+  : Generate index pages for a bucket tree
 - [`hex_add_membership()`](http://marinesensitivity.org/msens/reference/hex_add_membership.md)
   : Flag hexes inside a polygon (H3 polyfill membership)
 - [`hex_centroids()`](http://marinesensitivity.org/msens/reference/hex_centroids.md)
@@ -542,6 +544,10 @@ Other functions not defined by the concepts above
   weighting)
 - [`hex_ocean()`](http://marinesensitivity.org/msens/reference/hex_ocean.md)
   : Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)
+- [`s3_list_all()`](http://marinesensitivity.org/msens/reference/s3_list_all.md)
+  : List every object under a prefix
+- [`storage_page()`](http://marinesensitivity.org/msens/reference/storage_page.md)
+  : One self-contained storage index page
 
 # Articles
 
