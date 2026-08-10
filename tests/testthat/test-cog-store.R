@@ -94,3 +94,18 @@ test_that("an empty store is empty, not an error", {
   Sys.chmod(noisy, "0755")
   expect_error(cog_store_index("global05", aws = noisy), "failed")
 })
+
+test_that("the encoding is part of the object identity, not just the payload", {
+  h <- "abc123def4567890"
+  # same payload written differently must NOT share a URL: GDAL's /vsicurl caches
+  # a file's header per URL, so swapping the bytes under a stable key makes
+  # low-zoom tiles 500 while high-zoom tiles keep working
+  expect_false(content_hash_encoded(h, "flt4s-nd9999-noovr") ==
+               content_hash_encoded(h, "flt4s-nd9999-ovr"))
+  # ...and identical payload + identical encoding still dedups
+  expect_equal(content_hash_encoded(h, "flt4s-nd9999-noovr"),
+               content_hash_encoded(h, "flt4s-nd9999-noovr"))
+  expect_equal(nchar(content_hash_encoded(h, "x")), 16L)
+  expect_length(content_hash_encoded(c(h, "0000111122223333"), "x"), 2L)
+  expect_error(content_hash_encoded(h, c("a", "b")), "enc")
+})
