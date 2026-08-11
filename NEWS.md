@@ -7,6 +7,11 @@
   gains a `zone_sets =` argument to supply the registry. Resolution returns `NA` rather than
   guessing when a zone type is absent or lists two vintages for one version — a wrong outline draws
   the 2026 Program Areas over scores computed on different geometry and looks entirely plausible.
+  A zone type may declare a **canonical** vintage in the registry — a frame applied uniformly to
+  every release rather than matched per version. Subregions need it: the two 4-zone vintages are
+  indistinguishable by count and v7's own 5-zone set (which adds `FULL`) matches neither, so
+  without it every release resolved to `NA` and drew no subregion outline. Program and Planning
+  Areas declare none and stay strictly version-matched — their geometry must be the one scored.
 
 # msens 0.15.0
 

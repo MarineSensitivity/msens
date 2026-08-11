@@ -208,3 +208,36 @@ test_that("substring version names do not match", {
   expect_true(is.na(zone_set_resolve("v1", "programarea_key", r)))
   expect_equal(zone_set_resolve("v4b", "programarea_key", r), "programarea_2026-01")
 })
+
+# canonical vintages --------------------------------------------------------
+# Subregions are a presentation frame applied uniformly across releases (one
+# consistent set spanning all US waters), so the registry declares one canonical
+# vintage. Program/Planning Areas declare none and stay strictly version-matched:
+# their geometry must be the one actually scored.
+
+reg_c <- data.frame(
+  zone_set_key = c("subregion_2025-06", "subregion_2025-08", "programarea_2026-01"),
+  zone_type    = c("subregion", "subregion", "programarea"),
+  versions     = c("v1 v6", "v1 v6", "v6"),
+  canonical    = c(TRUE, FALSE, FALSE),
+  stringsAsFactors = FALSE)
+
+test_that("a canonical vintage breaks a tie between same-count subregion sets", {
+  # both subregion vintages have 4 zones, so usage-matching alone hits both
+  expect_equal(zone_set_resolve("v6", "subregion_key", reg_c), "subregion_2025-06")
+})
+
+test_that("a canonical vintage also covers a release that matched none", {
+  # v7's own subregion set has 5 zones (adds FULL) so it matches neither vintage
+  expect_equal(zone_set_resolve("v7", "subregion_key", reg_c), "subregion_2025-06")
+})
+
+test_that("a type with NO canonical vintage stays strictly version-matched", {
+  expect_true(is.na(zone_set_resolve("v7", "programarea_key", reg_c)))
+  expect_equal(zone_set_resolve("v6", "programarea_key", reg_c), "programarea_2026-01")
+})
+
+test_that("two canonical vintages of one type is ambiguous, not a coin flip", {
+  bad <- reg_c; bad$canonical <- c(TRUE, TRUE, FALSE)
+  expect_true(is.na(zone_set_resolve("v6", "subregion_key", bad)))
+})

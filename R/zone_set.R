@@ -116,12 +116,26 @@ zone_geom_hash <- function(x, key_col = NULL, zone_type = NULL, layer = NULL) {
 #' @concept zone_set
 zone_set_resolve <- function(ver, fld, zone_sets) {
   stopifnot(all(c("zone_set_key", "zone_type", "versions") %in% names(zone_sets)))
-  zt  <- sub("_key$", "", fld)
+  canon <- if ("canonical" %in% names(zone_sets))
+    as.logical(zone_sets$canonical) else rep(FALSE, nrow(zone_sets))
+  canon[is.na(canon)] <- FALSE
+  zt <- sub("_key$", "", fld)
+
   vapply(zt, function(t) {
-    hit <- zone_sets[zone_sets$zone_type == t &
-                     vapply(strsplit(as.character(zone_sets$versions), "\\s+"),
-                            function(vs) ver %in% vs, logical(1)), , drop = FALSE]
-    if (nrow(hit) == 1L) as.character(hit$zone_set_key) else NA_character_
+    of_type <- zone_sets$zone_type == t
+    used    <- of_type & vapply(strsplit(as.character(zone_sets$versions), "\\s+"),
+                                function(vs) ver %in% vs, logical(1))
+    if (sum(used) == 1L) return(as.character(zone_sets$zone_set_key[used]))
+
+    # A zone type whose registry declares a CANONICAL vintage is a presentation
+    # frame applied uniformly to every release (subregions: one consistent set
+    # spanning all US waters), so it resolves to that vintage both when several
+    # match and when none does -- a rule, not a guess. Program/Planning Areas
+    # declare none, so they stay strictly version-matched: their geometry must be
+    # the one actually scored.
+    ck <- zone_sets$zone_set_key[of_type & canon]
+    if (length(ck) == 1L) return(as.character(ck))
+    NA_character_
   }, character(1), USE.NAMES = FALSE)
 }
 
