@@ -1,5 +1,22 @@
 # Changelog
 
+## msens 0.16.0
+
+- **[`zone_set_resolve()`](http://marinesensitivity.org/msens/reference/zone_set_resolve.md)**
+  — a release whose own `zone` table predates the `zone_set_key` column
+  (v1–v7; only v8 stamps it) resolves its spatial units against the
+  zone-set registry instead. Without it
+  [`manifest_build()`](http://marinesensitivity.org/msens/reference/manifest_build.md)
+  emitted no `zone_set_key`, hence no `pmtiles`, for every historical
+  release: the app could not draw a zone outline on any version but the
+  newest.
+  [`manifest_build()`](http://marinesensitivity.org/msens/reference/manifest_build.md)
+  gains a `zone_sets =` argument to supply the registry. Resolution
+  returns `NA` rather than guessing when a zone type is absent or lists
+  two vintages for one version — a wrong outline draws the 2026 Program
+  Areas over scores computed on different geometry and looks entirely
+  plausible.
+
 ## msens 0.15.0
 
 *Publishing surface for the multi-version app: spatial units as reusable

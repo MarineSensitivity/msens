@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.16.0" id="msens-0160">msens 0.16.0<a class="anchor" aria-label="anchor" href="#msens-0160"></a></h2>
+<ul><li>
+<strong><code><a href="../reference/zone_set_resolve.html">zone_set_resolve()</a></code></strong> — a release whose own <code>zone</code> table predates the <code>zone_set_key</code> column (v1–v7; only v8 stamps it) resolves its spatial units against the zone-set registry instead. Without it <code><a href="../reference/manifest_build.html">manifest_build()</a></code> emitted no <code>zone_set_key</code>, hence no <code>pmtiles</code>, for every historical release: the app could not draw a zone outline on any version but the newest. <code><a href="../reference/manifest_build.html">manifest_build()</a></code> gains a <code>zone_sets =</code> argument to supply the registry. Resolution returns <code>NA</code> rather than guessing when a zone type is absent or lists two vintages for one version — a wrong outline draws the 2026 Program Areas over scores computed on different geometry and looks entirely plausible.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.15.0" id="msens-0150">msens 0.15.0<a class="anchor" aria-label="anchor" href="#msens-0150"></a></h2>
 <p><em>Publishing surface for the multi-version app: spatial units as reusable vintages, object keys that identify bytes, full-resolution vector tiles, and a browsable public bucket.</em></p>
