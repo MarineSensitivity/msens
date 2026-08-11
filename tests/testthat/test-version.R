@@ -194,3 +194,60 @@ test_that("a release predating zone_set_key still builds a manifest", {
   expect_false("zone_set_key" %in% names(m$zones))
   expect_gt(nrow(m$zones), 0)
 })
+
+# disk cache ----------------------------------------------------------------
+# shiny-server starts a fresh R process per session, so the in-process memo never
+# survives; without a disk cache every visitor re-fetched latest.txt +
+# versions.json + manifest.json (~0.58 s) inside time-to-first-byte.
+
+test_that("a fetch is served from disk by a process with a cold memo", {
+  d <- withr::local_tempdir()
+  withr::local_envvar(MSENS_ATLAS_CACHE = d, MSENS_ATLAS_TTL = "300")
+  f <- withr::local_tempfile(fileext = ".txt")
+  writeLines("v7", f)
+  u <- paste0("file://", f)
+
+  expect_equal(trimws(msens:::.atlas_fetch(u)), "v7")
+  expect_length(list.files(d), 1)              # landed on disk
+
+  # simulate a NEW process: clear the in-memory memo, then remove the source.
+  # a disk hit is the only way this can still answer.
+  rm(list = ls(envir = msens:::.atlas_reg), envir = msens:::.atlas_reg)
+  unlink(f)
+  expect_equal(trimws(msens:::.atlas_fetch(u)), "v7")
+})
+
+test_that("an expired entry is NOT served — a promoted latest.txt must be seen", {
+  d <- withr::local_tempdir()
+  withr::local_envvar(MSENS_ATLAS_CACHE = d, MSENS_ATLAS_TTL = "300")
+  f <- withr::local_tempfile(fileext = ".txt")
+  writeLines("v7", f)
+  u <- paste0("file://", f)
+  msens:::.atlas_fetch(u)
+
+  # age the cache file past the TTL and update the source
+  cf <- list.files(d, full.names = TRUE)[1]
+  Sys.setFileTime(cf, Sys.time() - 3600)
+  writeLines("v8", f)
+  rm(list = ls(envir = msens:::.atlas_reg), envir = msens:::.atlas_reg)
+  expect_equal(trimws(msens:::.atlas_fetch(u)), "v8")
+})
+
+test_that("TTL=0 and refresh=TRUE both bypass the cache entirely", {
+  d <- withr::local_tempdir()
+  f <- withr::local_tempfile(fileext = ".txt")
+  writeLines("v7", f)
+  u <- paste0("file://", f)
+
+  withr::local_envvar(MSENS_ATLAS_CACHE = d, MSENS_ATLAS_TTL = "0")
+  msens:::.atlas_fetch(u)
+  expect_length(list.files(d), 0)              # nothing written when disabled
+
+  writeLines("v8", f)
+  expect_equal(trimws(msens:::.atlas_fetch(u, refresh = TRUE)), "v8")
+})
+
+test_that("distinct urls do not collide in the cache", {
+  expect_false(identical(msens:::.hash_str("https://x/latest.txt"),
+                         msens:::.hash_str("https://x/versions.json")))
+})

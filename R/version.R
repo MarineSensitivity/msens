@@ -22,14 +22,59 @@
 # session cache for the registry files (all small; keyed by URL)
 .atlas_reg <- new.env(parent = emptyenv())
 
+.atlas_cache_dir <- function() {
+  d <- Sys.getenv("MSENS_ATLAS_CACHE", "")
+  if (!nzchar(d)) d <- file.path(tempdir(), "msens-atlas")
+  d
+}
+
 .atlas_fetch <- function(url, refresh = FALSE) {
+  # In-process memo first: free, and correct within one session.
   if (!refresh && !is.null(.atlas_reg[[url]])) return(.atlas_reg[[url]])
+
+  # Then a DISK cache, because the in-process memo does not survive the process.
+  # shiny-server starts a fresh R process per session, so without this every
+  # visitor re-fetches latest.txt + versions.json + manifest.json over HTTPS --
+  # measured at ~0.58 s, which lands squarely in time-to-first-byte for every
+  # single session. Off disk the same three reads are microseconds.
+  #
+  # TTL'd rather than permanent: these files are small but NOT immutable --
+  # promoting a release rewrites latest.txt, and republishing rewrites a
+  # manifest. Set MSENS_ATLAS_TTL=0 (or refresh = TRUE) to always go to network.
+  ttl <- suppressWarnings(as.numeric(Sys.getenv("MSENS_ATLAS_TTL", "300")))
+  if (is.na(ttl)) ttl <- 300
+  f <- file.path(.atlas_cache_dir(),
+                 paste0(substr(.hash_str(url), 1, 16), ".txt"))
+  if (!refresh && ttl > 0 && file.exists(f) &&
+      as.numeric(Sys.time() - file.mtime(f), units = "secs") < ttl) {
+    txt <- tryCatch(paste(readLines(f, warn = FALSE), collapse = "\n"),
+                    error = function(e) NULL)
+    if (!is.null(txt) && nzchar(txt)) { .atlas_reg[[url]] <- txt; return(txt) }
+  }
+
   txt <- tryCatch(
     paste(readLines(url, warn = FALSE), collapse = "\n"),
     warning = function(w) stop(sprintf("could not read '%s': %s", url, conditionMessage(w)), call. = FALSE),
     error   = function(e) stop(sprintf("could not read '%s': %s", url, conditionMessage(e)), call. = FALSE))
   .atlas_reg[[url]] <- txt
+  if (ttl > 0) tryCatch({
+    dir.create(dirname(f), showWarnings = FALSE, recursive = TRUE)
+    # write-then-rename so a concurrent reader never sees a half-written file
+    tmp <- paste0(f, ".", Sys.getpid())
+    writeLines(txt, tmp); file.rename(tmp, f)
+  }, error = function(e) invisible(NULL))
   txt
+}
+
+# tiny, dependency-free digest for cache filenames (not security-sensitive)
+.hash_str <- function(x) {
+  b <- utf8ToInt(x)
+  h1 <- 5381; h2 <- 52711
+  for (i in seq_along(b)) {
+    h1 <- (h1 * 33 + b[i]) %% 2147483647
+    h2 <- (h2 * 31 + b[i] * i) %% 2147483647
+  }
+  sprintf("%08x%08x", h1, h2)
 }
 
 #' Base HTTPS URL of the marine-atlas release tree
