@@ -8,7 +8,7 @@ uses. On a `lon360` grid the returned longitude is wrapped to
 ## Usage
 
 ``` r
-cell_lonlat(cell_id, grid)
+cell_lonlat(cell_id, grid, wrap = TRUE)
 ```
 
 ## Arguments
@@ -21,6 +21,12 @@ cell_lonlat(cell_id, grid)
 
   grid spec from
   [`grid_spec_for()`](http://marinesensitivity.org/msens/reference/grid_spec_for.md)
+
+- wrap:
+
+  wrap a 0-360 grid onto -180..180. TRUE (default) for plotting a point;
+  FALSE to keep the grid's own frame, which an EXTENT needs – a wrapped
+  antimeridian-crossing grid yields a whole-globe bounding box
 
 ## Value
 

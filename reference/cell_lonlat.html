@@ -14,7 +14,7 @@ On a lon360 grid the returned longitude is wrapped to [-180, 180)."><script asyn
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,7 +48,7 @@ On a <code>lon360</code> grid the returned longitude is wrapped to <code>[-180, 
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cell_lonlat</span><span class="op">(</span><span class="va">cell_id</span>, <span class="va">grid</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cell_lonlat</span><span class="op">(</span><span class="va">cell_id</span>, <span class="va">grid</span>, wrap <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -61,6 +61,12 @@ On a <code>lon360</code> grid the returned longitude is wrapped to <code>[-180, 
 
 <dt id="arg-grid">grid<a class="anchor" aria-label="anchor" href="#arg-grid"></a></dt>
 <dd><p>grid spec from <code><a href="grid_spec_for.html">grid_spec_for()</a></code></p></dd>
+
+
+<dt id="arg-wrap">wrap<a class="anchor" aria-label="anchor" href="#arg-wrap"></a></dt>
+<dd><p>wrap a 0-360 grid onto -180..180. TRUE (default) for plotting a
+point; FALSE to keep the grid's own frame, which an EXTENT needs – a
+wrapped antimeridian-crossing grid yields a whole-globe bounding box</p></dd>
 
 </dl></div>
     <div class="section level2">

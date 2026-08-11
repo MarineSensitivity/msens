@@ -1,5 +1,16 @@
 # Changelog
 
+## msens 0.17.0
+
+- **`cell_lonlat(wrap = )`** — `wrap = FALSE` keeps a 0-360 grid in its
+  own frame. Wrapping is right for plotting a point but wrong for an
+  **extent**: `usa05` runs 141.10 E across the antimeridian, so a
+  wrapped Alaska spans -180..180 and its bounding box comes out as the
+  whole globe instead of the Bering Sea. This is what lets subregion
+  bboxes be derived from `zone_cell` instead of a per-version metrics
+  raster, which existed only for v3-v8 and so made older releases
+  unopenable.
+
 ## msens 0.16.0
 
 - **[`zone_set_resolve()`](http://marinesensitivity.org/msens/reference/zone_set_resolve.md)**

@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.17.0" id="msens-0170">msens 0.17.0<a class="anchor" aria-label="anchor" href="#msens-0170"></a></h2>
+<ul><li>
+<strong><code>cell_lonlat(wrap = )</code></strong> — <code>wrap = FALSE</code> keeps a 0-360 grid in its own frame. Wrapping is right for plotting a point but wrong for an <strong>extent</strong>: <code>usa05</code> runs 141.10 E across the antimeridian, so a wrapped Alaska spans -180..180 and its bounding box comes out as the whole globe instead of the Bering Sea. This is what lets subregion bboxes be derived from <code>zone_cell</code> instead of a per-version metrics raster, which existed only for v3-v8 and so made older releases unopenable.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.16.0" id="msens-0160">msens 0.16.0<a class="anchor" aria-label="anchor" href="#msens-0160"></a></h2>
 <ul><li>
