@@ -17,7 +17,8 @@ build_storage_index(
   site_url = "https://storage.marinesensitivity.org",
   obj_url = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public",
   max_child_dirs = 500L,
-  max_rows = 2000L
+  max_rows = 2000L,
+  readme = list()
 )
 ```
 
@@ -45,6 +46,14 @@ build_storage_index(
 
   most rows rendered on one page, so a huge directory does not emit a
   multi-megabyte document
+
+- readme:
+
+  named list of prefix -\> markdown, rendered above the listing. A file
+  listing says WHAT is there but never what it means, how it was made,
+  or how to reach it without a browser; this is where that goes. The
+  same text is published as `README.md` beside the data, so `aws s3 cp`
+  and `curl` users get it too.
 
 ## Value
 

@@ -68,7 +68,8 @@ visible rather than mysterious.</p>
 <span>  site_url <span class="op">=</span> <span class="st">"https://storage.marinesensitivity.org"</span>,</span>
 <span>  obj_url <span class="op">=</span> <span class="st">"https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public"</span>,</span>
 <span>  max_child_dirs <span class="op">=</span> <span class="fl">500L</span>,</span>
-<span>  max_rows <span class="op">=</span> <span class="fl">2000L</span></span>
+<span>  max_rows <span class="op">=</span> <span class="fl">2000L</span>,</span>
+<span>  readme <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -96,6 +97,14 @@ its children listed but not expanded into pages of their own</p></dd>
 <dt id="arg-max-rows">max_rows<a class="anchor" aria-label="anchor" href="#arg-max-rows"></a></dt>
 <dd><p>most rows rendered on one page, so a huge directory does not
 emit a multi-megabyte document</p></dd>
+
+
+<dt id="arg-readme">readme<a class="anchor" aria-label="anchor" href="#arg-readme"></a></dt>
+<dd><p>named list of prefix -&gt; markdown, rendered above the listing.
+A file listing says WHAT is there but never what it means, how it was made,
+or how to reach it without a browser; this is where that goes. The same text
+is published as <code>README.md</code> beside the data, so <code>aws s3 cp</code> and <code>curl</code> users
+get it too.</p></dd>
 
 </dl></div>
     <div class="section level2">
