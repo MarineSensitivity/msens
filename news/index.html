@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.19.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.19.0" id="msens-0190">msens 0.19.0<a class="anchor" aria-label="anchor" href="#msens-0190"></a></h2>
+<ul><li>
+<strong><code><a href="../reference/manifest_build.html">manifest_build()</a></code> emits one zone row per spatial unit.</strong> v2 and v3 each carry two subregion tables under a single <code>fld</code> (a legacy of synthesising subregions per release); both resolve to the same canonical vintage, so the manifest listed <code>subregion</code> twice and any app keying its picker on the manifest offered the same choice twice. Rows now collapse on <code>zone_set_key</code>, keeping the largest <code>n</code> so the count describes the unit rather than whichever table sorted first.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.18.0" id="msens-0180">msens 0.18.0<a class="anchor" aria-label="anchor" href="#msens-0180"></a></h2>
 <ul><li>
