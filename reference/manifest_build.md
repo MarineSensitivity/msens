@@ -17,6 +17,7 @@ manifest_build(
   base = atlas_base_url(),
   metrics = NULL,
   capabilities = list(),
+  zone_tiles = list(),
   extra = list()
 )
 ```
@@ -59,6 +60,12 @@ manifest_build(
   alone would advertise `cell_species_list = FALSE` and switch off a
   panel that works. Overrides must be justified by checking the RELEASE,
   not by optimism.
+
+- zone_tiles:
+
+  named list of `zone_set_key` -\> PMTiles URL, attached to the zones
+  table so an app resolves outlines by VINTAGE instead of a hardcoded
+  unversioned filename on the file host
 
 - extra:
 

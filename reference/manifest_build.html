@@ -62,6 +62,7 @@ which spatial units were scored — is <em>read</em>, not assumed.</p>
 <span>  base <span class="op">=</span> <span class="fu"><a href="atlas_base_url.html">atlas_base_url</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  metrics <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  capabilities <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  zone_tiles <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -103,6 +104,12 @@ is published as a Parquet directory beside the database, so deriving from
 <code>con</code> alone would advertise <code>cell_species_list = FALSE</code> and switch off a
 panel that works. Overrides must be justified by checking the RELEASE, not
 by optimism.</p></dd>
+
+
+<dt id="arg-zone-tiles">zone_tiles<a class="anchor" aria-label="anchor" href="#arg-zone-tiles"></a></dt>
+<dd><p>named list of <code>zone_set_key</code> -&gt; PMTiles URL, attached to
+the zones table so an app resolves outlines by VINTAGE instead of a
+hardcoded unversioned filename on the file host</p></dd>
 
 
 <dt id="arg-extra">extra<a class="anchor" aria-label="anchor" href="#arg-extra"></a></dt>
