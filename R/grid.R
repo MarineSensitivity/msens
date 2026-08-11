@@ -107,14 +107,21 @@ grid_spec_for <- function(grid_id, cellid_tif = NULL) {
 #'
 #' @param cell_id integer vector of cell ids
 #' @param grid grid spec from [grid_spec_for()]
+#' @param wrap wrap a 0-360 grid onto -180..180. TRUE (default) for plotting a
+#'   point; FALSE to keep the grid's own frame, which an EXTENT needs -- a
+#'   wrapped antimeridian-crossing grid yields a whole-globe bounding box
 #' @return a data frame with `lon`, `lat`
 #' @export
 #' @concept grid
-cell_lonlat <- function(cell_id, grid) {
+cell_lonlat <- function(cell_id, grid, wrap = TRUE) {
   cell_id <- as.double(cell_id)
   row <- ((cell_id - 1) %/% grid$nc) + 1
   col <- ((cell_id - 1) %%  grid$nc) + 1
   lon <- grid$xmin + (col - 0.5) * grid$resx
-  if (isTRUE(grid$lon360)) lon <- ifelse(lon >= 180, lon - 360, lon)
+  # wrap = FALSE keeps a 0-360 grid in its OWN frame. Wrapping is right for
+  # plotting a point, but wrong for an EXTENT: usa05 runs 141.10 E across the
+  # antimeridian, so a wrapped Alaska spans -180..180 and its bounding box comes
+  # out as the whole globe instead of the Bering Sea.
+  if (isTRUE(grid$lon360) && isTRUE(wrap)) lon <- ifelse(lon >= 180, lon - 360, lon)
   data.frame(lon = lon, lat = grid$ymax - (row - 0.5) * grid$resy)
 }

@@ -4,12 +4,16 @@
 \alias{cell_lonlat}
 \title{Longitude/latitude of cell centers on a grid}
 \usage{
-cell_lonlat(cell_id, grid)
+cell_lonlat(cell_id, grid, wrap = TRUE)
 }
 \arguments{
 \item{cell_id}{integer vector of cell ids}
 
 \item{grid}{grid spec from \code{\link[=grid_spec_for]{grid_spec_for()}}}
+
+\item{wrap}{wrap a 0-360 grid onto -180..180. TRUE (default) for plotting a
+point; FALSE to keep the grid's own frame, which an EXTENT needs -- a
+wrapped antimeridian-crossing grid yields a whole-globe bounding box}
 }
 \value{
 a data frame with \code{lon}, \code{lat}

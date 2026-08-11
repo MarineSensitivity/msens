@@ -66,3 +66,29 @@ test_that("publish_cog leaves a -180..180 grid alone", {
   ll <- cell_lonlat(ids, g)
   expect_equal(as.numeric(terra::extract(terra::rast(out), ll)[, 2]), 42)
 })
+
+test_that("cell_lonlat(wrap = FALSE) keeps a 0-360 grid contiguous", {
+  g <- grid_spec_for("usa05")           # 141.10 E eastward across the antimeridian
+  # a column east of the antimeridian: wrapped it reads negative, unwrapped it
+  # stays > 180 so an extent spanning the dateline does not blow up to the globe
+  far <- 3000                            # near the east edge of the usa05 frame
+  w   <- cell_lonlat(far, g, wrap = TRUE)$lon
+  u   <- cell_lonlat(far, g, wrap = FALSE)$lon
+  expect_lt(w, 0)
+  expect_gt(u, 180)
+  expect_equal(u - 360, w)
+  # a bbox over cells either side of the dateline stays narrow when unwrapped
+  cells <- c(700, 3000)                 # west and east of 180
+  lw <- cell_lonlat(cells, g, wrap = TRUE)$lon
+  lu <- cell_lonlat(cells, g, wrap = FALSE)$lon
+  # 176.08 E and 291.08 E: unwrapped they are 115 deg apart, wrapped the eastern
+  # one becomes -68.93 and the pair reads as 245 deg -- a bbox twice the truth
+  expect_equal(round(diff(range(lu)), 1), 115.0)
+  expect_equal(round(diff(range(lw)), 1), 245.0)
+  expect_gt(diff(range(lw)), diff(range(lu)))
+})
+
+test_that("wrap has no effect on a -180..180 grid", {
+  g <- grid_spec_for("global05")
+  expect_equal(cell_lonlat(12345, g, wrap = TRUE), cell_lonlat(12345, g, wrap = FALSE))
+})
