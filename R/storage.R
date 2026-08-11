@@ -91,6 +91,13 @@ storage_page <- function(title, subtitle = "", body_html = "", crumb = "") {
     "td.num{text-align:right;font-variant-numeric:tabular-nums}",
     ".chip{background:var(--bd);border-radius:999px;padding:.05rem .5rem;font-size:.8rem;",
     "color:var(--muted)}footer{margin-top:2rem;color:var(--muted);font-size:.85rem}",
+    ".readme{margin:1rem 0 .5rem;padding:.75rem 1rem;border:1px solid var(--bd);",
+    "border-radius:8px;background:color-mix(in srgb,var(--bd) 25%,transparent)}",
+    ".readme h1,.readme h2,.readme h3{font-size:1rem;margin:.4rem 0}",
+    ".readme p{margin:.4rem 0}.readme code{font-size:.85em;background:var(--bd);",
+    "padding:.05rem .3rem;border-radius:4px}",
+    ".readme pre{overflow-x:auto;background:var(--bd);padding:.5rem;border-radius:6px}",
+    ".readme pre code{background:none;padding:0}.readme ul{margin:.4rem 0 .4rem 1.1rem}",
     "</style></head><body><main>",
     "<h1>", .esc(title), "</h1>",
     if (nzchar(subtitle)) paste0("<div class='sub'>", subtitle, "</div>") else "",
@@ -102,54 +109,84 @@ storage_page <- function(title, subtitle = "", body_html = "", crumb = "") {
 
 #' Generate index pages for a bucket tree
 #'
+#' A page is generated for EVERY directory, however many files it holds: the cost
+#' of this index is the number of PAGES, not the number of objects, so a
+#' directory of 20,000 files is still one page. Only a directory whose CHILDREN
+#' are themselves numerous directories is collapsed - `serve/model_cell/` is
+#' ~17,765 Hive partition directories, which would be ~17,765 pages nobody reads.
+#' Those children are still listed with counts and labelled, so the reason is
+#' visible rather than mysterious.
+#'
 #' @param objs data frame from [s3_list_all()]
 #' @param site_url public base of the browse host
 #' @param obj_url public base objects are fetched from
-#' @param max_depth deepest directory level to generate a page for
-#' @param skip regex of key prefixes to summarize rather than walk (machine-only
-#'   trees such as Hive partitions, which would otherwise produce tens of
-#'   thousands of pages nobody reads)
+#' @param max_child_dirs a directory with more than this many SUBDIRECTORIES has
+#'   its children listed but not expanded into pages of their own
+#' @param max_rows most rows rendered on one page, so a huge directory does not
+#'   emit a multi-megabyte document
+#' @param readme named list of prefix -> markdown, rendered above the listing.
+#'   A file listing says WHAT is there but never what it means, how it was made,
+#'   or how to reach it without a browser; this is where that goes. The same text
+#'   is published as `README.md` beside the data, so `aws s3 cp` and `curl` users
+#'   get it too.
 #' @return a data frame of `key` (the index.html object key) and `html`
 #' @export
 #' @concept storage
 build_storage_index <- function(objs,
                                 site_url = "https://storage.marinesensitivity.org",
                                 obj_url  = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public",
-                                max_depth = 3L,
-                                skip = "^marine-atlas/(cog|v[0-9]+[a-z]?/(serve|dist_merged|dist))/") {
-  objs <- objs[!grepl("(^|/)index\\.html$", objs$key), , drop = FALSE]   # never index our own pages
+                                max_child_dirs = 500L,
+                                max_rows = 2000L,
+                                readme = list()) {
+  objs <- objs[!grepl("(^|/)index[.]html$", objs$key), , drop = FALSE]
+  objs <- objs[!grepl("/$", objs$key), , drop = FALSE]   # 0-byte directory markers
   if (!nrow(objs)) return(data.frame(key = character(), html = character()))
 
   parts <- strsplit(objs$key, "/", fixed = TRUE)
-  dir_of <- vapply(parts, function(p)
-    if (length(p) > 1) paste(utils::head(p, -1), collapse = "/") else "", character(1))
-  # vectorised: strsplit("", "/") is character(0), so the root correctly has depth 0
-  depth_of <- function(d) lengths(strsplit(d, "/", fixed = TRUE))
-
-  # every ancestor directory, so no generated link points at a key with no object
   anc <- unique(c("", unlist(lapply(parts, function(p)
     if (length(p) > 1)
       vapply(seq_len(length(p) - 1), function(i) paste(p[seq_len(i)], collapse = "/"), character(1))
     else NULL))))
-  keep <- anc[depth_of(anc) <= max_depth & (!nzchar(anc) | !grepl(skip, paste0(anc, "/")))]
+
+  parent_of <- function(d) ifelse(grepl("/", d), sub("/[^/]*$", "", d), "")
+  kid_dirs  <- table(parent_of(anc[nzchar(anc)]))
+  crowded   <- names(kid_dirs)[kid_dirs > max_child_dirs]
+
+  under_crowded <- function(d) {
+    if (!length(crowded)) return(rep(FALSE, length(d)))
+    vapply(d, function(x) any(vapply(crowded, function(cc)
+      nzchar(cc) && startsWith(x, paste0(cc, "/")), logical(1))), logical(1), USE.NAMES = FALSE)
+  }
+  keep <- anc[!under_crowded(anc)]
+
+  n_kids <- function(k) { v <- kid_dirs[k]; if (is.na(v)) 0L else as.integer(v) }
 
   pages <- lapply(keep, function(d) {
-    pre <- if (nzchar(d)) paste0(d, "/") else ""
+    pre  <- if (nzchar(d)) paste0(d, "/") else ""
     here <- objs[startsWith(objs$key, pre), , drop = FALSE]
     rel  <- substring(here$key, nchar(pre) + 1)
     seg  <- sub("/.*$", "", rel)
     is_dir <- grepl("/", rel)
 
-    kids <- unique(seg)
-    rows <- vapply(sort(kids), function(k) {
+    kids  <- sort(unique(seg))
+    shown <- utils::head(kids, max_rows)
+
+    rows <- vapply(shown, function(k) {
       sel <- seg == k
       if (any(is_dir[sel])) {
-        n  <- sum(sel); sz <- sum(here$size[sel])
-        sub_pre <- paste0(pre, k, "/")
-        browsable <- depth_of(paste0(pre, k)) <= max_depth && !grepl(skip, sub_pre)
+        n <- sum(sel); sz <- sum(here$size[sel])
+        expandable <- !under_crowded(paste0(pre, k))
         nm <- paste0(.esc(k), "/")
-        cell <- if (browsable) sprintf("<a href='%s/%s%s/'>%s</a>", site_url, pre, .esc(k), nm)
-                else sprintf("%s <span class='chip'>not browsable</span>", nm)
+        cell <- if (expandable) {
+          sprintf("<a href='%s/%s%s/'>%s</a>", site_url, pre, .esc(k), nm)
+        } else if (n == 1L) {
+          # a Hive partition holds exactly one object -- link straight to it
+          # rather than to a page that would say only "here is one file"
+          sprintf("<a href='%s/%s'>%s</a>", obj_url, here$key[sel][1], nm)
+        } else {
+          sprintf("%s <span class='chip' title='%s partition directories - listed here rather than expanded into a page each'>partitioned data</span>",
+                  nm, format(n_kids(paste0(pre, k)), big.mark = ","))
+        }
         sprintf("<tr><td>%s</td><td class='num'>%s</td><td class='num'>%s</td></tr>",
                 cell, format(n, big.mark = ","), .fmt_size(sz))
       } else {
@@ -158,6 +195,11 @@ build_storage_index <- function(objs,
                 obj_url, pre, .esc(k), .esc(k), .fmt_size(here$size[i]))
       }
     }, character(1))
+
+    if (length(kids) > length(shown))
+      rows <- c(rows, sprintf("<tr><td colspan='3' class='chip'>showing %s of %s entries</td></tr>",
+                              format(length(shown), big.mark = ","),
+                              format(length(kids), big.mark = ",")))
 
     crumbs <- if (nzchar(d)) {
       sg <- strsplit(d, "/", fixed = TRUE)[[1]]
@@ -168,7 +210,9 @@ build_storage_index <- function(objs,
                collapse = " / "))
     } else ""
 
-    body <- paste0("<table><thead><tr><th>name</th><th class='num'>items</th>",
+    intro <- .render_readme(readme[[if (nzchar(d)) d else "."]])
+    body <- paste0(intro,
+                   "<table><thead><tr><th>name</th><th class='num'>items</th>",
                    "<th class='num'>size</th></tr></thead><tbody>",
                    paste(rows, collapse = ""), "</tbody></table>")
     list(key  = paste0(pre, "index.html"),
@@ -181,4 +225,16 @@ build_storage_index <- function(objs,
   data.frame(key  = vapply(pages, `[[`, character(1), "key"),
              html = vapply(pages, `[[`, character(1), "html"),
              stringsAsFactors = FALSE)
+}
+
+# Markdown -> HTML for the per-directory README. commonmark is present in both
+# the laptop and container libraries; without it the text is still shown, just
+# unformatted, because an explanation that fails to render is worse than a plain
+# one that does.
+.render_readme <- function(md) {
+  if (is.null(md) || !nzchar(trimws(md))) return("")
+  html <- if (requireNamespace("commonmark", quietly = TRUE))
+    commonmark::markdown_html(md, extensions = TRUE)
+  else paste0("<pre>", .esc(md), "</pre>")
+  paste0("<div class='readme'>", html, "</div>")
 }
