@@ -154,9 +154,17 @@ cell_from_lonlat <- function(lon, lat, grid) {
   # which side of the line a point sits on. A map click delivers floats, never an
   # exact multiple of 0.05, so this does not arise in practice -- and if it ever
   # matters, read the COG.
-  col <- floor((lon - grid$xmin) / grid$resx) + 1
-  row <- pmax(1, ceiling((grid$ymax - lat) / grid$resy))
-  ok  <- col >= 1 & col <= grid$nc & row >= 1 & row <= grid$nr
+  ymin <- grid$ymax - grid$nr * grid$resy
+  xmax <- grid$xmin + grid$nc * grid$resx
+  col  <- floor((lon - grid$xmin) / grid$resx) + 1
+  row  <- ceiling((grid$ymax - lat) / grid$resy)
+  # the top edge is row 1, not row 0; every other row already lands correctly
+  row  <- ifelse(row == 0 & lat <= grid$ymax, 1, row)
+  # validity is a question about the COORDINATES, not about clamped indices --
+  # clamping first made a point north of the grid (lat 89 on a 82.6 N grid)
+  # report as row 1 instead of NA
+  ok <- lon >= grid$xmin & lon < xmax & lat <= grid$ymax & lat > ymin &
+        col >= 1 & col <= grid$nc & row >= 1 & row <= grid$nr
   ifelse(ok, (row - 1) * grid$nc + col, NA_real_)
 }
 
