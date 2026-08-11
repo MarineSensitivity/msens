@@ -187,7 +187,7 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
 #' @export
 #' @concept publish
 publish_pmtiles_models <- function(x, dir_out, layer, workers = NULL, redo = FALSE,
-                                   minzoom = 0, maxzoom = 6, simplification = 10) {
+                                   minzoom = 0, maxzoom = 10, simplification = 10) {
   stopifnot(inherits(x, "sf"), "mdl_key" %in% names(x))
   fs::dir_create(dir_out)
   x$mdl_key <- as.character(x$mdl_key)
@@ -239,7 +239,7 @@ publish_pmtiles_models <- function(x, dir_out, layer, workers = NULL, redo = FAL
 #' @export
 #' @concept publish
 publish_pmtiles_from_gpkg <- function(gpkg, layer, keys, dir_out, workers = NULL, redo = FALSE,
-                                      minzoom = 0, maxzoom = 6, simplification = 10) {
+                                      minzoom = 0, maxzoom = 10, simplification = 10) {
   stopifnot(file.exists(gpkg))
   fs::dir_create(dir_out)
   keys <- unique(as.character(keys))
