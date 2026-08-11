@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.19.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.20.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.20.0" id="msens-0200">msens 0.20.0<a class="anchor" aria-label="anchor" href="#msens-0200"></a></h2>
+<ul><li><p><strong>Resolve a clicked point through titiler, not a local raster.</strong> <code><a href="../reference/cog_point_value.html">cog_point_value()</a></code> calls <code>GET /cog/point/{lon},{lat}</code> so the number in a popup comes from the same surface the user is looking at, and <code><a href="../reference/grid_cellid_url.html">grid_cellid_url()</a></code> names the grid’s cell-id COG so the cell id resolves the same way. Reading the raster in the app produced three separate bugs: the band is named <code>r_cellid</code> on <code>usa05</code> and <code>depth_mean</code> on <code>global05</code> (selecting <code>$cell_id</code> returned NULL), longitude was shifted to 0-360 while both images are stored -180..180 (every Americas click sampled outside the image), and a <code>SpatRaster</code> cached across Shiny sessions is a stale external pointer that <strong>segfaults</strong> the process – which is why clicking the map disconnected the app with no R error and nothing in the log.</p></li>
+<li><p><strong><code><a href="../reference/cell_from_lonlat.html">cell_from_lonlat()</a></code></strong> — the exact inverse of <code><a href="../reference/cell_lonlat.html">cell_lonlat()</a></code>, pure arithmetic on the grid definition, so a click still resolves if the tile server is briefly unavailable. Round-trips with <code><a href="../reference/cell_lonlat.html">cell_lonlat()</a></code> on both grids; a point outside the grid is <code>NA</code> rather than a wrapped-around cell.</p></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.19.0" id="msens-0190">msens 0.19.0<a class="anchor" aria-label="anchor" href="#msens-0190"></a></h2>
 <ul><li>

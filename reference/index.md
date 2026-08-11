@@ -33,8 +33,17 @@ every version instead of a forked app per release
 - [`version_picker_html()`](http://marinesensitivity.org/msens/reference/version_picker_html.md)
   : HTML for the version picker
 
+- [`cell_from_lonlat()`](http://marinesensitivity.org/msens/reference/cell_from_lonlat.md)
+  :
+
+  Cell id at a longitude/latitude (inverse of
+  [`cell_lonlat()`](http://marinesensitivity.org/msens/reference/cell_lonlat.md))
+
 - [`cell_lonlat()`](http://marinesensitivity.org/msens/reference/cell_lonlat.md)
   : Longitude/latitude of cell centers on a grid
+
+- [`grid_cellid_url()`](http://marinesensitivity.org/msens/reference/grid_cellid_url.md)
+  : Public URL of a grid's cell-id COG
 
 - [`grid_for_ver()`](http://marinesensitivity.org/msens/reference/grid_for_ver.md)
   :
@@ -240,6 +249,9 @@ Map cell surfaces and COGs, and build the report widgets
 
 - [`cell_tile_url()`](http://marinesensitivity.org/msens/reference/cell_tile_url.md)
   : Build an msens cell tile URL template
+
+- [`cog_point_value()`](http://marinesensitivity.org/msens/reference/cog_point_value.md)
+  : Value of a COG at a point, via titiler
 
 - [`cog_tile_url()`](http://marinesensitivity.org/msens/reference/cog_tile_url.md)
   :
