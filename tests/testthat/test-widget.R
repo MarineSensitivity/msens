@@ -38,3 +38,39 @@ test_that("cog_tile_url renders a flat mask via an explicit colormap", {
   # the ordinary ramp path is untouched
   expect_match(cog_tile_url("https://x/y.tif"), "colormap_name=spectral_r", fixed = TRUE)
 })
+
+test_that("publish_pmtiles simplifies only the LOW zooms, and drops nothing tiny", {
+  # `--simplification` alone applies at every zoom including the max, so the
+  # deepest tiles were coarser than the source -- and every higher zoom
+  # overzooms from them, so no view anywhere showed the real boundary.
+  skip_if_not_installed("sf")
+  fake <- withr::local_tempfile(fileext = ".sh")
+  writeLines(c("#!/bin/sh", 'echo "$@" > "$TIPPE_ARGS"', "exit 0"), fake)
+  Sys.chmod(fake, "0755")
+  argf <- withr::local_tempfile()
+  withr::local_envvar(TIPPE_ARGS = argf)
+
+  sq <- sf::st_sf(mdl_key = "am|x", ds_key = "am", geometry = sf::st_sfc(
+    sf::st_polygon(list(cbind(c(0,1,1,0,0), c(0,0,1,1,0)))), crs = 4326))
+  publish_pmtiles(sq, tempfile(fileext = ".pmtiles"), "lyr", tippecanoe = fake)
+
+  a <- readLines(argf)
+  expect_match(a, "--simplify-only-low-zooms", fixed = TRUE)
+  expect_match(a, "--no-tiny-polygon-reduction", fixed = TRUE)
+  expect_match(a, "-z 10", fixed = TRUE)          # was 6: ~2.4 km at its finest
+  expect_false(grepl("--drop-densest|--coalesce", a))
+})
+
+test_that("publish_pmtiles carries caller-chosen attributes", {
+  skip_if_not_installed("sf")
+  fake <- withr::local_tempfile(fileext = ".sh")
+  writeLines(c("#!/bin/sh", 'echo "$@" > "$TIPPE_ARGS"', "exit 0"), fake); Sys.chmod(fake, "0755")
+  argf <- withr::local_tempfile(); withr::local_envvar(TIPPE_ARGS = argf)
+  sq <- sf::st_sf(programarea_key = "GAB", geometry = sf::st_sfc(
+    sf::st_polygon(list(cbind(c(0,1,1,0,0), c(0,0,1,1,0)))), crs = 4326))
+  publish_pmtiles(sq, tempfile(fileext = ".pmtiles"), "zones",
+                  keep_attrs = "programarea_key", tippecanoe = fake)
+  a <- readLines(argf)
+  expect_match(a, "-y programarea_key", fixed = TRUE)
+  expect_false(grepl("mdl_key", a))   # zone layers have no mdl_key
+})

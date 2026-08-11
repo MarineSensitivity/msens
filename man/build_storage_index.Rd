@@ -9,7 +9,8 @@ build_storage_index(
   site_url = "https://storage.marinesensitivity.org",
   obj_url = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public",
   max_child_dirs = 500L,
-  max_rows = 2000L
+  max_rows = 2000L,
+  readme = list()
 )
 }
 \arguments{
@@ -24,6 +25,12 @@ its children listed but not expanded into pages of their own}
 
 \item{max_rows}{most rows rendered on one page, so a huge directory does not
 emit a multi-megabyte document}
+
+\item{readme}{named list of prefix -> markdown, rendered above the listing.
+A file listing says WHAT is there but never what it means, how it was made,
+or how to reach it without a browser; this is where that goes. The same text
+is published as \code{README.md} beside the data, so \verb{aws s3 cp} and \code{curl} users
+get it too.}
 }
 \value{
 a data frame of \code{key} (the index.html object key) and \code{html}

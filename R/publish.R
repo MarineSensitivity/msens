@@ -109,10 +109,12 @@ publish_cog <- function(cell_id, val, out_tif, grid,
 #'   (FlatGeobuf / GeoJSON)
 #' @param out_pmtiles output path (`.pmtiles`)
 #' @param layer tile layer name (the `source_layer` the app references)
-#' @param minzoom,maxzoom zoom range (default 0..6; coarse expert ranges don't
-#'   need street-level detail, and high zoom on huge global polygons is very slow)
-#' @param simplification tippecanoe `--simplification` (default 10; aggressive,
-#'   since ranges are coarse — keeps tiles small without dropping species)
+#' @param minzoom,maxzoom zoom range (default 0..10). Simplification is applied
+#'   at the LOW zooms only, so maxzoom carries full source resolution and every
+#'   view above it overzooms from something faithful.
+#' @param simplification tippecanoe `--simplification` for the low zooms only
+#' @param keep_attrs attributes to carry into the tiles (`-y`); the zone layers
+#'   need their own key columns, not `mdl_key`/`ds_key`
 #' @param tippecanoe path to the tippecanoe binary (default `"tippecanoe"`)
 #' @param extra extra tippecanoe CLI args (character vector)
 #' @param quiet suppress tippecanoe stderr (default `TRUE`)
@@ -121,7 +123,8 @@ publish_cog <- function(cell_id, val, out_tif, grid,
 #' @export
 #' @concept publish
 publish_pmtiles <- function(x, out_pmtiles, layer,
-                            minzoom = 0, maxzoom = 6, simplification = 20,
+                            minzoom = 0, maxzoom = 10, simplification = 10,
+                            keep_attrs = c("mdl_key", "ds_key"),
                             tippecanoe = "tippecanoe", extra = character(0),
                             quiet = TRUE) {
   if (inherits(x, "sf")) {
@@ -135,15 +138,25 @@ publish_pmtiles <- function(x, out_pmtiles, layer,
   } else {
     stopifnot(file.exists(x)); src <- x
   }
-  # keep EVERY feature at EVERY zoom — never --drop-densest / --coalesce (they drop or
-  # merge features, so a range vanishes at low zoom). For a per-MODEL file (one species;
-  # see publish_pmtiles_models) every feature is the same range, so low-zoom tiles stay
-  # tiny; tame any complex single range with --simplification + a modest maxzoom (ranges
-  # are coarse; higher zooms overzoom cleanly). Only carry the id attributes.
+  # Keep EVERY feature at EVERY zoom — never --drop-densest / --coalesce (they drop
+  # or merge features, so a range vanishes at low zoom).
+  #
+  # `--simplification` alone applies at EVERY zoom INCLUDING the maximum, so the
+  # deepest tiles were coarser than the source — and since every zoom above
+  # maxzoom overzooms from it, no view anywhere ever showed the real boundary.
+  # `--simplify-only-low-zooms` keeps maxzoom at full source resolution while the
+  # far-out views stay small. `--no-tiny-polygon-reduction` stops tippecanoe
+  # merging or dropping "tiny" polygons at low zoom, which quietly removes small
+  # features — a pocket critical habitat, a single-island range — at exactly the
+  # zooms where the whole layer is in view and a user would be counting them.
+  #
+  # maxzoom 10 (was 6): at 6 the finest real detail was ~2.4 km, so a coastal
+  # critical-habitat boundary was visibly blocky at any working zoom.
   args <- c("-o", out_pmtiles, "-l", layer,
             "-Z", minzoom, "-z", maxzoom, "--simplification", simplification,
+            "--simplify-only-low-zooms", "--no-tiny-polygon-reduction",
             "--no-tile-size-limit", "--no-feature-limit",
-            "-y", "mdl_key", "-y", "ds_key", "--force",
+            unlist(lapply(keep_attrs, function(a) c("-y", a))), "--force",
             extra, src)
   st <- system2(tippecanoe, as.character(args),
                 stdout = if (quiet) FALSE else "", stderr = if (quiet) FALSE else "")

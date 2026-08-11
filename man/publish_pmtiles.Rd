@@ -9,8 +9,9 @@ publish_pmtiles(
   out_pmtiles,
   layer,
   minzoom = 0,
-  maxzoom = 6,
-  simplification = 20,
+  maxzoom = 10,
+  simplification = 10,
+  keep_attrs = c("mdl_key", "ds_key"),
   tippecanoe = "tippecanoe",
   extra = character(0),
   quiet = TRUE
@@ -24,11 +25,14 @@ publish_pmtiles(
 
 \item{layer}{tile layer name (the \code{source_layer} the app references)}
 
-\item{minzoom, maxzoom}{zoom range (default 0..6; coarse expert ranges don't
-need street-level detail, and high zoom on huge global polygons is very slow)}
+\item{minzoom, maxzoom}{zoom range (default 0..10). Simplification is applied
+at the LOW zooms only, so maxzoom carries full source resolution and every
+view above it overzooms from something faithful.}
 
-\item{simplification}{tippecanoe \code{--simplification} (default 10; aggressive,
-since ranges are coarse — keeps tiles small without dropping species)}
+\item{simplification}{tippecanoe \code{--simplification} for the low zooms only}
+
+\item{keep_attrs}{attributes to carry into the tiles (\code{-y}); the zone layers
+need their own key columns, not \code{mdl_key}/\code{ds_key}}
 
 \item{tippecanoe}{path to the tippecanoe binary (default \code{"tippecanoe"})}
 
