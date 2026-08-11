@@ -1,3 +1,45 @@
+# msens 0.15.0
+
+*Publishing surface for the multi-version app: spatial units as reusable vintages, object keys that
+identify bytes, full-resolution vector tiles, and a browsable public bucket.*
+
+* **Zone sets are reusable, and keyed on the right column** — `zone_cells()` computes the
+  `(zone_set × grid)` intersection **once** so every MST version on that grid reuses it, instead of
+  each release recomputing its own. `zone_key_col()` picks the layer's *own* `{zone_type}_key`
+  rather than the first column matching `key$` — that bug selected `region_key` for a subregion
+  layer, collapsing 20 zones to 3 and, because the resulting order was not total, made
+  `zone_geom_hash()` unstable across runs.
+
+* **Version equivalence is asserted on a fixed spatial unit** — `pra_score_delta(zone_set_key=)`
+  pins which zone vintage is compared; previously it silently compared whatever each version
+  happened to call "programarea", so a geometry change could read as a score change. `score_delta()`
+  now refuses two identical labels rather than reporting a self-comparison as agreement.
+
+* **Content-addressed object keys cover the encoding** — `content_hash_encoded()` folds the encoding
+  parameters into the key. The payload hash alone is not enough: republishing the same cells with
+  different scaling reused the URL, and `/vsicurl` caches headers **per URL**, so stale ranges were
+  served against new bytes and low-zoom tiles failed with HTTP 500. `cog_store_index()` now returns
+  an empty `character()` for an empty store instead of erroring, so the first publish into a fresh
+  store works.
+
+* **Vector tiles at full resolution** — `publish_pmtiles()` / `publish_pmtiles_models()` default to
+  `maxzoom = 10` and pass `--simplify-only-low-zooms --no-tiny-polygon-reduction`. Simplification
+  previously applied at *every* zoom including the deepest, so the tiles every higher zoom
+  overzooms from were coarser than the source, and small polygons were dropped outright at low zoom.
+
+* **Manifest zones carry their tiles** — `manifest_build()` emits `zone_set_key` and a `pmtiles` URL
+  per zone vintage, so an app can draw a version's spatial units without knowing their filenames.
+
+* **Browsable public storage** — `s3_list_all()`, `storage_page()`, `build_storage_index()` generate
+  the `storage.marinesensitivity.org` index, with per-directory READMEs pointing at the STAC API,
+  `curl`, GDAL and `rstac`. Depth is budgeted by child-directory count (`max_child_dirs`) rather
+  than a prefix blocklist — the blocklist left whole trees unbrowsable, which defeats the point.
+
+* **Also** — `version_picker_html()` shares one picker between both apps and the docs;
+  `cog_tile_url(color=)` renders a flat binary mask on stock titiler; `mdl_key_raw()` is vectorised;
+  `sdm_db_path("v3")` falls back to the standard layout instead of hardcoding the legacy path (its
+  test had asserted the legacy path *unconditionally*, encoding the bug it should have caught).
+
 # msens 0.14.0
 
 *Foundations for one app serving every MST version (v1–v8), instead of a forked app per release.*
