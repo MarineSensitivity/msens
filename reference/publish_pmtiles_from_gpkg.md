@@ -19,7 +19,7 @@ publish_pmtiles_from_gpkg(
   workers = NULL,
   redo = FALSE,
   minzoom = 0,
-  maxzoom = 6,
+  maxzoom = 10,
   simplification = 10
 )
 ```

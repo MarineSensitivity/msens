@@ -21,7 +21,7 @@ publish_pmtiles_models(
   workers = NULL,
   redo = FALSE,
   minzoom = 0,
-  maxzoom = 6,
+  maxzoom = 10,
   simplification = 10
 )
 ```
