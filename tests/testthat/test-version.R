@@ -177,3 +177,20 @@ test_that("malformed capability overrides are rejected, not silently ignored", {
   expect_error(manifest_build(mk_rel(), "v8", capabilities = list(TRUE)), "NAMED list")
   expect_error(manifest_build(mk_rel(), "v8", capabilities = list(x = "yes")), "single logicals")
 })
+
+test_that("zones carry zone_set_key and its PMTiles when the release has them", {
+  con <- mk_rel(v8 = TRUE)
+  DBI::dbExecute(con, "ALTER TABLE zone ADD COLUMN zone_set_key VARCHAR")
+  DBI::dbExecute(con, "UPDATE zone SET zone_set_key = 'programarea_2026-01'")
+  m <- manifest_build(con, "v8",
+    zone_tiles = list("programarea_2026-01" = "https://x/zones/programarea_2026-01/zones.pmtiles"))
+  expect_true("zone_set_key" %in% names(m$zones))
+  expect_match(m$zones$pmtiles[1], "programarea_2026-01/zones\\.pmtiles$")
+})
+
+test_that("a release predating zone_set_key still builds a manifest", {
+  # v1-v7 as originally written have no such column; the app falls back
+  m <- manifest_build(mk_rel(v8 = FALSE), "v7")
+  expect_false("zone_set_key" %in% names(m$zones))
+  expect_gt(nrow(m$zones), 0)
+})

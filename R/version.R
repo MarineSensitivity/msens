@@ -200,6 +200,9 @@ validate_manifest <- function(m, ver = NULL) {
 #'   `con` alone would advertise `cell_species_list = FALSE` and switch off a
 #'   panel that works. Overrides must be justified by checking the RELEASE, not
 #'   by optimism.
+#' @param zone_tiles named list of `zone_set_key` -> PMTiles URL, attached to
+#'   the zones table so an app resolves outlines by VINTAGE instead of a
+#'   hardcoded unversioned filename on the file host
 #' @param extra named list merged into the manifest (e.g. `zone_sets`)
 #' @return a validated manifest list
 #' @importFrom DBI dbListTables dbListFields dbGetQuery
@@ -208,7 +211,8 @@ validate_manifest <- function(m, ver = NULL) {
 #' @concept version
 manifest_build <- function(con, ver, status = "released",
                            grid_id = grid_for_ver(ver), base = atlas_base_url(),
-                           metrics = NULL, capabilities = list(), extra = list()) {
+                           metrics = NULL, capabilities = list(),
+                           zone_tiles = list(), extra = list()) {
   tbls <- DBI::dbListTables(con)
   has  <- function(x) x %in% tbls
   http <- sprintf("%s/%s", base, ver)
@@ -235,8 +239,15 @@ manifest_build <- function(con, ver, status = "released",
   if (!is.null(metrics) && nrow(met))
     met <- merge(met, metrics, by = "metric_key", all.x = TRUE)
 
+  # zone_set_key when the release carries it, so the app can resolve each spatial
+  # unit's PMTiles by vintage rather than a hardcoded, unversioned filename
+  has_zsk <- has("zone") && "zone_set_key" %in% DBI::dbListFields(con, "zone")
   zones <- if (has("zone"))
-    DBI::dbGetQuery(con, "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY 2") else data.frame()
+    DBI::dbGetQuery(con, if (has_zsk)
+      "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY 3"
+      else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY 2") else data.frame()
+  if (nrow(zones) && length(zone_tiles) && "zone_set_key" %in% names(zones))
+    zones$pmtiles <- unname(unlist(zone_tiles[zones$zone_set_key])[zones$zone_set_key])
 
   caps <- list(
     cell_species_list     = has("cell_model"),

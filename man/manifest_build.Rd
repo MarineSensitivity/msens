@@ -12,6 +12,7 @@ manifest_build(
   base = atlas_base_url(),
   metrics = NULL,
   capabilities = list(),
+  zone_tiles = list(),
   extra = list()
 )
 }
@@ -36,6 +37,10 @@ is published as a Parquet directory beside the database, so deriving from
 \code{con} alone would advertise \code{cell_species_list = FALSE} and switch off a
 panel that works. Overrides must be justified by checking the RELEASE, not
 by optimism.}
+
+\item{zone_tiles}{named list of \code{zone_set_key} -> PMTiles URL, attached to
+the zones table so an app resolves outlines by VINTAGE instead of a
+hardcoded unversioned filename on the file host}
 
 \item{extra}{named list merged into the manifest (e.g. \code{zone_sets})}
 }
