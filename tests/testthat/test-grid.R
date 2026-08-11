@@ -92,3 +92,25 @@ test_that("wrap has no effect on a -180..180 grid", {
   g <- grid_spec_for("global05")
   expect_equal(cell_lonlat(12345, g, wrap = TRUE), cell_lonlat(12345, g, wrap = FALSE))
 })
+
+test_that("cell_from_lonlat round-trips with cell_lonlat on both grids", {
+  for (gid in c("usa05", "global05")) {
+    g <- grid_spec_for(gid)
+    ids <- c(1, 5000, 123456, g$nc + 7)
+    ll  <- cell_lonlat(ids, g)                    # wrapped to -180..180
+    back <- cell_from_lonlat(ll$lon, ll$lat, g)
+    expect_equal(back, as.numeric(ids), info = gid)
+  }
+})
+
+test_that("a point outside the grid is NA, not a wrapped-around cell", {
+  g <- grid_spec_for("usa05")                     # 141.10 E eastward, 82.6 N down
+  expect_true(is.na(cell_from_lonlat(0, 0, g)))   # mid-Atlantic: outside usa05
+  expect_true(is.na(cell_from_lonlat(-140, 89, g)))  # north of the grid
+})
+
+test_that("a -180..180 click resolves on a 0-360 grid", {
+  g <- grid_spec_for("usa05")
+  # -138.5 E is 221.5 in the grid's own frame, well inside it
+  expect_false(is.na(cell_from_lonlat(-138.5, 55, g)))
+})

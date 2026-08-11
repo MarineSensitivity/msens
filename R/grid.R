@@ -125,3 +125,43 @@ cell_lonlat <- function(cell_id, grid, wrap = TRUE) {
   if (isTRUE(grid$lon360) && isTRUE(wrap)) lon <- ifelse(lon >= 180, lon - 360, lon)
   data.frame(lon = lon, lat = grid$ymax - (row - 0.5) * grid$resy)
 }
+
+#' Cell id at a longitude/latitude (inverse of [cell_lonlat()])
+#'
+#' Pure arithmetic on the grid definition -- no raster read. The cell-id COGs are
+#' lookup IMAGES whose band name and frame vary by grid, so resolving a click by
+#' reading one is both slower and a source of bugs: selecting the band by name
+#' fails (usa05 calls it `r_cellid`, global05 `depth_mean`), and shifting a click
+#' to 0-360 lands outside a raster stored in -180..180. The grid registry already
+#' defines the mapping exactly.
+#'
+#' @param lon,lat coordinates in degrees, `lon` in -180..180
+#' @param grid grid spec from [grid_spec_for()]
+#' @return cell id, or `NA` where the point falls outside the grid
+#' @export
+#' @concept grid
+cell_from_lonlat <- function(lon, lat, grid) {
+  # a 0-360 grid stores its own frame, so bring a -180..180 click into it
+  if (isTRUE(grid$lon360)) lon <- ifelse(lon < grid$xmin, lon + 360, lon)
+  col <- floor((lon - grid$xmin) / grid$resx) + 1
+  row <- floor((grid$ymax - lat) / grid$resy) + 1
+  ok  <- col >= 1 & col <= grid$nc & row >= 1 & row <= grid$nr
+  ifelse(ok, (row - 1) * grid$nc + col, NA_real_)
+}
+
+#' Public URL of a grid's cell-id COG
+#'
+#' The cell-id lookup published beside the release data, so a client can resolve
+#' "which cell is at this point?" through the same titiler `/cog/point` call it
+#' uses for the layer value -- no local raster, and the id comes from the same
+#' authority the tiles do. Written INT4U with **no overviews**: cell ids are
+#' categorical, and a resampled pyramid would average them into ids that do not
+#' exist.
+#'
+#' @param grid_id `usa05` or `global05`
+#' @param base atlas base URL from [atlas_base_url()]
+#' @return an https URL
+#' @export
+#' @concept grid
+grid_cellid_url <- function(grid_id, base = atlas_base_url())
+  sprintf("%s/grid/%s/cellid.tif", base, grid_id)

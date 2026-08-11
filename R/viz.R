@@ -1016,3 +1016,34 @@ utils::globalVariables(c(
   "component", "scientific", "common", "er_code", "er_score",
   "is_mmpa", "is_mbta", "area_km2", "avg_suit", "pct_cat",
   "pct_component", "taxon", "model", "cat"))
+
+#' Value of a COG at a point, via titiler
+#'
+#' Asks the tile server what the layer shows at a coordinate, instead of the app
+#' opening a raster itself. The pixels the user is looking at and the number in
+#' the popup then come from the SAME source, so they cannot disagree -- and the
+#' app needs no local copy of the surface, which is the point of publishing COGs.
+#'
+#' @param cog_url the COG the layer is drawn from
+#' @param lon,lat coordinates in degrees (-180..180)
+#' @param base titiler base URL
+#' @param timeout seconds before giving up
+#' @return numeric value, or `NA` if the point is nodata/outside or the request
+#'   fails -- a popup is not worth an error dialog
+#' @export
+#' @concept viz
+cog_point_value <- function(cog_url, lon, lat,
+                            base = "https://titiler-v8.marinesensitivity.org",
+                            timeout = 8) {
+  if (!is.character(cog_url) || length(cog_url) != 1 || !nzchar(cog_url)) return(NA_real_)
+  u <- sprintf("%s/cog/point/%s,%s?url=%s", base,
+               format(lon, digits = 10), format(lat, digits = 10),
+               utils::URLencode(cog_url, reserved = TRUE))
+  j <- tryCatch(
+    jsonlite::fromJSON(paste(readLines(url(u), warn = FALSE), collapse = "")),
+    error = function(e) NULL, warning = function(w) NULL)
+  v <- if (is.null(j)) NULL else j$values
+  if (is.null(v) || !length(v)) return(NA_real_)
+  v <- suppressWarnings(as.numeric(v[[1]]))
+  if (length(v) != 1 || is.na(v)) NA_real_ else v
+}

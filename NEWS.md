@@ -1,3 +1,19 @@
+# msens 0.20.0
+
+* **Resolve a clicked point through titiler, not a local raster.** `cog_point_value()` calls
+  `GET /cog/point/{lon},{lat}` so the number in a popup comes from the same surface the user is
+  looking at, and `grid_cellid_url()` names the grid's cell-id COG so the cell id resolves the same
+  way. Reading the raster in the app produced three separate bugs: the band is named `r_cellid` on
+  `usa05` and `depth_mean` on `global05` (selecting `$cell_id` returned NULL), longitude was
+  shifted to 0-360 while both images are stored -180..180 (every Americas click sampled outside the
+  image), and a `SpatRaster` cached across Shiny sessions is a stale external pointer that
+  **segfaults** the process -- which is why clicking the map disconnected the app with no R error
+  and nothing in the log.
+
+* **`cell_from_lonlat()`** — the exact inverse of `cell_lonlat()`, pure arithmetic on the grid
+  definition, so a click still resolves if the tile server is briefly unavailable. Round-trips with
+  `cell_lonlat()` on both grids; a point outside the grid is `NA` rather than a wrapped-around cell.
+
 # msens 0.19.0
 
 * **`manifest_build()` emits one zone row per spatial unit.** v2 and v3 each carry two subregion
