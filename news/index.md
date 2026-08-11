@@ -1,5 +1,19 @@
 # Changelog
 
+## msens 0.18.0
+
+- **Registry fetches are cached on DISK, not just in-process.**
+  `latest.txt`, `versions.json` and `manifest.json` were memoised per R
+  process — but shiny-server starts a fresh process per session, so
+  every visitor re-fetched all three over HTTPS. Measured at **0.58 s**,
+  landing squarely inside time-to-first-byte for each session (TTFB was
+  ~0.87–1.14 s total). Off disk the same reads are microseconds. TTL’d
+  at 300 s rather than permanent, because promoting a release rewrites
+  `latest.txt` and republishing rewrites a manifest; `MSENS_ATLAS_TTL=0`
+  or `refresh = TRUE` bypasses it, `MSENS_ATLAS_CACHE` relocates it.
+  Written via write-then-rename so a concurrent reader never sees a
+  half-written file.
+
 ## msens 0.17.0
 
 - **`cell_lonlat(wrap = )`** — `wrap = FALSE` keeps a 0-360 grid in its

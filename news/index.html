@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/MarineSensitivity/msens/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.18.0" id="msens-0180">msens 0.18.0<a class="anchor" aria-label="anchor" href="#msens-0180"></a></h2>
+<ul><li>
+<strong>Registry fetches are cached on DISK, not just in-process.</strong> <code>latest.txt</code>, <code>versions.json</code> and <code>manifest.json</code> were memoised per R process — but shiny-server starts a fresh process per session, so every visitor re-fetched all three over HTTPS. Measured at <strong>0.58 s</strong>, landing squarely inside time-to-first-byte for each session (TTFB was ~0.87–1.14 s total). Off disk the same reads are microseconds. TTL’d at 300 s rather than permanent, because promoting a release rewrites <code>latest.txt</code> and republishing rewrites a manifest; <code>MSENS_ATLAS_TTL=0</code> or <code>refresh = TRUE</code> bypasses it, <code>MSENS_ATLAS_CACHE</code> relocates it. Written via write-then-rename so a concurrent reader never sees a half-written file.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.17.0" id="msens-0170">msens 0.17.0<a class="anchor" aria-label="anchor" href="#msens-0170"></a></h2>
 <ul><li>
