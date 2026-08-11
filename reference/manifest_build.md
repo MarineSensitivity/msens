@@ -18,6 +18,7 @@ manifest_build(
   metrics = NULL,
   capabilities = list(),
   zone_tiles = list(),
+  zone_sets = NULL,
   extra = list()
 )
 ```
@@ -66,6 +67,16 @@ manifest_build(
   named list of `zone_set_key` -\> PMTiles URL, attached to the zones
   table so an app resolves outlines by VINTAGE instead of a hardcoded
   unversioned filename on the file host
+
+- zone_sets:
+
+  the zone-set registry (`data/zone_sets.csv`), used to resolve
+  `zone_set_key` for a release whose own `zone` table predates that
+  column. Only v8 stamps `zone_set_key` into the database; v1–v7 record
+  a spatial unit as `tbl`/`fld` only, so without the registry every
+  historical manifest comes out with no `zone_set_key` and therefore no
+  `pmtiles` — the app then cannot draw a single zone outline on any
+  version but the newest.
 
 - extra:
 

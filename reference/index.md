@@ -85,6 +85,8 @@ used it, so one Program Area is comparable across versions
   : Group zone layers into distinct vintages by geometry
 - [`zone_set_key()`](http://marinesensitivity.org/msens/reference/zone_set_key.md)
   : Compose (and validate) a zone-set key
+- [`zone_set_resolve()`](http://marinesensitivity.org/msens/reference/zone_set_resolve.md)
+  : Resolve a release's zone columns to zone-set keys via the registry
 
 ## Atlas & database
 

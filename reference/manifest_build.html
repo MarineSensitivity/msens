@@ -63,6 +63,7 @@ which spatial units were scored — is <em>read</em>, not assumed.</p>
 <span>  metrics <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  capabilities <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  zone_tiles <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  zone_sets <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -110,6 +111,15 @@ by optimism.</p></dd>
 <dd><p>named list of <code>zone_set_key</code> -&gt; PMTiles URL, attached to
 the zones table so an app resolves outlines by VINTAGE instead of a
 hardcoded unversioned filename on the file host</p></dd>
+
+
+<dt id="arg-zone-sets">zone_sets<a class="anchor" aria-label="anchor" href="#arg-zone-sets"></a></dt>
+<dd><p>the zone-set registry (<code>data/zone_sets.csv</code>), used to resolve
+<code>zone_set_key</code> for a release whose own <code>zone</code> table predates that column.
+Only v8 stamps <code>zone_set_key</code> into the database; v1–v7 record a spatial unit
+as <code>tbl</code>/<code>fld</code> only, so without the registry every historical manifest comes
+out with no <code>zone_set_key</code> and therefore no <code>pmtiles</code> — the app then cannot
+draw a single zone outline on any version but the newest.</p></dd>
 
 
 <dt id="arg-extra">extra<a class="anchor" aria-label="anchor" href="#arg-extra"></a></dt>
