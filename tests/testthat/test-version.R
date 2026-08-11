@@ -251,3 +251,19 @@ test_that("distinct urls do not collide in the cache", {
   expect_false(identical(msens:::.hash_str("https://x/latest.txt"),
                          msens:::.hash_str("https://x/versions.json")))
 })
+
+test_that("zones collapse to one row per spatial unit", {
+  # v2/v3 carry TWO subregion tables under one fld; both resolve to the canonical
+  # vintage, so the manifest listed subregion twice and a manifest-driven picker
+  # would offer the same choice twice
+  z <- data.frame(
+    zone_set_key = c("subregion_2025-06", "subregion_2025-06", "programarea_2026-01"),
+    tbl = c("ply_subregions_a", "ply_subregions_b", "ply_programareas_2026"),
+    fld = c("subregion_key", "subregion_key", "programarea_key"),
+    n   = c(4, 9, 20), stringsAsFactors = FALSE)
+  ord <- order(z$zone_set_key, -as.numeric(z$n))
+  z2  <- z[ord, , drop = FALSE]
+  z2  <- z2[!duplicated(z2$zone_set_key) | is.na(z2$zone_set_key), , drop = FALSE]
+  expect_equal(nrow(z2), 2)
+  expect_equal(z2$n[z2$fld == "subregion_key"], 9)   # keeps the larger count
+})

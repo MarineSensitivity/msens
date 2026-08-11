@@ -304,6 +304,21 @@ manifest_build <- function(con, ver, status = "released",
   if (nrow(zones) && !("zone_set_key" %in% names(zones)) && !is.null(zone_sets))
     zones$zone_set_key <- zone_set_resolve(ver, zones$fld, zone_sets)
 
+  # One row per SPATIAL UNIT, not per source table. v2 and v3 each carry two
+  # subregion tables under one `fld` (a legacy of synthesising subregions per
+  # release), which both resolve to the same canonical vintage -- so the manifest
+  # listed subregion twice and an app keying its picker on the manifest would
+  # offer the same choice twice. Collapse on zone_set_key, keeping the largest
+  # `n` so the count still describes the unit rather than whichever table sorted
+  # first.
+  if (nrow(zones) && "zone_set_key" %in% names(zones)) {
+    ord <- order(zones$zone_set_key, -as.numeric(zones$n))
+    zones <- zones[ord, , drop = FALSE]
+    zones <- zones[!duplicated(zones$zone_set_key) | is.na(zones$zone_set_key), , drop = FALSE]
+    zones <- zones[order(zones$fld), , drop = FALSE]
+    rownames(zones) <- NULL
+  }
+
   if (nrow(zones) && length(zone_tiles) && "zone_set_key" %in% names(zones))
     zones$pmtiles <- unname(unlist(zone_tiles[zones$zone_set_key])[zones$zone_set_key])
 

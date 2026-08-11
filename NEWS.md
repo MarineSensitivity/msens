@@ -1,3 +1,11 @@
+# msens 0.19.0
+
+* **`manifest_build()` emits one zone row per spatial unit.** v2 and v3 each carry two subregion
+  tables under a single `fld` (a legacy of synthesising subregions per release); both resolve to
+  the same canonical vintage, so the manifest listed `subregion` twice and any app keying its
+  picker on the manifest offered the same choice twice. Rows now collapse on `zone_set_key`,
+  keeping the largest `n` so the count describes the unit rather than whichever table sorted first.
+
 # msens 0.18.0
 
 * **Registry fetches are cached on DISK, not just in-process.** `latest.txt`, `versions.json` and
