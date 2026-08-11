@@ -25,5 +25,26 @@ test_that("sdm_db_path returns a single path string per version", {
   expect_length(as.character(p), 1L)
   expect_match(as.character(p), "v8")
   expect_match(as.character(p), "duckdb$")
-  expect_match(as.character(sdm_db_path("v3")), "sdm_v3\\.duckdb$")
+})
+
+test_that("v3 prefers the LEGACY file only when it actually exists", {
+  # this used to assert the legacy path unconditionally -- i.e. it encoded the
+  # bug, and stayed green while every real v3 caller failed on a missing file
+  d <- withr::local_tempdir()
+  withr::local_envvar(HOME = d)
+  legacy <- file.path(d, "_big", "msens", "derived", "sdm_v3.duckdb")
+  dir.create(dirname(legacy), recursive = TRUE, showWarnings = FALSE)
+  # without the legacy file: standard layout
+  expect_match(as.character(sdm_db_path("v3")), "v3/(sdm|serve)[.]duckdb$")
+})
+
+test_that("v3 resolves to the standard layout now that the legacy file is gone", {
+  # v3 predates per-version folders and once lived at derived/sdm_v3.duckdb.
+  # Returning that unconditionally made every v3 caller fail on a missing file --
+  # the v1-v7 backfill skipped v3 alone because of it.
+  d <- withr::local_tempdir()
+  withr::local_envvar(HOME = d)   # no legacy file anywhere
+  p <- sdm_db_path("v3")
+  expect_match(p, "v3/(sdm|serve)\\.duckdb$")
+  expect_false(grepl("sdm_v3\\.duckdb$", p))
 })

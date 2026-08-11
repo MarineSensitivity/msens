@@ -18,12 +18,19 @@
 #' @concept db
 sdm_db_path <- function(version = "v6") {
   sysname <- Sys.info()[["sysname"]]
-  if (version == "v3") {
-    dir_data <- switch(
-      sysname,
+  # v3 once lived at derived/sdm_v3.duckdb, before releases were foldered by
+  # version. It has since moved to the standard big/{version}/ layout, so the
+  # special case is a FALLBACK, not the answer: returning the legacy path
+  # unconditionally made every v3 caller fail on a file that is not there
+  # (caught when the v1-v7 backfill skipped v3 alone).
+  legacy_v3 <- if (version == "v3") {
+    dir_data <- switch(sysname,
       "Darwin" = "~/My Drive/projects/msens/data",
       "Linux"  = "/share/data")
     glue::glue("{dir_data}/derived/sdm_v3.duckdb")
+  } else NULL
+  if (!is.null(legacy_v3) && file.exists(path.expand(legacy_v3))) {
+    legacy_v3
   } else {
     dir_big <- switch(
       sysname,
