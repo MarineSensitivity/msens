@@ -203,6 +203,12 @@ validate_manifest <- function(m, ver = NULL) {
 #' @param zone_tiles named list of `zone_set_key` -> PMTiles URL, attached to
 #'   the zones table so an app resolves outlines by VINTAGE instead of a
 #'   hardcoded unversioned filename on the file host
+#' @param zone_sets the zone-set registry (`data/zone_sets.csv`), used to resolve
+#'   `zone_set_key` for a release whose own `zone` table predates that column.
+#'   Only v8 stamps `zone_set_key` into the database; v1–v7 record a spatial unit
+#'   as `tbl`/`fld` only, so without the registry every historical manifest comes
+#'   out with no `zone_set_key` and therefore no `pmtiles` — the app then cannot
+#'   draw a single zone outline on any version but the newest.
 #' @param extra named list merged into the manifest (e.g. `zone_sets`)
 #' @return a validated manifest list
 #' @importFrom DBI dbListTables dbListFields dbGetQuery
@@ -212,7 +218,8 @@ validate_manifest <- function(m, ver = NULL) {
 manifest_build <- function(con, ver, status = "released",
                            grid_id = grid_for_ver(ver), base = atlas_base_url(),
                            metrics = NULL, capabilities = list(),
-                           zone_tiles = list(), extra = list()) {
+                           zone_tiles = list(), zone_sets = NULL,
+                           extra = list()) {
   tbls <- DBI::dbListTables(con)
   has  <- function(x) x %in% tbls
   http <- sprintf("%s/%s", base, ver)
@@ -246,6 +253,12 @@ manifest_build <- function(con, ver, status = "released",
     DBI::dbGetQuery(con, if (has_zsk)
       "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY 3"
       else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY 2") else data.frame()
+  # A release that predates the column gets its zone_set_key from the registry,
+  # matched on (zone_type, this version). Without this only v8 -- the one release
+  # that stamps the column into its own `zone` table -- ever carried zone tiles.
+  if (nrow(zones) && !("zone_set_key" %in% names(zones)) && !is.null(zone_sets))
+    zones$zone_set_key <- zone_set_resolve(ver, zones$fld, zone_sets)
+
   if (nrow(zones) && length(zone_tiles) && "zone_set_key" %in% names(zones))
     zones$pmtiles <- unname(unlist(zone_tiles[zones$zone_set_key])[zones$zone_set_key])
 

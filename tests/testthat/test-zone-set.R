@@ -168,3 +168,43 @@ test_that("zone_geom_hash honours zone_type when several *_key columns exist", {
   expect_equal(zone_geom_hash(x, zone_type = "programarea")$geom_hash,
                zone_geom_hash(y, zone_type = "programarea")$geom_hash)
 })
+
+# zone_set_resolve() --------------------------------------------------------
+# Regression: only v8 stamps zone_set_key into its own `zone` table, so v1-v7
+# manifests were published with no zone_set_key and therefore no zone PMTiles --
+# the app could not draw an outline on any release but the newest.
+
+reg <- data.frame(
+  zone_set_key = c("ecoregion_2025-06", "programarea_2026-01",
+                   "planarea_2025-06", "subregion_2025-08"),
+  zone_type    = c("ecoregion", "programarea", "planarea", "subregion"),
+  versions     = c("v1 v2 v7 v8", "v2 v7 v8", "v1 v4", "v1"),
+  stringsAsFactors = FALSE)
+
+test_that("zone_set_resolve maps a legacy release's fld to its vintage", {
+  expect_equal(zone_set_resolve("v7", "programarea_key", reg), "programarea_2026-01")
+  expect_equal(zone_set_resolve("v7", c("ecoregion_key", "programarea_key"), reg),
+               c("ecoregion_2025-06", "programarea_2026-01"))
+})
+
+test_that("a version not listed for that zone type resolves to NA, not a guess", {
+  # v7 has no planarea vintage in the registry; drawing v1's outlines over v7
+  # scores would look entirely plausible and be wrong
+  expect_true(is.na(zone_set_resolve("v7", "planarea_key", reg)))
+  expect_true(is.na(zone_set_resolve("v3", "subregion_key", reg)))
+})
+
+test_that("an ambiguous registry resolves to NA rather than picking one", {
+  amb <- rbind(reg, data.frame(
+    zone_set_key = "programarea_2026-06", zone_type = "programarea",
+    versions = "v7", stringsAsFactors = FALSE))
+  expect_true(is.na(zone_set_resolve("v7", "programarea_key", amb)))
+})
+
+test_that("substring version names do not match", {
+  # "v1" must not match "v10"/"v1b" via a bare grepl
+  r <- data.frame(zone_set_key = "programarea_2026-01", zone_type = "programarea",
+                  versions = "v10 v4b", stringsAsFactors = FALSE)
+  expect_true(is.na(zone_set_resolve("v1", "programarea_key", r)))
+  expect_equal(zone_set_resolve("v4b", "programarea_key", r), "programarea_2026-01")
+})

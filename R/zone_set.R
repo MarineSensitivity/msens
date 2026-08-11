@@ -94,6 +94,37 @@ zone_geom_hash <- function(x, key_col = NULL, zone_type = NULL, layer = NULL) {
          algo = "xxhash64"), 1, 16))
 }
 
+#' Resolve a release's zone columns to zone-set keys via the registry
+#'
+#' Only v8 stamps `zone_set_key` into its own `zone` table; v1–v7 identify a
+#' spatial unit by `fld` (`programarea_key`) and a per-version table name
+#' (`ply_programareas_2026_v7`). This maps the former to the vintage that release
+#' actually used, by matching `zone_type` and finding `ver` in the registry's
+#' space-separated `versions` column.
+#'
+#' Returns `NA` rather than guessing when a release's zone type is absent from
+#' the registry, or when the registry lists more than one vintage of that type
+#' for the same version. A wrong outline is worse than a missing one: it would
+#' draw the 2026 Program Areas over scores computed on a different geometry and
+#' look entirely plausible.
+#'
+#' @param ver MST version, e.g. `"v7"`
+#' @param fld zone key column(s) from the release's `zone` table
+#' @param zone_sets the registry (`data/zone_sets.csv`)
+#' @return character vector of `zone_set_key`, `NA` where unresolvable
+#' @export
+#' @concept zone_set
+zone_set_resolve <- function(ver, fld, zone_sets) {
+  stopifnot(all(c("zone_set_key", "zone_type", "versions") %in% names(zone_sets)))
+  zt  <- sub("_key$", "", fld)
+  vapply(zt, function(t) {
+    hit <- zone_sets[zone_sets$zone_type == t &
+                     vapply(strsplit(as.character(zone_sets$versions), "\\s+"),
+                            function(vs) ver %in% vs, logical(1)), , drop = FALSE]
+    if (nrow(hit) == 1L) as.character(hit$zone_set_key) else NA_character_
+  }, character(1), USE.NAMES = FALSE)
+}
+
 #' Compose (and validate) a zone-set key
 #'
 #' @param zone_type one of `planarea`, `programarea`, `ecoregion`, `subregion`

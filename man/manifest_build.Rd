@@ -13,6 +13,7 @@ manifest_build(
   metrics = NULL,
   capabilities = list(),
   zone_tiles = list(),
+  zone_sets = NULL,
   extra = list()
 )
 }
@@ -41,6 +42,13 @@ by optimism.}
 \item{zone_tiles}{named list of \code{zone_set_key} -> PMTiles URL, attached to
 the zones table so an app resolves outlines by VINTAGE instead of a
 hardcoded unversioned filename on the file host}
+
+\item{zone_sets}{the zone-set registry (\code{data/zone_sets.csv}), used to resolve
+\code{zone_set_key} for a release whose own \code{zone} table predates that column.
+Only v8 stamps \code{zone_set_key} into the database; v1–v7 record a spatial unit
+as \code{tbl}/\code{fld} only, so without the registry every historical manifest comes
+out with no \code{zone_set_key} and therefore no \code{pmtiles} — the app then cannot
+draw a single zone outline on any version but the newest.}
 
 \item{extra}{named list merged into the manifest (e.g. \code{zone_sets})}
 }
