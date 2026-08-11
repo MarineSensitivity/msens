@@ -143,8 +143,19 @@ cell_lonlat <- function(cell_id, grid, wrap = TRUE) {
 cell_from_lonlat <- function(lon, lat, grid) {
   # a 0-360 grid stores its own frame, so bring a -180..180 click into it
   if (isTRUE(grid$lon360)) lon <- ifelse(lon < grid$xmin, lon + 360, lon)
+  # Row uses ceiling, column floor+1 -- the asymmetry only shows at an exact cell
+  # boundary, and it matches GDAL there for `global05`.
+  #
+  # This is a FALLBACK, not the authority: the published cell-id COG is, and the
+  # app asks titiler for it first. Validated against that COG at interior points
+  # on both grids -- all agreed. Exactly ON a boundary `usa05` can still differ by
+  # one cell, because `r_cellid.tif` is a lookup IMAGE whose pixels are aligned to
+  # -180 while the usa05 grid is defined from 141.10 E, so the two disagree about
+  # which side of the line a point sits on. A map click delivers floats, never an
+  # exact multiple of 0.05, so this does not arise in practice -- and if it ever
+  # matters, read the COG.
   col <- floor((lon - grid$xmin) / grid$resx) + 1
-  row <- floor((grid$ymax - lat) / grid$resy) + 1
+  row <- pmax(1, ceiling((grid$ymax - lat) / grid$resy))
   ok  <- col >= 1 & col <= grid$nc & row >= 1 & row <= grid$nr
   ifelse(ok, (row - 1) * grid$nc + col, NA_real_)
 }
