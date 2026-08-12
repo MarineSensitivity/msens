@@ -32,6 +32,24 @@
 #' mdl_key_raw("gm", 1234, "01")    # "gm|1234|01"
 #' @export
 #' @concept mdl_key
+#' Normalise a legacy dataset key to the `mdl_key` grammar
+#'
+#' v1–v7 spell AquaMaps `am_0.05` (the 0.5° source resolution baked into the
+#' name); the `mdl_key` grammar uses `am`. Minting a key from the raw legacy
+#' string yields `am_0.05|Fis-29291`, which matches nothing in v8 — so a
+#' crosswalk built without this silently fails to join the two generations.
+#'
+#' Lives here rather than inline in the backfill notebook because it is a rule
+#' about the key grammar, and rules belong in the package where a test can
+#' assert them.
+#'
+#' @param dataset_key character vector of dataset keys, legacy or current
+#' @return the same vector with legacy spellings normalised
+#' @export
+#' @concept mdl_key
+normalize_ds_key <- function(dataset_key)
+  sub("^am_0\\.05$", "am", dataset_key)
+
 mdl_key_raw <- function(dataset_key, sp_id, interval = NULL) {
   # vectorised, like mdl_key_merged(): a backfill mints tens of thousands of keys
   # at once, and the scalar-only form failed inside mutate() with an opaque

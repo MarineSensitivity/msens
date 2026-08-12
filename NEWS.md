@@ -1,3 +1,12 @@
+# msens 0.21.0
+
+* **`normalize_ds_key()`** — v1–v7 spell AquaMaps `am_0.05`; the `mdl_key` grammar uses `am`.
+  The rule had been an inline `sub()` in `backfill_versions.qmd`, so it was untested and invisible
+  to anyone reading the package — and minting a key from the raw legacy string yields
+  `am_0.05|Fis-29291`, which matches nothing in v8, silently failing to join the two generations.
+  Now exported and asserted, including a round-trip of `mdl_key_raw()` against the **real**
+  published v1/v3/v7 `model_asset.parquet` rows rather than synthetic fixtures.
+
 # msens 0.20.0
 
 * **Resolve a clicked point through titiler, not a local raster.** `cog_point_value()` calls
