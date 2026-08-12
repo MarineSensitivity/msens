@@ -1,3 +1,14 @@
+# msens 0.21.1
+
+* **Fixes `mdl_key_raw()` losing its export in 0.21.0.** `normalize_ds_key()` was inserted between
+  `mdl_key_raw()`'s roxygen block and the function itself, which silently reassigned that block —
+  `mdl_key_raw` dropped out of `NAMESPACE` entirely. Nothing failed at build or test time; it
+  surfaced as `'mdl_key_raw' is not an exported object from 'namespace:msens'` partway through a
+  backfill render.
+
+* **New `test-exports.R` guards the whole class.** It asserts the public surface other repos call,
+  and checks that every `@export` is followed by a definition rather than another roxygen block.
+
 # msens 0.21.0
 
 * **`normalize_ds_key()`** — v1–v7 spell AquaMaps `am_0.05`; the `mdl_key` grammar uses `am`.

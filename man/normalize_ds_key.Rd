@@ -2,40 +2,25 @@
 % Please edit documentation in R/mdl_key.R
 \name{normalize_ds_key}
 \alias{normalize_ds_key}
-\title{Compose a raw (per-dataset) model key}
+\title{Normalise a legacy dataset key to the \code{mdl_key} grammar}
 \usage{
 normalize_ds_key(dataset_key)
 }
 \arguments{
 \item{dataset_key}{character vector of dataset keys, legacy or current}
-
-\item{sp_id}{dataset-native species/guild id(s) (character or coercible)}
-
-\item{interval}{optional interval label(s), e.g. month \code{"01"} or season \code{"summer"}}
 }
 \value{
-character \code{mdl_key}(s)
-
 the same vector with legacy spellings normalised
 }
 \description{
-The stable id for a native, per-dataset model: \code{{dataset_key}|{sp_id}} with an
-optional trailing \verb{|\{interval\}} for time-resolved models (monthly \code{gm}, seasonal
-\code{nc}). Vectorised over \code{sp_id} (and \code{interval}).
-}
-\examples{
-mdl_key_raw("am", "Fis-29291")   # "am|Fis-29291"
-mdl_key_raw("gm", 1234, "01")    # "gm|1234|01"
-}
-\concept{mdl_key}
-\concept{mdl_key
-Normalise a legacy dataset key to the `mdl_key` grammar
-
-v1–v7 spell AquaMaps `am_0.05` (the 0.5° source resolution baked into the
-name); the `mdl_key` grammar uses `am`. Minting a key from the raw legacy
-string yields `am_0.05|Fis-29291`, which matches nothing in v8 — so a
+v1–v7 spell AquaMaps \code{am_0.05} (the 0.5° source resolution baked into the
+name); the \code{mdl_key} grammar uses \code{am}. Minting a key from the raw legacy
+string yields \code{am_0.05|Fis-29291}, which matches nothing in v8 — so a
 crosswalk built without this silently fails to join the two generations.
-
+}
+\details{
 Lives here rather than inline in the backfill notebook because it is a rule
 about the key grammar, and rules belong in the package where a test can
-assert them.}
+assert them.
+}
+\concept{mdl_key}

@@ -17,21 +17,6 @@
 .MDL_KEY_SEP <- "|"
 .TAXON_AUTHORITIES <- c("WORMS", "BOTW", "ITIS", "GBIF", "SLB")
 
-#' Compose a raw (per-dataset) model key
-#'
-#' The stable id for a native, per-dataset model: `{dataset_key}|{sp_id}` with an
-#' optional trailing `|{interval}` for time-resolved models (monthly `gm`, seasonal
-#' `nc`). Vectorised over `sp_id` (and `interval`).
-#'
-#' @param dataset_key scalar dataset key, e.g. `"am"`, `"gm"`, `"nc"`, `"botw"`
-#' @param sp_id dataset-native species/guild id(s) (character or coercible)
-#' @param interval optional interval label(s), e.g. month `"01"` or season `"summer"`
-#' @return character `mdl_key`(s)
-#' @examples
-#' mdl_key_raw("am", "Fis-29291")   # "am|Fis-29291"
-#' mdl_key_raw("gm", 1234, "01")    # "gm|1234|01"
-#' @export
-#' @concept mdl_key
 #' Normalise a legacy dataset key to the `mdl_key` grammar
 #'
 #' v1–v7 spell AquaMaps `am_0.05` (the 0.5° source resolution baked into the
@@ -50,6 +35,21 @@
 normalize_ds_key <- function(dataset_key)
   sub("^am_0\\.05$", "am", dataset_key)
 
+#' Compose a raw (per-dataset) model key
+#'
+#' The stable id for a native, per-dataset model: `{dataset_key}|{sp_id}` with an
+#' optional trailing `|{interval}` for time-resolved models (monthly `gm`, seasonal
+#' `nc`). Vectorised over `sp_id` (and `interval`).
+#'
+#' @param dataset_key scalar dataset key, e.g. `"am"`, `"gm"`, `"nc"`, `"botw"`
+#' @param sp_id dataset-native species/guild id(s) (character or coercible)
+#' @param interval optional interval label(s), e.g. month `"01"` or season `"summer"`
+#' @return character `mdl_key`(s)
+#' @examples
+#' mdl_key_raw("am", "Fis-29291")   # "am|Fis-29291"
+#' mdl_key_raw("gm", 1234, "01")    # "gm|1234|01"
+#' @export
+#' @concept mdl_key
 mdl_key_raw <- function(dataset_key, sp_id, interval = NULL) {
   # vectorised, like mdl_key_merged(): a backfill mints tens of thousands of keys
   # at once, and the scalar-only form failed inside mutate() with an opaque
