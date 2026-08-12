@@ -120,3 +120,90 @@ mdl_key_parse <- function(mdl_key) {
     taxon_authority = taxon_authority,
     taxon_id        = taxon_id)
 }
+
+#' Assign the dense integer `mdl_id` for a set of models
+#'
+#' `mdl_id` is the compact partition key of the serving surface
+#' (`serve/model_cell/mdl_id={id}/`), so a titiler tile is a partition-pruned point
+#' read. The **stable public identifier stays `mdl_key`**: titiler resolves
+#' `mdl_key -> mdl_id` from the published `model` registry, so `mdl_id` never
+#' appears in a URL.
+#'
+#' That indirection has a sharp edge. A plain `dense_rank(mdl_key)` is a
+#' deterministic function of the model *set*, which means **adding any model
+#' renumbers every model sorted after it**. Ingesting `gm` + `nc` into a released
+#' version's `dist/` — registered but deliberately not merged — moved 45,499 of
+#' v8's 80,261 `mdl_id`s, and nothing would have failed: the registry and the
+#' `serve/` partitions would simply disagree, and titiler would serve the wrong
+#' species' distribution for every model past `ch_nmfs`.
+#'
+#' So ids are assigned **against the published registry when one exists**: a
+#' `mdl_key` already published keeps its id, and new keys are appended above the
+#' current maximum in sorted order. Deterministic given
+#' (published registry, model set), and it can never invalidate a published
+#' partition. With `published = NULL` (a version that has never shipped) it falls
+#' back to `dense_rank` over the sorted keys, which is what produced the ids of
+#' every release to date.
+#'
+#' @param mdl_key character vector of model keys (need not be unique or sorted)
+#' @param published optional data frame of the already-published registry with
+#'   columns `mdl_key` and `mdl_id`; ids for keys present here are preserved
+#' @return integer vector of `mdl_id`, parallel to `mdl_key`
+#' @examples
+#' assign_mdl_id(c("b", "a", "c"))                                     # 2 1 3
+#' assign_mdl_id(c("b", "a", "c"),
+#'               data.frame(mdl_key = c("a", "c"), mdl_id = c(1L, 2L))) # 3 1 2
+#' @export
+#' @concept mdl_key
+assign_mdl_id <- function(mdl_key, published = NULL) {
+  mdl_key <- as.character(mdl_key)
+  keys    <- sort(unique(mdl_key))
+  if (is.null(published) || !nrow(published)) {
+    ids <- stats::setNames(seq_along(keys), keys)
+    return(unname(as.integer(ids[mdl_key])))
+  }
+  if (!all(c("mdl_key", "mdl_id") %in% names(published)))
+    stop("`published` must have columns `mdl_key` and `mdl_id`", call. = FALSE)
+  pub <- published[!duplicated(published$mdl_key), c("mdl_key", "mdl_id")]
+  if (anyDuplicated(pub$mdl_id))
+    stop("`published` has duplicate `mdl_id` — it is not a valid partition key", call. = FALSE)
+  ids <- stats::setNames(as.integer(pub$mdl_id), as.character(pub$mdl_key))
+
+  # new keys go above the published maximum, in sorted order, so no published
+  # partition is ever renumbered
+  new <- setdiff(keys, names(ids))
+  if (length(new))
+    ids <- c(ids, stats::setNames(max(ids, 0L) + seq_along(new), sort(new)))
+  unname(ids[mdl_key])
+}
+
+#' Which datasets actually fed the scored surface?
+#'
+#' A release's `dataset` table registers every dataset that was *ingested*, which is
+#' not the same as every dataset the scores were computed from. v8 ingests NOAA SEFSC
+#' (`gm`) and NCCOS (`nc`) density models into `dist/`, but their density units
+#' (#/km²) are not yet mapped onto the [0,100] suitability scale, so they are
+#' deliberately excluded from the merge — and therefore contribute nothing to any
+#' score. Listing them beside AquaMaps as though they did overstates the inputs.
+#'
+#' The test is introspected, never asserted: a dataset is scored iff it contributed at
+#' least one model to a merged taxon, i.e. its `ds_key` appears in `taxon_model`. The
+#' merged dataset itself (`ms_merge`) is scored by construction — it *is* the surface
+#' scoring reads.
+#'
+#' @param ds_key character vector of dataset keys to classify
+#' @param taxon_model_ds_key `ds_key` column of that release's `taxon_model` (the
+#'   taxon ↔ contributing-model edges); `NULL` when the release does not publish the
+#'   relation, in which case every registered dataset is assumed scored — the honest
+#'   answer when the release gives no way to tell
+#' @param merged_key the merged dataset's key
+#' @return logical vector parallel to `ds_key`
+#' @examples
+#' dataset_is_scored(c("ms_merge", "am", "gm"), c("am", "am", "bl"))  # TRUE TRUE FALSE
+#' @export
+#' @concept mdl_key
+dataset_is_scored <- function(ds_key, taxon_model_ds_key, merged_key = "ms_merge") {
+  ds_key <- as.character(ds_key)
+  if (is.null(taxon_model_ds_key)) return(rep(TRUE, length(ds_key)))
+  ds_key %in% c(merged_key, unique(as.character(taxon_model_ds_key)))
+}

@@ -1,3 +1,29 @@
+# msens 0.22.0
+
+* **`assign_mdl_id()`** — assigns the dense integer `mdl_id` that partitions the serving surface
+  (`serve/model_cell/mdl_id={id}/`). Previously this was an inline `dense_rank(mdl_key)` in
+  `build_registry.qmd`, which makes the id a function of the model *set*: **adding any model
+  renumbers every model sorted after it**. Ingesting `gm` + `nc` into v8's `dist/` (registered but
+  deliberately not merged) moved **45,499 of 80,261** ids, and nothing would have failed — the
+  registry and the published partitions would simply disagree, and titiler would have served the
+  wrong species' distribution for every model past `ch_nmfs`. `assign_mdl_id()` preserves the id of
+  any `mdl_key` already in the published registry and appends new keys above the maximum, so a
+  published partition can never be renumbered. With no published registry it falls back to
+  `dense_rank`, and a test asserts that fallback reproduces v8's published ids exactly.
+
+* **`dataset_is_scored()`** — a release's `dataset` table registers what was *ingested*, which is
+  not what the scores were computed from. v8 ingests the NOAA SEFSC (`gm`) and NCCOS (`nc`) density
+  models into `dist/`, but their `#/km²` units are not yet mapped onto the `[0,100]` suitability
+  scale, so they are excluded from the merge and contribute to no score — reading the registry
+  straight gives 11 input datasets where 8 produced the numbers. The test is introspected from
+  `taxon_model` (did this dataset feed a merged taxon?), never declared, and `build_registry.qmd`
+  now stamps it as `dataset.is_scored`.
+
+* **`sdm_cols()` is now exported** (was internal `.sdm_cols()`). It resolves the v1–v7 vs v8 column
+  names — `is_ok`/`is_valid_usa`, `mdl_seq`/`ms_merge_key`, `value`/`val` — by introspecting the
+  connection. The versioned documentation asks the same question of the same published tables, and
+  a second copy of the rule in the docs is exactly how a v3 page ends up printing a v8 column name.
+
 # msens 0.21.1
 
 * **Fixes `mdl_key_raw()` losing its export in 0.21.0.** `normalize_ds_key()` was inserted between

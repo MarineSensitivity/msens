@@ -255,19 +255,44 @@ scores_for_cells <- function(con, cells,
     dplyr::filter(component != "all")
 }
 
-# Resolve the v7 vs v8 column names for the species-table query (internal).
-#
-# The v8 rewrite renamed three things this query depends on, and the app-side
-# copy of it was never migrated — which is why the v8 "Table of Species" tab came
-# up empty with "Can't select columns that don't exist":
-#
-#   concept          v7                 v8
-#   taxon validity   is_ok              is_valid_usa
-#   model id         mdl_seq            ms_merge_key (taxon) / mdl_key (model_cell)
-#   cell value       value              val           (`value` is reserved in DuckDB)
-#
-# Resolved per connection so one implementation serves both schemas.
-.sdm_cols <- function(con, mc_tbl = "model_cell") {
+#' Resolve a release's column names for the cross-version queries
+#'
+#' The v8 rewrite renamed three things every taxon/model query depends on, and the
+#' app-side copy of one such query was never migrated — which is why the v8
+#' "Table of Species" tab came up empty with *"Can't select columns that don't
+#' exist"*:
+#'
+#' | concept | v1-v7 | v8 |
+#' | --- | --- | --- |
+#' | taxon validity | `is_ok` | `is_valid_usa` |
+#' | model id | `mdl_seq` | `ms_merge_key` (taxon) / `mdl_key` (`model_cell`) |
+#' | cell value | `value` | `val` (`value` is reserved in DuckDB) |
+#'
+#' Resolved **per connection** by introspection, so one implementation serves every
+#' release and no caller needs to know which generation it is talking to. Exported
+#' because the versioned documentation asks the same question of the same published
+#' tables — a second copy of the rule in the docs is exactly how a v3 page ends up
+#' printing a v8 column name.
+#'
+#' Note the semantics the names hide: v7's `is_ok` already baked in the
+#' marine/category cull, while v8's `is_valid_usa` only means "has >= 1 merged cell
+#' in US waters", so scoring eligibility on v8 additionally needs `is_marine`
+#' (returned as `marine`, `NA` when the release has no such column).
+#'
+#' @param con open connection to a release database, or to a set of views over one
+#' @param mc_tbl name of the model-cell table to inspect, or `NULL` to skip it.
+#'   Skipping matters on the server: inspecting `model_cell` there makes DuckDB LIST
+#'   the S3 prefix just to read a schema, which fails outright.
+#' @return a list with `valid`, `marine`, `tkey`, `mkey`, `val`
+#' @examples
+#' \dontrun{
+#' con <- attach_atlas(version = "v7")
+#' sdm_cols(con, mc_tbl = NULL)$valid   # "is_ok"
+#' }
+#' @importFrom DBI dbListFields
+#' @export
+#' @concept calc
+sdm_cols <- function(con, mc_tbl = "model_cell") {
   taxon_cols <- DBI::dbListFields(con, "taxon")
   # `mc_tbl` matters on the server: inspecting `model_cell` there means DuckDB
   # LISTs the S3 prefix just to read its schema, which fails
@@ -297,7 +322,7 @@ scores_for_cells <- function(con, cells,
 .species_sql <- function(con, cells_sql, tiles = NULL) {
   # decide the source FIRST, then only inspect that table's schema
   use_cm <- "cell_model" %in% DBI::dbListTables(con)
-  k <- .sdm_cols(con, if (use_cm) NULL else "model_cell")
+  k <- sdm_cols(con, if (use_cm) NULL else "model_cell")
   # SCORING ELIGIBILITY, not just "has cells". v7 encoded this in `is_ok`; v8
   # splits it out, so without these the table lists non-marine and excluded
   # taxa — the v8 run surfaced a cane toad (amphibian) as the first row of the

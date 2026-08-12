@@ -16,6 +16,9 @@ test_that("functions the workflows/apps call are actually exported", {
   expect_true(all(c(
     # model identity
     "mdl_key_raw", "mdl_key_merged", "mdl_key_parse", "normalize_ds_key",
+    "assign_mdl_id", "dataset_is_scored",
+    # cross-version schema resolution (apps AND the versioned docs)
+    "sdm_cols",
     # version + manifest registry
     "atlas_base_url", "atlas_latest", "atlas_versions", "atlas_resolve_ver",
     "atlas_manifest", "validate_manifest", "manifest_build", "manifest_can",
