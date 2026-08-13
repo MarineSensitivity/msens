@@ -1,3 +1,23 @@
+# msens 0.25.0
+
+* **`cell_grid_write()` / `cell_model_tile_check()`** — record the grid a serving database
+  tiles on, and prove the stored tile ids agree with it.
+
+  `cell_grid_ncol()` resolved the grid width from a `cell_grid` table in the database and
+  otherwise fell back to `global05`'s 7200 — and **no release had ever written that table**,
+  so the fallback was always taken. `cell_model` is Hive-partitioned by a tile id computed
+  from that width, so on every `usa05` release (v1–v7) the pruning filter named a *different,
+  perfectly valid* tile: `WHERE tile IN (…)` removed the only partition holding the cells and
+  the clicked-cell species list returned **empty instead of failing**. Measured on the
+  promoted release: a v7 cell holding 477 models reported 0 species. v8 passed only because
+  7200 happened to be its width.
+
+  `cell_model_tile_check()` cannot pass on that mismatch — it recomputes the tile for cells
+  taken from `cell_model` itself and compares with what is stored, naming both ids. Wired into
+  `backfill_versions.qmd` and the release view-DB + server repoint, so a serving database that
+  would silently answer "no species" now fails at build time. Guarded by `test-cell-grid.R`,
+  including the exact v7 mismatch and the never-written-`cell_grid` state every release shipped in.
+
 # msens 0.24.0
 
 * **`registry_merge()`** — merges a freshly built asset registry with the one already published,

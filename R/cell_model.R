@@ -97,3 +97,60 @@ cell_model_tiles <- function(cell_id, ncol = .CELL_GRID_NCOL) {
   col <- (cell_id - 1L) %%  ncol
   sort(unique((row %/% .CELL_TILE_SIDE) * n_across + (col %/% .CELL_TILE_SIDE)))
 }
+
+#' Record a database's grid, so tile pruning cannot guess it wrong
+#'
+#' [cell_grid_ncol()] resolves the grid width from a `cell_grid` table in the database
+#' and otherwise falls back to v8's 7200. **No release ever wrote that table**, so the
+#' fallback was always taken — correct for `global05` by coincidence and wrong for every
+#' `usa05` release. The consequence was silent and total: `cell_model` is Hive-partitioned
+#' by a tile id computed from the grid width, so a wrong width computes a *different, valid*
+#' tile id, `WHERE tile IN (…)` prunes away the only partition holding the cells, and the
+#' clicked-cell species list came back **empty** on v1-v7 rather than failing. Measured on
+#' the promoted release: a v7 cell with 477 models returned 0 species.
+#'
+#' Call this when building a serving database, before [cell_model_tile_check()].
+#'
+#' @param con a writable DBI connection to a serving database
+#' @param grid_id grid registry key, e.g. `"usa05"` or `"global05"`
+#' @return the written data frame, invisibly
+#' @export
+#' @concept calc
+cell_grid_write <- function(con, grid_id) {
+  g <- grid_spec_for(grid_id)
+  d <- data.frame(grid_id = g$grid_id, ncol = as.integer(g$nc), nrow = as.integer(g$nr),
+                  stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "cell_grid", d, overwrite = TRUE)
+  invisible(d)
+}
+
+#' Assert a database's stored tile ids match the width it reports
+#'
+#' The one check that **cannot pass on a mismatch**: it recomputes the tile id for cells
+#' taken from `cell_model` itself and compares them with the ids stored beside those cells.
+#' Counting rows, listing views, or querying a tile cannot distinguish a right width from a
+#' wrong one — a wrong tile id is still a valid tile id, so the query simply returns nothing.
+#'
+#' @param con a DBI connection to a serving database with a `cell_model` table/view
+#' @param n how many cells to sample
+#' @return `TRUE`, invisibly; errors on mismatch
+#' @export
+#' @concept calc
+cell_model_tile_check <- function(con, n = 20L) {
+  if (!"cell_model" %in% DBI::dbListTables(con)) return(invisible(TRUE))
+  d <- DBI::dbGetQuery(con, sprintf(
+    "SELECT cell_id, any_value(tile) AS tile FROM cell_model GROUP BY 1 LIMIT %d", as.integer(n)))
+  if (!nrow(d)) stop("cell_model is empty — nothing to verify", call. = FALSE)
+  ncol_db <- cell_grid_ncol(con)
+  want    <- vapply(d$cell_id, function(x) as.integer(cell_model_tiles(x, ncol = ncol_db)[1]), integer(1))
+  bad     <- which(want != as.integer(d$tile))
+  if (length(bad))
+    stop(sprintf(paste0(
+      "cell_model tile ids do not match the grid width this database reports (ncol = %d).\n",
+      "  e.g. cell_id %d is stored in tile %d but computes to tile %d\n",
+      "%d of %d sampled cells disagree. Tile pruning would silently return NO rows.\n",
+      "Write the correct grid with cell_grid_write(con, grid_id) before publishing."),
+      ncol_db, d$cell_id[bad[1]], as.integer(d$tile)[bad[1]], want[bad[1]],
+      length(bad), nrow(d)), call. = FALSE)
+  invisible(TRUE)
+}
