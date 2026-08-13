@@ -79,3 +79,27 @@ test_that("usa05 and global05 give DIFFERENT tiles for the same cell — the who
   expect_false(identical(cell_model_tiles(2493507L, ncol = 3103L),
                          cell_model_tiles(2493507L, ncol = 7200L)))
 })
+
+# v1/v2 predate extinction-risk scoring: their taxon table has no extrisk_code, er_score,
+# is_mmpa or is_mbta, and .species_sql selected all four unconditionally — so the clicked-cell
+# species list failed outright on those releases with a Binder Error.
+
+test_that("species_for_cells works on a taxon table with no extinction-risk columns", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "cell", data.frame(cell_id = 1:3, area_km2 = c(10, 10, 10)))
+  DBI::dbWriteTable(con, "cell_model", data.frame(
+    cell_id = c(1L, 1L, 2L), mdl_seq = c(11L, 12L, 11L), val = c(80, 40, 60),
+    tile = vapply(c(1L, 1L, 2L), function(x) as.integer(cell_model_tiles(x, ncol = 3103L)[1]), integer(1))))
+  # the v1/v2 shape: no extrisk_code / er_score / is_mmpa / is_mbta
+  DBI::dbWriteTable(con, "taxon", data.frame(
+    mdl_seq = c(11L, 12L), taxon_id = c(101L, 102L), taxon_authority = "worms",
+    scientific_name = c("Aaa bbb", "Ccc ddd"), common_name = c("A", "C"),
+    sp_cat = c("fish", "fish"), is_ok = TRUE, worms_is_marine = TRUE))
+  cell_grid_write(con, "usa05")
+
+  d <- species_for_cells(con, data.frame(cell_id = 1L, pct_covered = 100))
+  expect_equal(nrow(d), 2L)
+  expect_true(all(c("er_code", "er_score", "is_mmpa", "is_mbta") %in% names(d)))
+  expect_true(all(is.na(d$er_score)))          # absent, but the column keeps its place
+  expect_setequal(d$sp_scientific, c("Aaa bbb", "Ccc ddd"))
+})

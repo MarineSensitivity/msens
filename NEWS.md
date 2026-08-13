@@ -1,3 +1,12 @@
+# msens 0.26.0
+
+* **`species_for_cells()` works on releases that predate extinction-risk scoring.** The SELECT
+  named `extrisk_code`, `er_score`, `is_mmpa` and `is_mbta` unconditionally, but those columns
+  arrived in v3 — so on v1 and v2 the clicked-cell species list failed outright with
+  `Binder Error: ... does not have a column named "extrisk_code"`. They are now substituted as
+  typed NULLs, keeping the result's shape (`.species_shares()` multiplies by `er_score`, so a
+  missing column would surface as a silently absent share rather than an empty one).
+
 # msens 0.25.0
 
 * **`cell_grid_write()` / `cell_model_tile_check()`** — record the grid a serving database

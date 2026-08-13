@@ -361,6 +361,17 @@ sdm_cols <- function(con, mc_tbl = "model_cell") {
   } else {
     mc_from <- "model_cell mc"
   }
+  # The extinction-risk columns arrived in v3; v1 and v2 have no extrisk_code, er_score,
+  # is_mmpa or is_mbta at all, so selecting them unconditionally made those two releases fail
+  # outright with `Binder Error: ... does not have a column named "extrisk_code"`. Substitute
+  # typed NULLs so the result KEEPS ITS SHAPE — .species_shares() multiplies by er_score, and a
+  # missing column there would propagate as a silently absent share rather than an empty one.
+  tx <- DBI::dbListFields(con, "taxon")
+  col <- function(nm, expr, type) if (nm %in% tx) expr else sprintf("CAST(NULL AS %s)", type)
+  er_code  <- col("extrisk_code", "t.extrisk_code",     "VARCHAR")
+  er_score <- col("er_score",     "t.er_score / 100.0", "DOUBLE")
+  is_mmpa  <- col("is_mmpa",      "t.is_mmpa",          "BOOLEAN")
+  is_mbta  <- col("is_mbta",      "t.is_mbta",          "BOOLEAN")
   glue::glue("
     WITH z AS ({cells_sql})
     SELECT t.sp_cat,
@@ -368,10 +379,10 @@ sdm_cols <- function(con, mc_tbl = "model_cell") {
            t.scientific_name          AS sp_scientific,
            t.taxon_id,
            t.taxon_authority,
-           t.extrisk_code             AS er_code,
-           t.er_score / 100.0         AS er_score,
-           t.is_mmpa,
-           t.is_mbta,
+           {er_code}                  AS er_code,
+           {er_score}                 AS er_score,
+           {is_mmpa}                  AS is_mmpa,
+           {is_mbta}                  AS is_mbta,
            CAST(mc.{k$mkey} AS VARCHAR) AS mdl_key,
            sum(c.area_km2 * z.pct_covered / 100.0)                         AS area_km2,
            sum(mc.{k$val} * z.pct_covered) / sum(z.pct_covered) / 100.0    AS avg_suit
