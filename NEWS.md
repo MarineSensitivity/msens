@@ -1,3 +1,19 @@
+# msens 0.23.0
+
+* **`zone_score_delta()`** — compares per-zone scores between two releases across **every** metric,
+  for the versioned documentation's "what changed" summary. `pra_score_delta()` answers "did this
+  bump move the Program-Area composite?" for one metric; this answers "what did this release
+  actually move", which the species count cannot: v4, v4b and v5 all report an unchanged 9,795
+  valid species while changing the values substantially.
+
+  Comparability is asserted rather than assumed. Two releases can label a spatial unit identically
+  and mean different things by it — every release resolves `subregion_key` to the same zone-set
+  vintage while the member keys are `AK, AKL48, L48, USA` in v1, `AK, FULL, GA, PA, USA` in v7 and
+  `AK, AT, GA, PA, USA` in v8, so a vintage check alone would report a delta for a redefinition.
+  It compares only zones and metrics present on BOTH sides and returns what it had to drop.
+  Metrics move too: `extrisk_reptile` exists only in v1, `extrisk_all` only in v1–v2, and v8
+  replaces `extrisk_other` with `extrisk_primary_producer`.
+
 # msens 0.22.0
 
 * **`assign_mdl_id()`** — assigns the dense integer `mdl_id` that partitions the serving surface

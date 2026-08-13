@@ -152,3 +152,36 @@ test_that("identical labels are refused with a message about labels", {
   expect_error(score_delta(d, d, labels = c("v8", "v8")), "`labels` must differ")
   expect_no_error(score_delta(d, d, labels = c("v8a", "v8b")))
 })
+
+# zone_score_delta() -- the per-release "what moved" comparison. The rule that
+# matters is that it never compares things that only LOOK alike (see the v7 `FULL`
+# vs v8 `AT` subregion trap in the roxygen).
+test_that("zone_score_delta() compares only shared zones and metrics, and says what it dropped", {
+  a <- data.frame(zone_key = c("GAA","GAB","FULL"), metric_key = "extrisk_fish",
+                  score = c(10, 20, 30))
+  b <- data.frame(zone_key = c("GAA","GAB","AT"),   metric_key = "extrisk_fish",
+                  score = c(12, 20, 44))
+  r <- zone_score_delta(a, b, labels = c("v7","v8"))
+  expect_equal(r$n_zones_shared, 2)
+  expect_equal(r$zones_only_a, "FULL")
+  expect_equal(r$zones_only_b, "AT")
+  expect_equal(r$by_metric$n_zones, 2)          # FULL/AT excluded, not compared
+  expect_equal(r$by_metric$mean_delta, 1)       # (+2, 0) / 2
+  expect_equal(r$by_metric$max_abs_delta, 2)
+})
+
+test_that("zone_score_delta() reports metrics unique to one release rather than comparing them", {
+  a <- data.frame(zone_key = c("A","B"), metric_key = rep(c("extrisk_other","extrisk_fish"), each = 2),
+                  score = c(1, 2, 3, 4))
+  b <- data.frame(zone_key = c("A","B"), metric_key = rep(c("extrisk_primary_producer","extrisk_fish"), each = 2),
+                  score = c(9, 9, 3, 4))
+  r <- zone_score_delta(a, b)
+  expect_equal(r$metrics_only_a, "extrisk_other")
+  expect_equal(r$metrics_only_b, "extrisk_primary_producer")
+  expect_equal(r$by_metric$metric_key, "extrisk_fish")
+  expect_equal(r$by_metric$mean_abs_delta, 0)   # unchanged where comparable
+})
+
+test_that("zone_score_delta() rejects a frame missing the columns it needs", {
+  expect_error(zone_score_delta(data.frame(x = 1), data.frame(x = 1)), "zone_key")
+})

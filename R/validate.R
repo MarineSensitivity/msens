@@ -205,3 +205,91 @@ pra_score_delta <- function(con_a, con_b,
     DBI::dbGetQuery(con_b, q(con_b, labels[2])),
     key = "programarea_key", value = "score", labels = labels)
 }
+
+#' Compare per-zone scores between two releases, across every metric
+#'
+#' [pra_score_delta()] answers "did this bump move the Program-Area composite?"
+#' for one metric and one zone type. This answers the documentation question:
+#' *what did this release change, per zone, across all components* — so a release
+#' that altered values without altering membership (v4b's turtle merge, v5's MMPA
+#' fix) has something quantitative to show, instead of an unchanged species count.
+#'
+#' **Comparability is asserted, not assumed.** Two releases can label a spatial
+#' unit identically and mean different things by it, so the caller must pass units
+#' that match. The specific trap: every release's `subregion_key` resolves to the
+#' same zone-set vintage, while the member keys are `AK, AKL48, L48, USA` in v1,
+#' `AK, FULL, GA, PA, USA` in v7 and `AK, AT, GA, PA, USA` in v8 — a vintage check
+#' alone would compare `FULL` against `AT` and report a delta for what is really a
+#' redefinition. So this compares only zones and metrics present on BOTH sides,
+#' and RETURNS what it had to drop rather than quietly dropping it.
+#'
+#' Metrics move too: `extrisk_reptile` exists only in v1, `extrisk_all` only in
+#' v1–v2, and v8 replaces `extrisk_other` with `extrisk_primary_producer`. A
+#' metric on one side only is reported, never compared against nothing.
+#'
+#' @param a,b data frames of `zone_key`, `metric_key`, `score` for the earlier and
+#'   later release
+#' @param labels length-2 character labels for `a` and `b`
+#' @return a list with `by_metric` (one row per shared metric: `n_zones`,
+#'   `mean_a`, `mean_b`, `mean_delta`, `mean_abs_delta`, `max_abs_delta`, `cor`),
+#'   `zones_only_a`/`zones_only_b`, `metrics_only_a`/`metrics_only_b`, and
+#'   `n_zones_shared`
+#' @examples
+#' a <- data.frame(zone_key = c("GAA","GAB"), metric_key = "x", score = c(10, 20))
+#' b <- data.frame(zone_key = c("GAA","GAB"), metric_key = "x", score = c(12, 20))
+#' zone_score_delta(a, b)$by_metric
+#' @export
+#' @concept validate
+zone_score_delta <- function(a, b, labels = c("a", "b")) {
+  need <- c("zone_key", "metric_key", "score")
+  for (nm in c("a", "b")) {
+    d <- get(nm)
+    if (!is.data.frame(d) || !all(need %in% names(d)))
+      stop(sprintf("`%s` must be a data frame with columns %s", nm,
+                   paste(need, collapse = ", ")), call. = FALSE)
+  }
+  a$zone_key <- as.character(a$zone_key); b$zone_key <- as.character(b$zone_key)
+  a$metric_key <- as.character(a$metric_key); b$metric_key <- as.character(b$metric_key)
+
+  zones_a <- sort(unique(a$zone_key));   zones_b <- sort(unique(b$zone_key))
+  mets_a  <- sort(unique(a$metric_key)); mets_b  <- sort(unique(b$metric_key))
+  shared_z <- intersect(zones_a, zones_b)
+  shared_m <- intersect(mets_a, mets_b)
+
+  rows <- lapply(shared_m, function(mk) {
+    x <- a[a$metric_key == mk & a$zone_key %in% shared_z, ]
+    y <- b[b$metric_key == mk & b$zone_key %in% shared_z, ]
+    x <- x[!duplicated(x$zone_key), ]; y <- y[!duplicated(y$zone_key), ]
+    m <- merge(x[, c("zone_key", "score")], y[, c("zone_key", "score")],
+               by = "zone_key", suffixes = c("_a", "_b"))
+    if (!nrow(m)) return(NULL)
+    d <- as.numeric(m$score_b) - as.numeric(m$score_a)
+    data.frame(
+      metric_key     = mk,
+      n_zones        = nrow(m),
+      mean_a         = mean(as.numeric(m$score_a), na.rm = TRUE),
+      mean_b         = mean(as.numeric(m$score_b), na.rm = TRUE),
+      mean_delta     = mean(d, na.rm = TRUE),
+      mean_abs_delta = mean(abs(d), na.rm = TRUE),
+      max_abs_delta  = if (all(is.na(d))) NA_real_ else max(abs(d), na.rm = TRUE),
+      # a single constant metric on both sides has no correlation to report;
+      # stats::cor would warn and return NA, so say NA deliberately
+      cor            = if (nrow(m) > 2 &&
+                           stats::sd(m$score_a, na.rm = TRUE) > 0 &&
+                           stats::sd(m$score_b, na.rm = TRUE) > 0)
+                         stats::cor(as.numeric(m$score_a), as.numeric(m$score_b),
+                                    use = "complete.obs") else NA_real_,
+      stringsAsFactors = FALSE)
+  })
+  by_metric <- do.call(rbind, Filter(Negate(is.null), rows))
+  if (is.null(by_metric)) by_metric <- data.frame()
+
+  list(
+    labels          = labels,
+    by_metric       = by_metric,
+    n_zones_shared  = length(shared_z),
+    zones_only_a    = setdiff(zones_a, zones_b),
+    zones_only_b    = setdiff(zones_b, zones_a),
+    metrics_only_a  = setdiff(mets_a, mets_b),
+    metrics_only_b  = setdiff(mets_b, mets_a))
+}
