@@ -14,7 +14,7 @@ or ecoregion_key), aggregated with pct_covered weighting."><script async src="ht
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.26.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.27.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,7 +48,7 @@ or <code>ecoregion_key</code>), aggregated with <code>pct_covered</code> weighti
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">species_for_zone</span><span class="op">(</span><span class="va">con</span>, <span class="va">zone_fld</span>, <span class="va">zone_val</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">species_for_zone</span><span class="op">(</span><span class="va">con</span>, <span class="va">zone_fld</span>, <span class="va">zone_val</span>, use_precomputed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -66,10 +66,17 @@ or <code>ecoregion_key</code>), aggregated with <code>pct_covered</code> weighti
 <dt id="arg-zone-val">zone_val<a class="anchor" aria-label="anchor" href="#arg-zone-val"></a></dt>
 <dd><p>zone value, e.g. <code>"GAA"</code></p></dd>
 
+
+<dt id="arg-use-precomputed">use_precomputed<a class="anchor" aria-label="anchor" href="#arg-use-precomputed"></a></dt>
+<dd><p>read an existing <code>zone_taxon</code> table when present.
+<code>FALSE</code> forces the live aggregation — which is what <code><a href="build_zone_taxon.html">build_zone_taxon()</a></code>
+needs, since it must not rebuild the table out of its own previous output.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>tibble, same shape as <code><a href="species_for_cells.html">species_for_cells()</a></code></p>
+    <p>tibble, same shape as <code><a href="species_for_cells.html">species_for_cells()</a></code>, whichever release's
+schema the connection holds</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
