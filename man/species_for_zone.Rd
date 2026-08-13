@@ -4,7 +4,7 @@
 \alias{species_for_zone}
 \title{Species table aggregated across a zone}
 \usage{
-species_for_zone(con, zone_fld, zone_val)
+species_for_zone(con, zone_fld, zone_val, use_precomputed = TRUE)
 }
 \arguments{
 \item{con}{a DBI connection to an \code{sdm.duckdb}}
@@ -12,9 +12,14 @@ species_for_zone(con, zone_fld, zone_val)
 \item{zone_fld}{zone field, e.g. \code{"programarea_key"}}
 
 \item{zone_val}{zone value, e.g. \code{"GAA"}}
+
+\item{use_precomputed}{read an existing \code{zone_taxon} table when present.
+\code{FALSE} forces the live aggregation — which is what \code{\link[=build_zone_taxon]{build_zone_taxon()}}
+needs, since it must not rebuild the table out of its own previous output.}
 }
 \value{
-tibble, same shape as \code{\link[=species_for_cells]{species_for_cells()}}
+tibble, same shape as \code{\link[=species_for_cells]{species_for_cells()}}, whichever release's
+schema the connection holds
 }
 \description{
 One row per species within a named zone (\code{subregion_key}, \code{programarea_key}

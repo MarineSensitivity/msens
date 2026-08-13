@@ -1,3 +1,22 @@
+# msens 0.27.0
+
+* **`species_for_zone()` returns the same shape from every release's `zone_taxon`.** The
+  precomputed branch handed back the stored columns verbatim, so the answer's schema depended
+  on which release was open: v1/v2 published `rl_code` + `rl_score`, v3–v7 `rl_code` +
+  `er_score` on the raw 1–100 scale with `mdl_seq` and `suit_rl*`, and only v8 used the
+  canonical names. The scores app's "Table of Species" therefore died server-side on every
+  v1–v7 release with `Can't select columns that don't exist. x Column er_code doesn't exist`
+  (MarineSensitivity/apps#7). All vintages are now normalised to the live aggregation's shape
+  — `er_code`, `er_score` as a **fraction**, `mdl_key` as character — with the share columns
+  recomputed so they agree with the resolved scale. The 1–100 scale is identified from the
+  **schema** (`rl_code` marks the v1–v7 vintages), never guessed from the values, and a score
+  outside 0–1 now errors rather than rendering as 5000%.
+
+* **`species_for_zone(use_precomputed = FALSE)`**, used by `build_zone_taxon()`. The builder
+  drops the old table only after computing every zone, so it was reading its own previous
+  output back and writing it out again — a re-run after a scoring change would have reported
+  success while republishing the prior release's species table.
+
 # msens 0.26.0
 
 * **`species_for_cells()` works on releases that predate extinction-risk scoring.** The SELECT

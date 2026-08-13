@@ -197,6 +197,124 @@ test_that("species_for_zone prefers the precomputed zone_taxon when present", {
   # proof it is READING the table, not recomputing: doctor a row and see it back
   DBI::dbExecute(con, "UPDATE zone_taxon SET area_km2 = 12345 WHERE zone_value = 'AAA'")
   expect_equal(species_for_zone(con, "programarea_key", "AAA")$area_km2, 12345)
+
+  # ...and use_precomputed = FALSE goes back to the live aggregation
+  expect_equal(species_for_zone(con, "programarea_key", "AAA",
+                                use_precomputed = FALSE)$area_km2, expected_area)
+})
+
+test_that("build_zone_taxon rebuilds from the cells, not from its own last output", {
+  # REGRESSION: species_for_zone() prefers an existing zone_taxon, and
+  # build_zone_taxon() drops the old table only AFTER computing every zone — so a
+  # re-run read the stale rows back and wrote them out again. Re-running
+  # score_zone_metrics.qmd after a scoring change would have reported success
+  # while publishing the PREVIOUS release's species table.
+  con <- fixture_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  build_zone_taxon(con)
+  DBI::dbExecute(con, "UPDATE zone_taxon SET area_km2 = 12345, avg_suit = 0.999")
+
+  build_zone_taxon(con)                                    # must recompute
+  zt <- DBI::dbReadTable(con, "zone_taxon")
+  expect_equal(zt$area_km2, expected_area)
+  expect_equal(zt$avg_suit, expected_suit)
+})
+
+# ---- reading a PUBLISHED zone_taxon of each vintage --------------------------
+#
+# REGRESSION (apps#7): the precomputed branch returned the stored columns verbatim, so
+# species_for_zone() answered in whatever shape the open release happened to use. The v7
+# "Table of Species" tab died server-side on `Can't select columns that don't exist.
+# x Column er_code doesn't exist`, because v1-v7 name it `rl_code` and the model id
+# `mdl_seq`. Every published vintage must come back in the SAME canonical shape.
+
+# a zone_taxon exactly as each generation released it, with the same underlying numbers:
+#   area 200 km2, avg_suit 2/3, extinction risk 50% -> the v8 expectations above
+zone_taxon_published <- function(vintage = c("v1", "v3", "v8")) {
+  vintage <- match.arg(vintage)
+  base <- data.frame(
+    zone_fld = "programarea_key", zone_value = "AAA",
+    sp_cat = "mammal", sp_common = "alpha", sp_scientific = "Aaa aaa",
+    taxon_id = 1L, taxon_authority = "worms",
+    area_km2 = expected_area, avg_suit = expected_suit)
+  shares <- function(d, er) data.frame(d,
+    suit_rl = d$avg_suit * er, suit_rl_area = d$avg_suit * er * d$area_km2,
+    cat_suit_rl_area = d$avg_suit * er * d$area_km2, pct_cat = 1)
+  switch(vintage,
+    # v1/v2: the redlist score, already a fraction; no MMPA/MBTA flags at all
+    v1 = shares(data.frame(base, mdl_seq = 10L, rl_code = "EN", rl_score = 0.5), 0.5),
+    # v3-v7: er_score on the RAW 1-100 scale, still keyed on rl_code/mdl_seq
+    v3 = shares(data.frame(base, mdl_seq = 10L, rl_code = "EN", er_score = 50,
+                           is_mmpa = TRUE, is_mbta = FALSE), 0.5),
+    # v8: the canonical names, er_score already divided by 100
+    v8 = data.frame(base, mdl_key = "ms_merge|WORMS:1", er_code = "EN", er_score = 0.5,
+                    is_mmpa = TRUE, is_mbta = FALSE,
+                    suit_er = 0.5 * expected_suit,
+                    suit_er_area = 0.5 * expected_suit * expected_area,
+                    cat_suit_er_area = 0.5 * expected_suit * expected_area, pct_cat = 1))
+}
+
+# a connection holding ONLY that published table (which is all serve.duckdb has for the
+# zone question — its model_cell is an S3 view that cannot answer a zone-wide scan)
+published_db <- function(vintage) {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  DBI::dbWriteTable(con, "zone_taxon", zone_taxon_published(vintage))
+  con
+}
+
+test_that("a published zone_taxon reads back in the canonical shape, every vintage", {
+  canonical <- c("sp_cat", "sp_common", "sp_scientific", "taxon_id", "taxon_authority",
+                 "er_code", "er_score", "is_mmpa", "is_mbta", "mdl_key",
+                 "area_km2", "avg_suit", "suit_er", "suit_er_area",
+                 "cat_suit_er_area", "pct_cat")
+  # the id itself stays each release's own — v1-v7 renumber a mdl_seq, v8 keys on a
+  # stable string — but it always arrives as character, under the one name
+  want_id <- c(v1 = "10", v3 = "10", v8 = "ms_merge|WORMS:1")
+  for (v in c("v1", "v3", "v8")) {
+    con <- published_db(v)
+    d <- species_for_zone(con, "programarea_key", "AAA")
+
+    expect_equal(names(d), canonical, info = v)      # the app selects exactly these
+    expect_equal(nrow(d), 1L, info = v)
+    expect_equal(d$mdl_key, unname(want_id[v]), info = v)
+    expect_equal(d$er_code, "EN", info = v)          # v1-v7 rl_code renamed
+    expect_equal(d$er_score, 0.5, info = v)          # 1-100 scale divided; fractions left be
+    expect_equal(d$area_km2, expected_area, info = v)
+    expect_equal(d$avg_suit, expected_suit, info = v)
+    expect_equal(d$suit_er_area, 0.5 * expected_suit * expected_area, info = v)
+    expect_equal(d$pct_cat, 1, info = v)
+    DBI::dbDisconnect(con, shutdown = TRUE)
+  }
+})
+
+test_that("the v8 mdl_key survives normalisation unchanged", {
+  con <- published_db("v8"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  expect_equal(species_for_zone(con, "programarea_key", "AAA")$mdl_key, "ms_merge|WORMS:1")
+})
+
+test_that("v1/v2 have no MMPA/MBTA flags, and say so rather than claiming FALSE", {
+  # a missing protection is unknown, not absent: rendering it as FALSE would assert
+  # that a marine mammal is NOT MMPA-protected in releases that never recorded it
+  con <- published_db("v1"); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d <- species_for_zone(con, "programarea_key", "AAA")
+  expect_true(is.na(d$is_mmpa))
+  expect_true(is.na(d$is_mbta))
+  expect_type(d$is_mmpa, "logical")
+})
+
+test_that("an er_score that is not a fraction fails loudly", {
+  # the scale is decided by the SCHEMA (rl_code marks the 1-100 vintages). If a future
+  # release breaks that rule, the app would silently render 5000% -- so assert instead.
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  zt <- zone_taxon_published("v8"); zt$er_score <- 50      # canonical names, raw scale
+  DBI::dbWriteTable(con, "zone_taxon", zt)
+  expect_error(species_for_zone(con, "programarea_key", "AAA"), "fraction")
+})
+
+test_that("a zone_taxon with no model id column errors rather than dropping it", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  zt <- zone_taxon_published("v8"); zt$mdl_key <- NULL
+  DBI::dbWriteTable(con, "zone_taxon", zt)
+  expect_error(species_for_zone(con, "programarea_key", "AAA"), "model id")
 })
 
 test_that("species_for_cells uses cell_model when present, with identical results", {

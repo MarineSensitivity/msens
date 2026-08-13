@@ -395,6 +395,57 @@ sdm_cols <- function(con, mc_tbl = "model_cell") {
     GROUP BY 1,2,3,4,5,6,7,8,9,10")
 }
 
+# A published `zone_taxon` carries the column names of ITS OWN generation, so reading one
+# back is a schema question exactly like the live aggregation is. Three vintages exist:
+#
+#   v1, v2   rl_code, rl_score (already a fraction), no MMPA/MBTA flags
+#   v3-v7    rl_code, er_score on the RAW 1-100 scale, mdl_seq, suit_rl*
+#   v8       er_code, er_score as a fraction,          mdl_key, suit_er*
+#
+# The live path already normalises all of this (.species_sql aliases to mdl_key/er_code and
+# divides er_score by 100); the precomputed path returned the stored columns verbatim, so
+# species_for_zone() silently answered in a different shape depending on which release was
+# open. That is what broke the v7 "Table of Species": the app selects the canonical names and
+# got `Can't select columns that don't exist. x Column er_code doesn't exist`.
+#
+# The er_score SCALE is decided by the schema, never by inspecting the values: "the numbers
+# look bigger than 1" is a guess that a release of all-least-concern taxa would get wrong.
+# `rl_code` is the v1-v7 marker, and only v3-v7 pair it with a raw-scale er_score.
+.zone_taxon_normalize <- function(d) {
+  nm <- names(d)
+  chr <- function(x) if (is.null(x)) NA_character_ else as.character(x)
+
+  mdl_key <- if ("mdl_key" %in% nm) chr(d$mdl_key) else
+    if ("mdl_seq" %in% nm) chr(d$mdl_seq) else
+      stop("zone_taxon has no recognizable model id column (mdl_key/mdl_seq)", call. = FALSE)
+
+  er_score <- if ("er_score" %in% nm) {
+    if ("rl_code" %in% nm) d$er_score / 100 else d$er_score   # v3-v7 stored 1-100
+  } else if ("rl_score" %in% nm) d$rl_score else NA_real_     # v1/v2, already a fraction
+  # a fraction is the contract .species_shares() and the app's formatPercentage() both assume,
+  # so a future vintage that breaks the rule above must say so rather than render as 1000%
+  stopifnot("zone_taxon er_score is not a 0-1 fraction" =
+              all(is.na(er_score) | (er_score >= 0 & er_score <= 1)))
+
+  out <- tibble::tibble(
+    sp_cat          = d$sp_cat,
+    sp_common       = d$sp_common,
+    sp_scientific   = d$sp_scientific,
+    taxon_id        = d$taxon_id,
+    taxon_authority = d$taxon_authority,
+    er_code         = if ("er_code" %in% nm) chr(d$er_code) else chr(d[["rl_code"]]),
+    er_score        = as.numeric(er_score),
+    is_mmpa         = if ("is_mmpa" %in% nm) as.logical(d$is_mmpa) else NA,
+    is_mbta         = if ("is_mbta" %in% nm) as.logical(d$is_mbta) else NA,
+    mdl_key         = mdl_key,
+    area_km2        = as.numeric(d$area_km2),
+    avg_suit        = as.numeric(d$avg_suit))
+  # recomputed rather than read: the stored share columns are named per vintage too
+  # (suit_rl/suit_rl_area/cat_suit_rl_area), and deriving them here is what guarantees they
+  # agree with the er_score scale just resolved above
+  .species_shares(out)
+}
+
 # shared post-aggregation: per-species and per-category contribution shares
 .species_shares <- function(d) {
   d |>
@@ -465,7 +516,10 @@ build_zone_taxon <- function(con, overwrite = TRUE) {
   stopifnot("no zones found" = nrow(zones) > 0)
   out <- vector("list", nrow(zones))
   for (i in seq_len(nrow(zones))) {
-    d <- species_for_zone(con, zones$fld[i], zones$val[i])
+    # use_precomputed = FALSE: this function BUILDS zone_taxon, so reading an existing
+    # one here would "rebuild" it out of its own previous output — every re-run after a
+    # scoring change would copy the stale rows forward and report success.
+    d <- species_for_zone(con, zones$fld[i], zones$val[i], use_precomputed = FALSE)
     if (nrow(d) == 0) next
     out[[i]] <- dplyr::mutate(d, zone_fld = zones$fld[i], zone_value = zones$val[i],
                               .before = 1)
@@ -491,10 +545,14 @@ build_zone_taxon <- function(con, overwrite = TRUE) {
 #' @param con a DBI connection to an `sdm.duckdb`
 #' @param zone_fld zone field, e.g. `"programarea_key"`
 #' @param zone_val zone value, e.g. `"GAA"`
-#' @return tibble, same shape as [species_for_cells()]
+#' @param use_precomputed read an existing `zone_taxon` table when present.
+#'   `FALSE` forces the live aggregation — which is what [build_zone_taxon()]
+#'   needs, since it must not rebuild the table out of its own previous output.
+#' @return tibble, same shape as [species_for_cells()], whichever release's
+#'   schema the connection holds
 #' @export
 #' @concept calc
-species_for_zone <- function(con, zone_fld, zone_val) {
+species_for_zone <- function(con, zone_fld, zone_val, use_precomputed = TRUE) {
   stopifnot(length(zone_fld) == 1L, length(zone_val) == 1L)
 
   # PREFER THE PRECOMPUTED TABLE. On the server `con` is the KB-sized
@@ -504,13 +562,15 @@ species_for_zone <- function(con, zone_fld, zone_val) {
   # build_zone_taxon() where model_cell is local, and released alongside the
   # other tables) makes this a small indexed read. Falling back to the live
   # aggregation keeps local development working before/without that table.
-  if ("zone_taxon" %in% DBI::dbListTables(con)) {
+  if (use_precomputed && "zone_taxon" %in% DBI::dbListTables(con)) {
     q <- glue::glue(
       "SELECT * FROM zone_taxon ",
       "WHERE zone_fld = {DBI::dbQuoteString(con, zone_fld)} ",
       "AND zone_value = {DBI::dbQuoteString(con, zone_val)}")
     d <- dplyr::as_tibble(DBI::dbGetQuery(con, q))
-    return(dplyr::arrange(d, .data$sp_cat, .data$sp_scientific))
+    # normalised, NOT returned verbatim: a v1-v7 table speaks its own generation's
+    # column names, and the caller asked for a species table, not a v7 species table
+    return(.zone_taxon_normalize(d))
   }
 
   cells_sql <- glue::glue(
