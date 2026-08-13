@@ -366,3 +366,46 @@ test_that("model_cell is never touched when cell_model is available", {
   expect_equal(nrow(d), 1L)
   expect_equal(d$mdl_key, "ms_merge|WORMS:1")
 })
+
+# ---- the measurement column: `value` (v1-v7) vs `val` (v8) -------------------
+#
+# REGRESSION (apps#6 follow-up): the scores app hardcoded BOTH spellings in one file --
+# `cell_sql()` said `cm.val`, `get_rast()` said `value` -- so one of them was always wrong
+# for the release in hand. A v8 SOURCE database has only `val`, a v8 SERVED one has both,
+# and every v1-v7 database has only `value`.
+
+test_that("sdm_val_col picks the column the table actually has", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  DBI::dbWriteTable(con, "old", data.frame(zone_seq = 1L, value = 1))       # v1-v7
+  DBI::dbWriteTable(con, "new", data.frame(zone_seq = 1L, val = 1))         # v8 source
+  DBI::dbWriteTable(con, "both", data.frame(zone_seq = 1L, val = 1, value = 1))  # v8 served
+
+  expect_equal(sdm_val_col(con, "old"),  "value")
+  expect_equal(sdm_val_col(con, "new"),  "val")
+  # where the release wrote both, prefer the name the data is STORED under
+  expect_equal(sdm_val_col(con, "both"), "val")
+})
+
+test_that("sdm_val_col fails loudly on a table with neither", {
+  # silence beats a wrong guess here: returning "value" for a table that has no
+  # measurement column at all would surface as `cannot coerce type 'closure'`
+  # from inside the SQL translator, nowhere near this table
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "z", data.frame(zone_seq = 1L, fld = "x"))
+  expect_error(sdm_val_col(con, "z"), "neither")
+})
+
+test_that("sdm_val_col resolves every table the apps read, on both schemas", {
+  # the four tables that carry a measurement, in the two shapes a release comes in
+  for (schema in c("v7", "v8")) {
+    con <- DBI::dbConnect(duckdb::duckdb())
+    v   <- if (schema == "v7") "value" else "val"
+    for (t in c("zone", "zone_metric", "cell_metric", "model_cell")) {
+      d <- data.frame(seq = 1L, x = 1); names(d)[2] <- v
+      DBI::dbWriteTable(con, t, d)
+      expect_equal(sdm_val_col(con, t), v, info = paste(schema, t))
+    }
+    DBI::dbDisconnect(con, shutdown = TRUE)
+  }
+})

@@ -1,3 +1,20 @@
+# msens 0.28.0
+
+* **`sdm_val_col(con, tbl)`** — resolve whether a release's table calls its measurement
+  column `val` or `value`, by introspection rather than by guessing from the version.
+
+  v1–v7 named it `value` everywhere (`zone`, `zone_metric`, `cell_metric`, `model_cell`);
+  v8 renamed it `val`, away from DuckDB's reserved word. The trap is that the **two forms
+  of a v8 release disagree**: the served `serve.duckdb` carries `val` *and* a `value`
+  alias, while the source `sdm.duckdb` it was built from carries only `val`. So code that
+  hardcodes `value` works against every served release and fails against a v8 source, and
+  code that hardcodes `val` does exactly the opposite — the scores app had both spellings
+  in one file. Prefers `val` where both exist (the name the data is stored under) and
+  errors when neither is present, because the alternative failure is not a clean missing
+  column: in dplyr a bare `value` with no such column resolves to a **function** further up
+  the scope chain, and the error reads `cannot coerce type 'closure'` from inside the SQL
+  translator, naming neither the table nor the column.
+
 # msens 0.27.0
 
 * **`species_for_zone()` returns the same shape from every release's `zone_taxon`.** The

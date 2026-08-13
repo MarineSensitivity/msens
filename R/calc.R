@@ -317,6 +317,47 @@ sdm_cols <- function(con, mc_tbl = "model_cell") {
     val   = if (length(mc_cols)) pick(c("value", "val"), mc_cols, "model_cell value") else NA_character_)
 }
 
+#' Name of the measurement column in a release's table
+#'
+#' Returns `"val"` or `"value"` — whichever the given table actually has.
+#'
+#' Releases disagree, and **so do the two forms of the same release**. v1-v7 named the
+#' measurement `value` throughout (`zone`, `zone_metric`, `cell_metric`, `model_cell`).
+#' v8 renamed it `val`, away from DuckDB's reserved word — but the release step *also*
+#' writes a `value` alias into the served views, so a v8 `serve.duckdb` carries **both**
+#' while the v8 source `sdm.duckdb` it was built from carries only `val`.
+#'
+#' The practical consequence, and the reason this is a function rather than a constant:
+#' code that hardcodes `value` runs against every served release and fails against a v8
+#' source database, while code that hardcodes `val` does the exact opposite. Both spellings
+#' appeared in one app file. `val` is preferred where both exist, since that is the name
+#' the data is actually stored under.
+#'
+#' The failure this prevents is not a clean missing-column error. In dplyr/dbplyr a bare
+#' `value` with no such column resolves to a *function* further up the scope chain, so the
+#' error reads `cannot coerce type 'closure' to vector of type 'character'` from somewhere
+#' inside the SQL translator, far from the table that lacks the column.
+#'
+#' @param con open connection to a release database, or to a set of views over one
+#' @param tbl name of the table to inspect, e.g. `"zone"`, `"cell_metric"`
+#' @return `"val"` or `"value"`
+#' @examples
+#' \dontrun{
+#' con <- attach_atlas(version = "v7")
+#' sdm_val_col(con, "zone_metric")   # "value"
+#' }
+#' @importFrom DBI dbListFields
+#' @export
+#' @concept calc
+sdm_val_col <- function(con, tbl) {
+  stopifnot(length(tbl) == 1L)
+  flds <- DBI::dbListFields(con, tbl)
+  if ("val" %in% flds) return("val")
+  if ("value" %in% flds) return("value")
+  stop("`", tbl, "` has neither a `val` nor a `value` column; found: ",
+       paste(flds, collapse = ", "), call. = FALSE)
+}
+
 # The one species-table aggregation, given SQL that yields (cell_id, pct_covered).
 # Weighted by pct_covered so partially covered edge cells count proportionally.
 .species_sql <- function(con, cells_sql, tiles = NULL) {
