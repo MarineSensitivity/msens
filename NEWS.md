@@ -1,3 +1,21 @@
+# msens 0.24.0
+
+* **`registry_merge()`** — merges a freshly built asset registry with the one already published,
+  so `publish_native.qmd` can no longer delete an asset class it simply did not rebuild.
+
+  `native_asset` records what is *published*, but it was assembled from what a given run
+  *built* and written with `overwrite = TRUE`. Skipping a build chunk (`NATIVE_SKIP_PMTILES`,
+  or leaving an opt-in class such as `PUBLISH_MERGED_COG` off) therefore rewrote the table from
+  that run's products alone. In v8 this silently removed all 2,234 vector-range PMTiles rows
+  while the tiles themselves stayed on S3 and the file host: the species app offered AquaMaps
+  as the only input for every taxon — 2,240 input edges across 2,121 scored taxa lost their
+  layer — and the content-hash checkpoint recorded the loss as a clean run (`n_pmtiles_native: 0`).
+
+  A **class** is one `(ds_key, asset_type, representation)` triple. `registry_merge()` carries
+  forward, verbatim, every prior class the new registry has no rows for, and **errors** when a
+  class it does cover came back smaller — a partial build must not publish as a complete one.
+  Deliberate removals are explicit: `allow_shrink = TRUE`, wired to `NATIVE_REGISTRY_REBUILD=1`.
+
 # msens 0.23.0
 
 * **`zone_score_delta()`** — compares per-zone scores between two releases across **every** metric,

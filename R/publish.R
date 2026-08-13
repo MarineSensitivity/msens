@@ -275,3 +275,82 @@ publish_pmtiles_from_gpkg <- function(gpkg, layer, keys, dir_out, workers = NULL
   }
   do.call(rbind, res)
 }
+
+#' Merge a freshly built asset registry with the one already published
+#'
+#' `native_asset` is a registry of what is **published**, but `publish_native.qmd`
+#' assembles it from whatever a given run happened to build, then writes it with
+#' `overwrite = TRUE`. A run that skips a build chunk (`NATIVE_SKIP_PMTILES`, or an
+#' opt-in class such as `PUBLISH_MERGED_COG` left off) therefore rewrote the table
+#' from its own products alone, silently deleting every row of the classes it did not
+#' touch. That is exactly how all 2,234 vector-range PMTiles rows disappeared from the
+#' published v8 registry while the tiles themselves sat untouched on S3 and the file
+#' host: the species app stopped offering any range input, and the content-hash
+#' checkpoint recorded the loss as a clean run (`n_pmtiles_native: 0`).
+#'
+#' A **class** is one `(ds_key, asset_type, representation)` triple — the unit the app
+#' actually reasons about, since that is what becomes an input layer. This function:
+#'
+#' * **carries forward** every prior class the new registry has no rows for at all
+#'   (the skipped-chunk case: those assets are still published, the run just did not
+#'   enumerate them); and
+#' * **errors** when a class the new registry *does* cover came back smaller than it
+#'   was — a partial build masquerading as a complete one, which carrying forward
+#'   would paper over with a mix of fresh and stale rows.
+#'
+#' Deliberate removals stay possible but must be explicit: `allow_shrink = TRUE`
+#' (wired to `NATIVE_REGISTRY_REBUILD=1`) writes exactly what the run produced.
+#'
+#' @param new registry rows built by this run (data frame; may be zero-row)
+#' @param prior registry rows currently published (data frame, `NULL`, or zero-row)
+#' @param allow_shrink write `new` verbatim — no carry-forward, no shrink check
+#' @param key columns defining a class
+#' @return `new` plus any carried-forward rows, with the carried class labels in the
+#'   `"carried"` attribute and the per-class counts in `"classes"`
+#' @export
+#' @concept publish
+registry_merge <- function(new, prior, allow_shrink = FALSE,
+                           key = c("ds_key", "asset_type", "representation")) {
+  as_df <- function(x) if (is.null(x)) data.frame() else as.data.frame(x)
+  new <- as_df(new); prior <- as_df(prior)
+  # a zero-row registry legitimately has no columns yet (tibble()), so only demand the
+  # key columns of a registry that actually carries rows
+  for (nm in c("new", "prior")) {
+    d <- get(nm)
+    if (nrow(d) && !all(key %in% names(d)))
+      stop(sprintf("`%s` is missing registry key column(s): %s", nm,
+                   paste(setdiff(key, names(d)), collapse = ", ")), call. = FALSE)
+  }
+  cls <- function(d) if (!nrow(d)) character(0) else
+    do.call(paste, c(lapply(key, function(k) as.character(d[[k]])), sep = " | "))
+  n_new <- table(cls(new)); n_old <- table(cls(prior))
+
+  shrunk <- intersect(names(n_old), names(n_new))
+  shrunk <- shrunk[n_new[shrunk] < n_old[shrunk]]
+  if (length(shrunk) && !allow_shrink)
+    stop(sprintf(paste0(
+      "native_asset would SHRINK for %d asset class(es) — refusing to publish a partial ",
+      "build as if it were complete:\n%s\nRe-run the build for these classes, or set ",
+      "NATIVE_REGISTRY_REBUILD=1 if the removal is intended."),
+      length(shrunk),
+      paste(sprintf("  %s: %d -> %d rows", shrunk, n_old[shrunk], n_new[shrunk]),
+            collapse = "\n")), call. = FALSE)
+
+  carried <- setdiff(names(n_old), names(n_new))
+  out <- if (allow_shrink || !length(carried)) new else
+    rbind_fill(new, prior[cls(prior) %in% carried, , drop = FALSE])
+  attr(out, "carried") <- if (allow_shrink) character(0) else carried
+  attr(out, "classes") <- n_new
+  out
+}
+
+# bind two registries that need not share a column set (a carried-forward class may
+# predate a column the current build adds, e.g. the per-model bbox). base-only so the
+# package's publishing path stays free of a dplyr dependency at this depth.
+rbind_fill <- function(a, b) {
+  if (!nrow(b)) return(a)
+  if (!nrow(a)) return(b)
+  for (nm in setdiff(names(b), names(a))) a[[nm]] <- NA
+  for (nm in setdiff(names(a), names(b))) b[[nm]] <- NA
+  rbind(a, b[names(a)])
+}
