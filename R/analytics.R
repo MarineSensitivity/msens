@@ -175,20 +175,29 @@ ms_track <- function(session, event, ...) {
 #' `ui = function(req)` receives, is the only place the real client IP survives.
 #' See the `ip` argument of [ga_js()].
 #'
+#' Behind Cloudflare (the signed-in preview host is proxied through its edge)
+#' the connecting peer is a Cloudflare address, and the visitor is named by
+#' `CF-Connecting-IP`; that wins when present, then the first `X-Forwarded-For`
+#' hop, then `REMOTE_ADDR`. Analytics only -- nothing here is trusted for policy.
+#'
 #' @param x a Shiny `session`, or the `req` environment handed to a `ui`
 #'   function (anything carrying the request fields directly)
 #' @return character scalar, or `NA_character_` if unavailable
 #' @examples
 #' ms_client_ip(list(request = list(HTTP_X_FORWARDED_FOR = "203.0.113.7, 10.0.0.1")))
 #' ms_client_ip(list(HTTP_X_FORWARDED_FOR = "203.0.113.7"))   # a ui(req)
+#' ms_client_ip(list(HTTP_CF_CONNECTING_IP = "198.51.100.4",
+#'                   HTTP_X_FORWARDED_FOR = "198.51.100.4, 172.70.0.1"))
 #' @export
 #' @concept analytics
 ms_client_ip <- function(x) {
   tryCatch({
     # a session carries the fields under $request; a ui() req carries them itself
     req <- if (is.null(x$request)) x else x$request
+    cf  <- req[["HTTP_CF_CONNECTING_IP"]]
     xff <- req[["HTTP_X_FORWARDED_FOR"]]
-    if (!is.null(xff) && nzchar(xff)) trimws(strsplit(xff, ",")[[1]][1])
+    if (!is.null(cf) && nzchar(cf)) trimws(cf)
+    else if (!is.null(xff) && nzchar(xff)) trimws(strsplit(xff, ",")[[1]][1])
     else {
       addr <- req[["REMOTE_ADDR"]]
       if (is.null(addr) || !nzchar(addr)) NA_character_ else addr

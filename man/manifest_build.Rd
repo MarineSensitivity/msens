@@ -8,6 +8,7 @@ manifest_build(
   con,
   ver,
   status = "released",
+  access = atlas_access_default(status),
   grid_id = grid_for_ver(ver),
   base = atlas_base_url(),
   metrics = NULL,
@@ -23,6 +24,10 @@ manifest_build(
 \item{ver}{version label}
 
 \item{status}{\code{released}, \code{prerelease} or \code{retired}}
+
+\item{access}{\code{public} or \code{restricted}; defaults from \code{status} via
+\code{\link[=atlas_access_default]{atlas_access_default()}}, and is copied into the manifest so a release
+describes its own visibility}
 
 \item{grid_id}{defaults to \code{\link[=grid_for_ver]{grid_for_ver()}}}
 

@@ -66,6 +66,76 @@ test_that("atlas_versions rejects an unrecognized status", {
   expect_error(atlas_versions(b), "unknown status")
 })
 
+# --- access: who may be shown a version --------------------------------------
+# `status` (where a release is in its life) and `access` (who may see it) are
+# separate axes. A pre-release under review is `restricted`: shown only through
+# the signed-in preview host. The failure mode to guard is a LEAK, so every
+# default here closes rather than opens.
+
+test_that("access is derived fail-closed when versions.json predates the field", {
+  d <- atlas_versions(fake_atlas())          # fake_atlas writes no `access`
+  expect_true("access" %in% names(d))
+  expect_equal(d$access[d$ver == "v9"], "restricted")   # prerelease -> restricted
+  expect_equal(d$access[d$ver == "v8"], "public")       # released
+  expect_equal(d$access[d$ver == "v6"], "public")       # retired stays citable
+  expect_equal(atlas_access_default(c("prerelease", "released", "retired")),
+               c("restricted", "public", "public"))
+})
+
+test_that("an explicit access column wins over the derived default, per row", {
+  b <- fake_atlas(versions = data.frame(
+    ver = c("v9", "v8", "v7"), status = c("prerelease", "released", "retired"),
+    access = c("public", "restricted", NA)))            # NA -> derived
+  d <- atlas_versions(b)
+  expect_equal(d$access[d$ver == "v9"], "public")       # a public pre-release is allowed
+  expect_equal(d$access[d$ver == "v8"], "restricted")   # a released version may be gated
+  expect_equal(d$access[d$ver == "v7"], "public")       # NA derived from status
+  expect_equal(atlas_ver_access("v8", b), "restricted")
+  expect_error(atlas_ver_access("v99", b), "unknown version")
+})
+
+test_that("atlas_versions rejects an unrecognized access value", {
+  b <- fake_atlas(versions = data.frame(ver = "v8", status = "released", access = "hidden"))
+  expect_error(atlas_versions(b), "unknown access")
+})
+
+test_that("the public instance cannot resolve a restricted version; preview can", {
+  b <- fake_atlas()                                     # v9 prerelease -> restricted
+  # library default stays permissive: notebooks and the docs CI render restricted releases
+  expect_equal(atlas_resolve_ver("v9", b), "v9")
+  # the public app instance passes allow_access = "public" and gets a CLASSED error,
+  # distinguishable from "unknown version" so it can point at the preview host
+  expect_error(atlas_resolve_ver("v9", b, allow_access = "public"), class = "msens_restricted")
+  e <- tryCatch(atlas_resolve_ver("v9", b, allow_access = "public"), msens_restricted = function(e) e)
+  expect_equal(e$ver, "v9")
+  expect_equal(e$access, "restricted")
+  expect_match(conditionMessage(e), "preview.marinesensitivity.org")
+  # public versions resolve on either instance
+  expect_equal(atlas_resolve_ver("v7", b, allow_access = "public"), "v7")
+  # ...and `latest` is never affected: the promoted version is public by construction
+  expect_equal(atlas_resolve_ver(NULL, b, allow_access = "public"), "v8")
+})
+
+test_that("atlas_allow_access is the instance policy: MS_PREVIEW decides", {
+  withr::local_envvar(MS_PREVIEW = "")
+  expect_false(atlas_is_preview())
+  expect_equal(atlas_allow_access(), "public")
+  withr::local_envvar(MS_PREVIEW = "1")
+  expect_true(atlas_is_preview())
+  expect_setequal(atlas_allow_access(), c("public", "restricted"))
+  withr::local_envvar(MS_PREVIEW = "true")
+  expect_true(atlas_is_preview())
+  # explicit argument beats the environment (tests, notebooks)
+  expect_equal(atlas_allow_access(preview = FALSE), "public")
+})
+
+test_that("atlas_preview_url is overridable and never carries a trailing slash", {
+  withr::local_envvar(MS_PREVIEW_URL = "")
+  expect_equal(atlas_preview_url(), "https://preview.marinesensitivity.org")
+  withr::local_envvar(MS_PREVIEW_URL = "https://review.example.org/")
+  expect_equal(atlas_preview_url(), "https://review.example.org")
+})
+
 test_that("atlas_manifest resolves, fetches and validates", {
   m <- atlas_manifest("v8", fake_atlas())
   expect_equal(m$ver, "v8")
@@ -119,6 +189,14 @@ mk_rel <- function(env = parent.frame(), v8 = TRUE, extras = character()) {
 test_that("manifest_build reads the public model id off the release", {
   expect_equal(manifest_build(mk_rel(v8 = TRUE),  "v8")$id_field, "mdl_key")
   expect_equal(manifest_build(mk_rel(v8 = FALSE), "v7")$id_field, "mdl_seq")
+})
+
+test_that("manifest_build records access, defaulting from status", {
+  expect_equal(manifest_build(mk_rel(), "v8", status = "prerelease")$access, "restricted")
+  expect_equal(manifest_build(mk_rel(), "v8", status = "released")$access,   "public")
+  expect_equal(manifest_build(mk_rel(), "v8", status = "prerelease", access = "public")$access,
+               "public")
+  expect_error(manifest_build(mk_rel(), "v8", access = "hidden"), "access")
 })
 
 test_that("capabilities are derived from presence and default to FALSE", {

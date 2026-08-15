@@ -38,3 +38,21 @@ test_that("the link shape is caller-controlled (docs use paths, apps use ?ver=)"
   expect_match(h, "href='/docs/v7/'")
   expect_false(grepl("\\?ver=", h))
 })
+
+test_that("a restricted version is shown locked, and linked to the preview host when asked", {
+  v <- fake_versions()                       # v9 prerelease -> restricted by default
+  # public app: restricted rows link OUT to the signed-in preview host
+  h <- as.character(version_picker_html(
+    "v8", v, href_restricted = function(x) sprintf("https://preview.example.org/scores/?ver=%s", x)))
+  expect_match(h, "restricted")
+  expect_match(h, "href='https://preview.example.org/scores/\\?ver=v9'")
+  expect_match(h, "href='\\?ver=v7'")      # public rows keep the in-app link
+  expect_false(grepl("href='\\?ver=v9'", h))
+  # preview instance: no href_restricted -> restricted rows render in place
+  h2 <- as.character(version_picker_html("v8", v))
+  expect_match(h2, "href='\\?ver=v9'")
+  expect_match(h2, "restricted")            # still labelled, so a reviewer knows
+  # an explicit public pre-release is NOT locked
+  v$access <- c("public", "public", "public", "public")
+  expect_false(grepl("restricted", as.character(version_picker_html("v8", v))))
+})

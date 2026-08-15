@@ -7,7 +7,8 @@
 version_picker_html(
   current,
   versions = NULL,
-  href = function(v) sprintf("?ver=\%s", v)
+  href = function(v) sprintf("?ver=\%s", v),
+  href_restricted = NULL
 )
 }
 \arguments{
@@ -17,6 +18,11 @@ version_picker_html(
 
 \item{href}{a function of the version label returning its link
 (default \code{?ver={v}})}
+
+\item{href_restricted}{link builder for restricted versions, or \code{NULL} to use
+\code{href} (the preview instance, where restricted versions render in place).
+The public app passes e.g.
+\code{function(v) sprintf("\%s/scores/?ver=\%s", atlas_preview_url(), v)}.}
 }
 \value{
 an \code{\link[htmltools:tagList]{htmltools::tagList()}}
@@ -25,6 +31,9 @@ an \code{\link[htmltools:tagList]{htmltools::tagList()}}
 Lists every published version newest-first, marks the one on screen, and links
 to the others via \verb{?ver=}. Retired and pre-release versions are labelled
 rather than hidden: a reader following a citation to v4 needs to find it, and
-needs to be told it is superseded.
+needs to be told it is superseded. A \strong{restricted} version (under review;
+see \code{\link[=atlas_allow_access]{atlas_allow_access()}}) is shown too -- locked, and linked through
+\code{href_restricted} when the caller supplies one, so a reviewer on the public
+app finds the door to the signed-in preview host rather than a dead link.
 }
 \concept{version}

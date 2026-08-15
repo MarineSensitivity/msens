@@ -1,3 +1,28 @@
+# msens 0.30.0
+
+* **The version registry gains `access`** (`public` / `restricted`), a second axis beside `status`:
+  where a release is in its life vs *who may be shown it*. A pre-release under review by SDM data
+  providers and BOEM/NOAA colleagues is `restricted` — reachable only through the signed-in
+  `preview.marinesensitivity.org` host — while retired releases stay `public` because citations
+  point at them. `atlas_versions()` parses the column and, when a `versions.json` predates it,
+  **derives it fail-closed** via the new `atlas_access_default()` (`prerelease → restricted`, else
+  `public`), so an old registry read by a new app can hide a release but never leak one.
+* `atlas_resolve_ver()` gains `allow_access`. The library default stays permissive (notebooks and
+  the docs CI must render restricted releases for the preview branch); the **app instance** passes
+  the new `atlas_allow_access()` — `"public"` unless `MS_PREVIEW=1` (`atlas_is_preview()`), the
+  one place the preview policy lives. A refused restricted version raises a classed
+  `msens_restricted` condition (with `$ver`, `$access`) so an app can say *"sign in at the preview
+  host"* rather than *"unknown version"*. Enforcement is by *process* — a second Shiny Server
+  instance whose wrapper sets `MS_PREVIEW=1` — never a trusted header, because Shiny Server OSS
+  forwards none to the R worker's websocket.
+* New `atlas_ver_access()` and `atlas_preview_url()` (`MS_PREVIEW_URL`, default
+  `https://preview.marinesensitivity.org`).
+* `manifest_build()` gains `access` (defaults from `status`) and writes it into the manifest.
+* `version_picker_html()` shows restricted versions **locked** (🔒 badge) and takes
+  `href_restricted` so the public app links them to the preview host instead of a dead `?ver=`.
+* `ms_client_ip()` prefers `CF-Connecting-IP` when present (the preview host is proxied through
+  Cloudflare; analytics only).
+
 # msens 0.29.0
 
 * **`merge_sql()$global` masks AquaMaps to the expert range again**, as `$us` always has. The

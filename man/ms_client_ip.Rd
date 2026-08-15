@@ -27,9 +27,16 @@ address while the websocket handshake shows \verb{HTTP_HOST 127.0.0.1:<worker po
 and no forwarded header at all). The page's HTTP request, which
 \verb{ui = function(req)} receives, is the only place the real client IP survives.
 See the \code{ip} argument of \code{\link[=ga_js]{ga_js()}}.
+
+Behind Cloudflare (the signed-in preview host is proxied through its edge)
+the connecting peer is a Cloudflare address, and the visitor is named by
+\code{CF-Connecting-IP}; that wins when present, then the first \code{X-Forwarded-For}
+hop, then \code{REMOTE_ADDR}. Analytics only -- nothing here is trusted for policy.
 }
 \examples{
 ms_client_ip(list(request = list(HTTP_X_FORWARDED_FOR = "203.0.113.7, 10.0.0.1")))
 ms_client_ip(list(HTTP_X_FORWARDED_FOR = "203.0.113.7"))   # a ui(req)
+ms_client_ip(list(HTTP_CF_CONNECTING_IP = "198.51.100.4",
+                  HTTP_X_FORWARDED_FOR = "198.51.100.4, 172.70.0.1"))
 }
 \concept{analytics}

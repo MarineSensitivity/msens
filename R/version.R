@@ -6,8 +6,15 @@
 # These helpers make it a DATA fact instead, so one app renders any version:
 #
 #   latest.txt          the newest RELEASED version (never a pre-release)
-#   versions.json       {"versions":[{ver,status,released,...}]}
+#   versions.json       {"versions":[{ver,status,access,released,...}]}
 #   {ver}/manifest.json everything needed to render that version (see atlas_manifest)
+#
+# `status` says where a release is in its life (prerelease / released / retired);
+# `access` says WHO may be shown it (public / restricted). They are separate
+# axes: a pre-release under review by SDM providers and BOEM/NOAA colleagues is
+# `restricted`, reachable only through the signed-in preview host, while a
+# retired release stays `public` forever because citations point at it. See
+# atlas_allow_access() for how an app instance turns `access` into policy.
 #
 # Design rules, learned from the CalCOFI release registry:
 #  - resolution NEVER silently falls back to a hardcoded version. A wrong-but-
@@ -135,7 +142,78 @@ atlas_versions <- function(base = atlas_base_url(), refresh = FALSE) {
     stop(sprintf("versions.json has unknown status %s (expected one of %s)",
                  paste(sQuote(unique(d$status[bad])), collapse = ", "),
                  paste(ok, collapse = ", ")), call. = FALSE)
+  # `access`: explicit when the registry carries it; DERIVED when it predates the
+  # field. Derivation fails closed -- a pre-release is restricted unless the
+  # registry says otherwise -- so an old versions.json read by a new app can only
+  # ever hide a release, never leak one under review.
+  if (!"access" %in% names(d)) d$access <- rep(NA_character_, nrow(d))
+  d$access <- as.character(d$access)
+  d$access[is.na(d$access) | !nzchar(d$access)] <-
+    atlas_access_default(d$status[is.na(d$access) | !nzchar(d$access)])
+  if (any(bad <- !d$access %in% .access_ok))
+    stop(sprintf("versions.json has unknown access %s (expected one of %s)",
+                 paste(sQuote(unique(d$access[bad])), collapse = ", "),
+                 paste(.access_ok, collapse = ", ")), call. = FALSE)
   d
+}
+
+# who may be shown a version
+.access_ok <- c("public", "restricted")
+
+#' Default `access` for a version whose registry row does not say
+#'
+#' A pre-release is `restricted` (under review; reachable only through the
+#' signed-in preview host), everything else is `public`. Used by
+#' [atlas_versions()] when `versions.json` predates the `access` field, and by
+#' the registry writer to fill the column, so the two cannot disagree.
+#'
+#' @param status vector of `released` / `prerelease` / `retired`
+#' @return character vector of `public` / `restricted`
+#' @export
+#' @concept version
+atlas_access_default <- function(status)
+  ifelse(status == "prerelease", "restricted", "public")
+
+#' Which `access` values THIS app instance may show
+#'
+#' The one place the preview policy lives. The public Shiny Server instance
+#' (`MS_PREVIEW` unset) may resolve `public` versions only; the preview instance
+#' -- a second Shiny Server `server` block whose wrapper `app.R` sets
+#' `MS_PREVIEW=1` and is reachable only through the signed-in
+#' `preview.marinesensitivity.org` vhost -- may resolve everything. Enforcement is
+#' by *process*, not by a trusted header: Shiny Server OSS opens its own
+#' websocket to the R worker, so no proxy header ever reaches `session$request`,
+#' and a client-supplied `url_search` could otherwise steer the shared instance
+#' to a restricted release.
+#'
+#' @param preview is this the preview instance? Default reads `MS_PREVIEW`
+#' @return character vector to pass as `allow_access` to [atlas_resolve_ver()]
+#' @export
+#' @concept version
+atlas_allow_access <- function(preview = atlas_is_preview())
+  if (isTRUE(preview)) .access_ok else "public"
+
+#' Is this process the preview (signed-in) app instance?
+#'
+#' @return logical scalar: `MS_PREVIEW` is `1`/`true`
+#' @export
+#' @concept version
+atlas_is_preview <- function()
+  tolower(trimws(Sys.getenv("MS_PREVIEW", ""))) %in% c("1", "true", "yes")
+
+#' Base URL of the signed-in preview host
+#'
+#' Where restricted versions are served (apps under `/scores`, `/species`; docs
+#' under `/docs/{ver}/`). Overridable via `MS_PREVIEW_URL` for another
+#' deployment; no trailing slash.
+#'
+#' @return a URL string
+#' @export
+#' @concept version
+atlas_preview_url <- function() {
+  u <- Sys.getenv("MS_PREVIEW_URL", "")
+  if (!nzchar(u)) u <- "https://preview.marinesensitivity.org"   # "" (unset OR blank) -> default
+  sub("/+$", "", u)
 }
 
 #' Resolve a requested version to a real, published one
@@ -145,15 +223,27 @@ atlas_versions <- function(base = atlas_base_url(), refresh = FALSE) {
 #' name a version present in [atlas_versions()]. A **pre-release is never returned
 #' for "latest"** — it is reachable only by asking for it by name.
 #'
+#' A **restricted** version (see [atlas_allow_access()]) is likewise resolvable
+#' only when the caller allows it; the public app instance passes
+#' `allow_access = "public"` and gets a classed error (`msens_restricted`) it can
+#' turn into a "sign in at the preview host" message rather than "unknown
+#' version". Library callers (notebooks, the docs CI, the registry writer) keep
+#' the permissive default -- restricting is an *instance* decision, not a
+#' library one, and the docs CI must be able to render a restricted release for
+#' the preview branch.
+#'
 #' @param ver requested version, or `NULL`/`"latest"`
 #' @param base atlas base URL from [atlas_base_url()]
 #' @param allow statuses that may be resolved when named explicitly
+#' @param allow_access `access` values that may be resolved when named
+#'   explicitly; app instances pass [atlas_allow_access()]
 #' @param refresh re-fetch the registry instead of using the session cache
 #' @return a validated version string
 #' @export
 #' @concept version
 atlas_resolve_ver <- function(ver = NULL, base = atlas_base_url(),
                               allow = c("released", "prerelease", "retired"),
+                              allow_access = c("public", "restricted"),
                               refresh = FALSE) {
   if (is.null(ver) || !nzchar(ver <- trimws(as.character(ver)[1])) || identical(ver, "latest"))
     return(atlas_latest(base, refresh))
@@ -168,7 +258,28 @@ atlas_resolve_ver <- function(ver = NULL, base = atlas_base_url(),
   if (!d$status[i] %in% allow)
     stop(sprintf("version '%s' has status '%s', which is not allowed here (allowed: %s)",
                  ver, d$status[i], paste(allow, collapse = ", ")), call. = FALSE)
+  if (!d$access[i] %in% allow_access)
+    stop(structure(class = c("msens_restricted", "error", "condition"), list(
+      message = sprintf(
+        "version '%s' is %s and not shown here (allowed access: %s); reviewers sign in at %s",
+        ver, d$access[i], paste(allow_access, collapse = ", "), atlas_preview_url()),
+      call = NULL, ver = ver, access = d$access[i])))
   ver
+}
+
+#' A version's `access` (`public` / `restricted`)
+#'
+#' @param ver version label (must exist in the registry)
+#' @param base atlas base URL from [atlas_base_url()]
+#' @param refresh re-fetch instead of using the session cache
+#' @return `"public"` or `"restricted"`
+#' @export
+#' @concept version
+atlas_ver_access <- function(ver, base = atlas_base_url(), refresh = FALSE) {
+  d <- atlas_versions(base, refresh)
+  i <- match(ver, d$ver)
+  if (is.na(i)) stop(sprintf("unknown version '%s'", ver), call. = FALSE)
+  d$access[i]
 }
 
 #' A version's manifest — the contract between a release and the apps
@@ -234,6 +345,9 @@ validate_manifest <- function(m, ver = NULL) {
 #' @param con open DuckDB connection to that release's database
 #' @param ver version label
 #' @param status `released`, `prerelease` or `retired`
+#' @param access `public` or `restricted`; defaults from `status` via
+#'   [atlas_access_default()], and is copied into the manifest so a release
+#'   describes its own visibility
 #' @param grid_id defaults to [grid_for_ver()]
 #' @param base atlas base URL from [atlas_base_url()]
 #' @param metrics optional data frame of published metric COGs to merge in
@@ -261,6 +375,7 @@ validate_manifest <- function(m, ver = NULL) {
 #' @export
 #' @concept version
 manifest_build <- function(con, ver, status = "released",
+                           access = atlas_access_default(status),
                            grid_id = grid_for_ver(ver), base = atlas_base_url(),
                            metrics = NULL, capabilities = list(),
                            zone_tiles = list(), zone_sets = NULL,
@@ -338,7 +453,11 @@ manifest_build <- function(con, ver, status = "released",
     caps <- utils::modifyList(caps, capabilities)
   }
 
-  m <- c(list(ver = ver, status = status, grid_id = grid_id, id_field = id_field,
+  if (!access %in% .access_ok)
+    stop(sprintf("`access` must be one of %s (got '%s')",
+                 paste(.access_ok, collapse = ", "), access), call. = FALSE)
+  m <- c(list(ver = ver, status = status, access = access,
+              grid_id = grid_id, id_field = id_field,
               capabilities = caps, tables = tables,
               metrics = met, zones = zones), extra)
   validate_manifest(m, ver = ver)

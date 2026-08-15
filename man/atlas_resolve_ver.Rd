@@ -8,6 +8,7 @@ atlas_resolve_ver(
   ver = NULL,
   base = atlas_base_url(),
   allow = c("released", "prerelease", "retired"),
+  allow_access = c("public", "restricted"),
   refresh = FALSE
 )
 }
@@ -17,6 +18,9 @@ atlas_resolve_ver(
 \item{base}{atlas base URL from \code{\link[=atlas_base_url]{atlas_base_url()}}}
 
 \item{allow}{statuses that may be resolved when named explicitly}
+
+\item{allow_access}{\code{access} values that may be resolved when named
+explicitly; app instances pass \code{\link[=atlas_allow_access]{atlas_allow_access()}}}
 
 \item{refresh}{re-fetch the registry instead of using the session cache}
 }
@@ -28,5 +32,15 @@ The single entry point every caller (app URL \verb{?ver=}, report endpoint, note
 should use. \code{NULL}/\code{""}/\code{"latest"} resolve to \code{\link[=atlas_latest]{atlas_latest()}}; anything else must
 name a version present in \code{\link[=atlas_versions]{atlas_versions()}}. A \strong{pre-release is never returned
 for "latest"} — it is reachable only by asking for it by name.
+}
+\details{
+A \strong{restricted} version (see \code{\link[=atlas_allow_access]{atlas_allow_access()}}) is likewise resolvable
+only when the caller allows it; the public app instance passes
+\code{allow_access = "public"} and gets a classed error (\code{msens_restricted}) it can
+turn into a "sign in at the preview host" message rather than "unknown
+version". Library callers (notebooks, the docs CI, the registry writer) keep
+the permissive default -- restricting is an \emph{instance} decision, not a
+library one, and the docs CI must be able to render a restricted release for
+the preview branch.
 }
 \concept{version}
