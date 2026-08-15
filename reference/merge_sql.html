@@ -20,7 +20,7 @@ being silently lost by a wrong sequence or minor tweak."><script async src="http
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.28.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.29.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -62,7 +62,7 @@ being silently lost by a wrong sequence or minor tweak.</p>
 
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>named list of SQL strings: <code>b_range</code>, <code>b_am_all</code>, <code>b_am_rng</code> (CREATE OR REPLACE TABLE),
+    <p>named list of SQL strings: <code>b_range</code>, <code>b_am_rng</code> (CREATE OR REPLACE TABLE),
 <code>global</code> and <code>us</code> (SELECT).</p>
     </div>
     <div class="section level2">
@@ -83,11 +83,13 @@ the US). This global scope is what enforces the IUCN-range constraint — see be
 <dd><p><code>(cell_id)</code> — the in-USA cell ids (scoring extent).</p></dd>
 
 
-</dl><p><code>merge_sql()$b_range</code>, <code>$b_am_all</code>, <code>$b_am_rng</code> create the intermediates; then <code>$global</code> and
-<code>$us</code> are the two output surfaces:</p>
-<p><strong>GLOBAL viz surface</strong> (<code>$global</code>) = am ∪ range (FULL OUTER of the range footprint valued by
-governing er and the taxon's WHOLE am footprint). am-only taxa are omitted (they reuse am COGs).
-This is the honest whole-range merged model painted to COGs.</p>
+</dl><p><code>merge_sql()$b_range</code> and <code>$b_am_rng</code> create the intermediates; then <code>$global</code> and <code>$us</code> are the
+two output surfaces. Both apply the SAME range mask — they differ only in extent (global vs
+US) and in the am-only branch that only the US surface needs:</p>
+<p><strong>GLOBAL viz surface</strong> (<code>$global</code>) = the taxon's WHOLE range footprint valued
+<code>max(er, am-at-range)</code> — am BEYOND the range is MASKED, exactly as in <code>$us</code> but without the US
+trim. am-only taxa are omitted (they reuse am COGs). This is the whole-range merged model
+painted to COGs, and it is what the species app draws.</p>
 <p><strong>US scoring surface</strong> (<code>$us</code>) = v7-faithful, US-boundary-aware, IUCN-CONSTRAINED:</p><ol><li><p>range footprint ∩ US valued <code>max(er, am-at-range)</code> — am BEYOND the range is MASKED (the
 expert range constrains AquaMaps over-prediction). Covers range-only + "both" taxa.</p></li>
 <li><p>TRUE am-only taxa (GLOBAL <code>has_range = FALSE</code>, i.e. no range dataset anywhere) keep their
@@ -97,14 +99,18 @@ US presence: its range ∩ US is empty (1) and it is excluded from (2) because g
 TRUE. This is the <code>iucn_range_outside_us_eez</code> exclusion (e.g. <em>Sotalia guianensis</em>, a river
 dolphin AquaMaps over-predicts into US waters). Keying (2) on GLOBAL has_range — not range-in-US —
 is the crux; keying it on range-in-US silently re-introduces ~750 such species.</p>
+<p>The mask must hold on BOTH surfaces. <code>$global</code> was briefly a FULL OUTER union of the range with
+the whole am footprint, which painted raw AquaMaps over-prediction into every merged COG — half
+the walrus surface, reaching 9.75 degrees N — while <code>$us</code> stayed correct and the manifest hash,
+which fingerprints only <code>$us</code>, could not see it (MarineSensitivity/apps#8). <code>test-merge.R</code> now
+asserts <code>$global</code> has no cell outside the range footprint.</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span>  <span class="va">msq</span> <span class="op">&lt;-</span> <span class="fu">merge_sql</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_range</span><span class="op">)</span>; <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_am_all</span><span class="op">)</span></span></span>
-<span class="r-in"><span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_am_rng</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_range</span><span class="op">)</span>; <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_am_rng</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="va">us</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">us</span><span class="op">)</span>      <span class="co"># US scoring surface for the batch</span></span></span>
 <span class="r-in"><span>  <span class="va">gl</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">global</span><span class="op">)</span>  <span class="co"># global whole-range surface for the batch</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
