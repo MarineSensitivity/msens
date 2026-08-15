@@ -1,3 +1,17 @@
+# msens 0.31.0
+
+* **Version tokens** (`ver_token_sign()`, `ver_token_verify()`, `ver_token_secret()`): a Shiny
+  page embeds an HMAC-signed `{ver}.{expiry}.{mac}` for the version its `ui(req)` resolved, and the
+  server function trusts that token — re-resolved through the instance policy — instead of the
+  client-supplied `url_search`/`url_pathname`. On the signed-in preview host the version is the URL
+  **path** (`/v9/scores/`, gated per version by Cloudflare Access), so a reviewer allowed on v9 must
+  not be able to steer the shared preview process to v10; the token is what makes that structural,
+  and it hardens the public instance the same way. Secret from `MS_TOKEN_SECRET`, else per-process
+  random (`/dev/urandom`).
+* `preview_app_url(app, ver)` / `preview_docs_url(ver)`: the one place for the preview host's URL
+  shape (`{base}/{ver}/{app}/`, `{base}/docs/{ver}/`), used by the apps, the docs and the release
+  checks.
+
 # msens 0.30.0
 
 * **The version registry gains `access`** (`public` / `restricted`), a second axis beside `status`:
