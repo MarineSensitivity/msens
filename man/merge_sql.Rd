@@ -7,7 +7,7 @@
 merge_sql()
 }
 \value{
-named list of SQL strings: \code{b_range}, \code{b_am_all}, \code{b_am_rng} (CREATE OR REPLACE TABLE),
+named list of SQL strings: \code{b_range}, \code{b_am_rng} (CREATE OR REPLACE TABLE),
 \code{global} and \code{us} (SELECT).
 }
 \description{
@@ -29,12 +29,14 @@ the US). This global scope is what enforces the IUCN-range constraint — see be
 \item{\code{us_cells}}{\code{(cell_id)} — the in-USA cell ids (scoring extent).}
 }
 
-\code{merge_sql()$b_range}, \verb{$b_am_all}, \verb{$b_am_rng} create the intermediates; then \verb{$global} and
-\verb{$us} are the two output surfaces:
+\code{merge_sql()$b_range} and \verb{$b_am_rng} create the intermediates; then \verb{$global} and \verb{$us} are the
+two output surfaces. Both apply the SAME range mask — they differ only in extent (global vs
+US) and in the am-only branch that only the US surface needs:
 
-\strong{GLOBAL viz surface} (\verb{$global}) = am ∪ range (FULL OUTER of the range footprint valued by
-governing er and the taxon's WHOLE am footprint). am-only taxa are omitted (they reuse am COGs).
-This is the honest whole-range merged model painted to COGs.
+\strong{GLOBAL viz surface} (\verb{$global}) = the taxon's WHOLE range footprint valued
+\code{max(er, am-at-range)} — am BEYOND the range is MASKED, exactly as in \verb{$us} but without the US
+trim. am-only taxa are omitted (they reuse am COGs). This is the whole-range merged model
+painted to COGs, and it is what the species app draws.
 
 \strong{US scoring surface} (\verb{$us}) = v7-faithful, US-boundary-aware, IUCN-CONSTRAINED:
 \enumerate{
@@ -48,12 +50,17 @@ US presence: its range ∩ US is empty (1) and it is excluded from (2) because g
 TRUE. This is the \code{iucn_range_outside_us_eez} exclusion (e.g. \emph{Sotalia guianensis}, a river
 dolphin AquaMaps over-predicts into US waters). Keying (2) on GLOBAL has_range — not range-in-US —
 is the crux; keying it on range-in-US silently re-introduces ~750 such species.
+
+The mask must hold on BOTH surfaces. \verb{$global} was briefly a FULL OUTER union of the range with
+the whole am footprint, which painted raw AquaMaps over-prediction into every merged COG — half
+the walrus surface, reaching 9.75 degrees N — while \verb{$us} stayed correct and the manifest hash,
+which fingerprints only \verb{$us}, could not see it (MarineSensitivity/apps#8). \code{test-merge.R} now
+asserts \verb{$global} has no cell outside the range footprint.
 }
 \examples{
 \dontrun{
   msq <- merge_sql()
-  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_all)
-  DBI::dbExecute(con, msq$b_am_rng)
+  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch
 }

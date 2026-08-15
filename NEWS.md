@@ -1,3 +1,33 @@
+# msens 0.29.0
+
+* **`merge_sql()$global` masks AquaMaps to the expert range again**, as `$us` always has. The
+  global surface is the taxon's whole **range** footprint valued `max(er, am-at-range)` — not, as
+  it had become, a `FULL OUTER` union of that range with the taxon's whole AquaMaps footprint. The
+  two surfaces now differ only in extent (global vs `in_usa`) and in the am-only branch that only
+  `$us` carries, so the same mask governs both. `$b_am_all` is gone; `$b_am_rng` is the only am
+  intermediate, and its join to `b_range` **is** the mask.
+
+  The union entered in the same change that restored the `iucn_range_outside_us_eez` exclusion to
+  the US surface, and it went unseen for a month because nothing looked: the merge manifest
+  fingerprints `$us` alone, and every existing global-surface assertion described the union rather
+  than questioning it. What it produced was a merged COG painted with raw AquaMaps
+  over-prediction — half the walrus surface (743,749 of 1,490,742 cells lay outside its IUCN
+  range, reaching 9.75°N) — which is exactly what the species app draws
+  (MarineSensitivity/apps#8). Scoring read `$us` throughout and was never affected.
+
+  `test-merge.R` now asserts the invariant the old tests could not: **no** global cell falls
+  outside the taxon's range footprint, checked across every fixture taxon at once, plus
+  `global ∩ us_cells == $us` for taxa with a range. The `T_both_mask` fixture gained an am cell
+  beyond the range *outside* the US, so the guard does not depend on the US extent. Both fail on
+  the old rule, returning the 4 leaked cells.
+
+  Downstream, only `taxon.n_global` changes (smaller counts). `is_valid_global` is
+  `n_global > 0 OR n_ocean > 0`, and every taxon with a range keeps range cells, so the flag
+  holds; `pct_marine`, `rarity` and the rest come from the US surface. Five taxa whose only range
+  dataset is US-scoped (*Crocodylus acutus*, *Sebastes paucispinis*, *S. ruberrimus*,
+  *Gasterosteus aculeatus*, *Spirinchus thaleichthys*) now draw over that US footprint instead of
+  their global AquaMaps envelope — the honest merged model, since the range is what constrains it.
+
 # msens 0.28.0
 
 * **`sdm_val_col(con, tbl)`** — resolve whether a release's table calls its measurement

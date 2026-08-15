@@ -4,10 +4,15 @@
 #
 # US cells = {1,2,3,4,5}; non-US = {100,101}. Categories:
 #   T_range      range-only, range in+out of US            -> er over range∩US
-#   T_both_mask  am+range, am extends BEYOND range in US    -> am MASKED to range footprint
+#   T_both_mask  am+range, am beyond range INSIDE and       -> am MASKED to the range footprint on
+#                OUTSIDE the US                                BOTH surfaces (apps#8)
 #   T_noeez      am+range, range wholly OUTSIDE US          -> EXCLUDED from US (Sotalia case)
 #   T_am_single  am-only, one model                         -> raw am∩US
 #   T_am_multi   am-only, TWO models (dup cell)             -> raw am∩US, duplicates PRESERVED
+#
+# T_both_mask carries am at cell 3 (US) and cell 101 (non-US), both OUTSIDE its range {1,2}. Those
+# two cells are the regression guard for apps#8: when the global surface was a FULL OUTER union of
+# the range with the whole am footprint, they leaked into it -- and no assertion here looked.
 
 skip_if_not_installed("duckdb")
 
@@ -16,25 +21,25 @@ merge_fixture_con <- function() {
   b <- data.frame(
     ms_merge_key = c(
       "T_range","T_range","T_range",
-      "T_both_mask","T_both_mask", "T_both_mask","T_both_mask","T_both_mask",
+      "T_both_mask","T_both_mask", "T_both_mask","T_both_mask","T_both_mask","T_both_mask",
       "T_noeez","T_noeez", "T_noeez","T_noeez",
       "T_am_single","T_am_single","T_am_single",
       "T_am_multi","T_am_multi","T_am_multi"),
     ds_key = c(
       "rng","rng","rng",
-      "rng","rng", "am","am","am",
+      "rng","rng", "am","am","am","am",
       "rng","rng", "am","am",
       "am","am","am",
       "am","am","am"),
     cell_id = c(
       1L,2L,100L,
-      1L,2L, 1L,2L,3L,
+      1L,2L, 1L,2L,3L,101L,
       100L,101L, 1L,2L,
       1L,2L,3L,
       1L,1L,2L),
     val = c(
       1,1,1,
-      1,1, 60,40,90,
+      1,1, 60,40,90,95,
       1,1, 70,80,
       55,65,75,
       50,60,70),
@@ -53,7 +58,6 @@ merge_fixture_con <- function() {
   DBI::dbWriteTable(con, "us_cells", us_cells)
   msq <- merge_sql()
   DBI::dbExecute(con, msq$b_range)
-  DBI::dbExecute(con, msq$b_am_all)
   DBI::dbExecute(con, msq$b_am_rng)
   con
 }
@@ -95,20 +99,45 @@ test_that("no_eez species are excluded from US but PRESENT in the global viz sur
 
   # excluded from scoring...
   expect_equal(nrow(us[us$mdl_key == "T_noeez", ]), 0L)
-  # ...but its whole-range am∪range IS in the global surface (range outside US + am in US)
-  expect_equal(key_set(gl, "T_noeez"), c("1:70", "2:80", "100:20", "101:20"))
+  # ...but its range IS drawn globally, at er. Its am cells 1,2 sit in the US, OUTSIDE the range,
+  # and are masked away here too -- the over-prediction the US exclusion exists to reject must not
+  # reappear on the map just because the map is global.
+  expect_equal(key_set(gl, "T_noeez"), c("100:20", "101:20"))
 })
 
-test_that("global viz surface = am ∪ range for has_range taxa; am-only taxa omitted", {
+test_that("global viz surface masks am to the range footprint; am-only taxa omitted", {
   con <- merge_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   gl <- DBI::dbGetQuery(con, merge_sql()$global)
 
-  # both: FULL OUTER keeps am BEYOND the range (cell 3) unlike the US surface
-  expect_equal(key_set(gl, "T_both_mask"), c("1:60", "2:40", "3:90"))
+  # both: am BEYOND the range is masked -- cell 3 (US) and cell 101 (non-US) both dropped
+  expect_equal(key_set(gl, "T_both_mask"), c("1:60", "2:40"))
   # range-only: er over the whole range footprint (incl. non-US cell 100)
   expect_equal(key_set(gl, "T_range"), c("1:50", "2:50", "100:50"))
   # am-only taxa are OMITTED from the global surface (they reuse am COGs)
   expect_equal(nrow(gl[gl$mdl_key %in% c("T_am_single", "T_am_multi"), ]), 0L)
+})
+
+test_that("NO global cell falls outside the taxon's range footprint (apps#8 regression)", {
+  con <- merge_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  # the invariant, asserted over every fixture taxon at once rather than per expected-value list:
+  # whatever the rule, the global surface may never introduce a (taxon, cell) the range does not
+  # have. A FULL OUTER against the whole am footprint returns 4 rows here.
+  leaked <- DBI::dbGetQuery(con, paste(
+    "SELECT g.mdl_key, g.cell_id FROM (", merge_sql()$global, ") g",
+    "LEFT JOIN b_range br ON br.ms_merge_key = g.mdl_key AND br.cell_id = g.cell_id",
+    "WHERE br.cell_id IS NULL"))
+  expect_equal(nrow(leaked), 0L)
+
+  # and the global surface is the SAME rule as the US one, differing only by the US trim: for a
+  # taxon with a range, global ∩ us_cells must equal the US surface exactly.
+  gl <- DBI::dbGetQuery(con, merge_sql()$global)
+  us <- DBI::dbGetQuery(con, merge_sql()$us)
+  ks <- c("T_range", "T_both_mask", "T_noeez")
+  gl_in_us <- gl[gl$cell_id %in% 1:5, ]
+  expect_equal(
+    sapply(ks, function(k) key_set(gl_in_us, k), simplify = FALSE),
+    sapply(ks, function(k) key_set(us,       k), simplify = FALSE))
 })
 
 test_that("turtle multiplicative rule: greatest(1, round(er*suit/100)) then ch max-override", {

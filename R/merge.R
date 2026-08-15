@@ -17,12 +17,14 @@
 #'   \item{`us_cells`}{`(cell_id)` — the in-USA cell ids (scoring extent).}
 #' }
 #'
-#' `merge_sql()$b_range`, `$b_am_all`, `$b_am_rng` create the intermediates; then `$global` and
-#' `$us` are the two output surfaces:
+#' `merge_sql()$b_range` and `$b_am_rng` create the intermediates; then `$global` and `$us` are the
+#' two output surfaces. Both apply the SAME range mask — they differ only in extent (global vs
+#' US) and in the am-only branch that only the US surface needs:
 #'
-#' \strong{GLOBAL viz surface} (`$global`) = am ∪ range (FULL OUTER of the range footprint valued by
-#' governing er and the taxon's WHOLE am footprint). am-only taxa are omitted (they reuse am COGs).
-#' This is the honest whole-range merged model painted to COGs.
+#' \strong{GLOBAL viz surface} (`$global`) = the taxon's WHOLE range footprint valued
+#' `max(er, am-at-range)` — am BEYOND the range is MASKED, exactly as in `$us` but without the US
+#' trim. am-only taxa are omitted (they reuse am COGs). This is the whole-range merged model
+#' painted to COGs, and it is what the species app draws.
 #'
 #' \strong{US scoring surface} (`$us`) = v7-faithful, US-boundary-aware, IUCN-CONSTRAINED:
 #' \enumerate{
@@ -37,15 +39,20 @@
 #' dolphin AquaMaps over-predicts into US waters). Keying (2) on GLOBAL has_range — not range-in-US —
 #' is the crux; keying it on range-in-US silently re-introduces ~750 such species.
 #'
-#' @return named list of SQL strings: `b_range`, `b_am_all`, `b_am_rng` (CREATE OR REPLACE TABLE),
+#' The mask must hold on BOTH surfaces. `$global` was briefly a FULL OUTER union of the range with
+#' the whole am footprint, which painted raw AquaMaps over-prediction into every merged COG — half
+#' the walrus surface, reaching 9.75 degrees N — while `$us` stayed correct and the manifest hash,
+#' which fingerprints only `$us`, could not see it (MarineSensitivity/apps#8). `test-merge.R` now
+#' asserts `$global` has no cell outside the range footprint.
+#'
+#' @return named list of SQL strings: `b_range`, `b_am_rng` (CREATE OR REPLACE TABLE),
 #'   `global` and `us` (SELECT).
 #' @concept merge
 #' @export
 #' @examples
 #' \dontrun{
 #'   msq <- merge_sql()
-#'   DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_all)
-#'   DBI::dbExecute(con, msq$b_am_rng)
+#'   DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
 #'   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
 #'   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch
 #' }
@@ -56,22 +63,19 @@ merge_sql <- function() {
       "CREATE OR REPLACE TABLE b_range AS",
       "SELECT DISTINCT b.ms_merge_key, b.cell_id, t.er_score::DOUBLE AS er",
       "FROM b JOIN taxon t ON b.ms_merge_key = t.ms_merge_key WHERE b.ds_key <> 'am'"),
-    # (global) am over the WHOLE am footprint of has_range taxa -> am∪range viz surface
-    b_am_all = paste(
-      "CREATE OR REPLACE TABLE b_am_all AS",
-      "SELECT b.ms_merge_key, b.cell_id, max(b.val) am_val",
-      "FROM b JOIN taxon_flags tf ON b.ms_merge_key = tf.ms_merge_key",
-      "WHERE b.ds_key = 'am' AND tf.has_range GROUP BY 1, 2"),
-    # (US) am AT range cells only -> range-footprint max(er, am-at-range)
+    # am AT range cells only -> range-footprint max(er, am-at-range). The JOIN to b_range IS the
+    # mask: am beyond the expert range never enters either output surface, and am-only taxa (no
+    # b_range rows) drop out of the global surface entirely.
     b_am_rng = paste(
       "CREATE OR REPLACE TABLE b_am_rng AS",
       "SELECT b.ms_merge_key, b.cell_id, max(b.val) am_val",
       "FROM b JOIN b_range USING (ms_merge_key, cell_id) WHERE b.ds_key = 'am' GROUP BY 1, 2"),
-    # GLOBAL viz surface = am ∪ range (FULL OUTER)
+    # GLOBAL viz surface = whole range footprint, masked: max(er, am-at-range)
     global = paste(
-      "SELECT ms_merge_key AS mdl_key, cell_id,",
-      "greatest(coalesce(br.er, 0), coalesce(ba.am_val, 0))::DOUBLE AS val",
-      "FROM b_range br FULL OUTER JOIN b_am_all ba USING (ms_merge_key, cell_id)"),
+      "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
+      "       greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
+      "FROM b_range br",
+      "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id"),
     # US scoring surface = (A) range∩US max(er, am-at-range) UNION (B) raw am∩US for TRUE am-only taxa
     us = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
