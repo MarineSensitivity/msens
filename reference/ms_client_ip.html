@@ -14,7 +14,7 @@ and falls back to the direct REMOTE_ADDR. Never errors."><script async src="http
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.29.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.30.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,6 +75,10 @@ address while the websocket handshake shows <code>HTTP_HOST 127.0.0.1:&lt;worker
 and no forwarded header at all). The page's HTTP request, which
 <code>ui = function(req)</code> receives, is the only place the real client IP survives.
 See the <code>ip</code> argument of <code><a href="ga_js.html">ga_js()</a></code>.</p>
+<p>Behind Cloudflare (the signed-in preview host is proxied through its edge)
+the connecting peer is a Cloudflare address, and the visitor is named by
+<code>CF-Connecting-IP</code>; that wins when present, then the first <code>X-Forwarded-For</code>
+hop, then <code>REMOTE_ADDR</code>. Analytics only – nothing here is trusted for policy.</p>
     </div>
 
     <div class="section level2">
@@ -83,6 +87,9 @@ See the <code>ip</code> argument of <code><a href="ga_js.html">ga_js()</a></code
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "203.0.113.7"</span>
 <span class="r-in"><span><span class="fu">ms_client_ip</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>HTTP_X_FORWARDED_FOR <span class="op">=</span> <span class="st">"203.0.113.7"</span><span class="op">)</span><span class="op">)</span>   <span class="co"># a ui(req)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "203.0.113.7"</span>
+<span class="r-in"><span><span class="fu">ms_client_ip</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>HTTP_CF_CONNECTING_IP <span class="op">=</span> <span class="st">"198.51.100.4"</span>,</span></span>
+<span class="r-in"><span>                  HTTP_X_FORWARDED_FOR <span class="op">=</span> <span class="st">"198.51.100.4, 172.70.0.1"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "198.51.100.4"</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

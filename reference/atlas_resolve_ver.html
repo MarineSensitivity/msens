@@ -18,7 +18,7 @@ for "latest" — it is reachable only by asking for it by name.'><script async s
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.29.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.30.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -58,6 +58,7 @@ for "latest"</strong> — it is reachable only by asking for it by name.</p>
 <span>  ver <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  base <span class="op">=</span> <span class="fu"><a href="atlas_base_url.html">atlas_base_url</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  allow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"released"</span>, <span class="st">"prerelease"</span>, <span class="st">"retired"</span><span class="op">)</span>,</span>
+<span>  allow_access <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"public"</span>, <span class="st">"restricted"</span><span class="op">)</span>,</span>
 <span>  refresh <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -78,6 +79,11 @@ for "latest"</strong> — it is reachable only by asking for it by name.</p>
 <dd><p>statuses that may be resolved when named explicitly</p></dd>
 
 
+<dt id="arg-allow-access">allow_access<a class="anchor" aria-label="anchor" href="#arg-allow-access"></a></dt>
+<dd><p><code>access</code> values that may be resolved when named
+explicitly; app instances pass <code><a href="atlas_allow_access.html">atlas_allow_access()</a></code></p></dd>
+
+
 <dt id="arg-refresh">refresh<a class="anchor" aria-label="anchor" href="#arg-refresh"></a></dt>
 <dd><p>re-fetch the registry instead of using the session cache</p></dd>
 
@@ -85,6 +91,17 @@ for "latest"</strong> — it is reachable only by asking for it by name.</p>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>a validated version string</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>A <strong>restricted</strong> version (see <code><a href="atlas_allow_access.html">atlas_allow_access()</a></code>) is likewise resolvable
+only when the caller allows it; the public app instance passes
+<code>allow_access = "public"</code> and gets a classed error (<code>msens_restricted</code>) it can
+turn into a "sign in at the preview host" message rather than "unknown
+version". Library callers (notebooks, the docs CI, the registry writer) keep
+the permissive default – restricting is an <em>instance</em> decision, not a
+library one, and the docs CI must be able to render a restricted release for
+the preview branch.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
