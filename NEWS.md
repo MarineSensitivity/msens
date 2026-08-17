@@ -1,3 +1,16 @@
+# msens 0.32.0
+
+* **`lon_span()` / `lon_span_agg()`**: the minimal longitude span of a distribution, measured in
+  both the -180..180 and 0..360 frames and reported in whichever is narrower. `min(lon)`/`max(lon)`
+  is the wrong extent for anything crossing the antimeridian: Least Auklet's v8 merged surface
+  reports -179.975..179.975, so the species app fitted the whole globe and put the camera off
+  Iceland instead of in the Bering Sea (apps#9). 2,744 of v8's 17,763 merged models -- 15% -- had
+  that degenerate extent, and every one of them resolves under this rule. The returned `xmax` may
+  exceed 180, which is what MapLibre's `fitBounds` wants; wrapping it back would fit the complement.
+* **`bbox_spans_globe()`**: whether a bounding box is too wide in longitude to frame anything. A
+  whole-world extent is correct for an *asset* (a wraparound range's COG really does run -180..180)
+  and useless for a *camera*, so callers reject it and fall back to a data-derived extent.
+
 # msens 0.31.0
 
 * **Version tokens** (`ver_token_sign()`, `ver_token_verify()`, `ver_token_secret()`): a Shiny

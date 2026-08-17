@@ -114,3 +114,78 @@ test_that("a -180..180 click resolves on a 0-360 grid", {
   # -138.5 E is 221.5 in the grid's own frame, well inside it
   expect_false(is.na(cell_from_lonlat(-138.5, 55, g)))
 })
+
+# lon_span: the antimeridian fit rule (apps#9) ------------------------------
+#
+# One fixture per branch. The regression case is the FIRST one: Least Auklet's
+# v8 merged surface really does report min lon -179.975 / max lon 179.975, and
+# the app fitted that whole-globe box, putting the camera off Iceland.
+
+test_that("an antimeridian-crossing range spans the short way, not the globe", {
+  # Least Auklet (Aethia pusilla), v8 ms_merge|BOTW:22694921: cells at
+  # 160-180 E and 180-150 W. -180..180 says 360 deg; the truth is ~50 deg.
+  lon <- c(-179.975, -160.0, -150.025, 160.025, 170.0, 179.975)
+  expect_equal(lon_span(lon), c(160.025, 209.975))
+  expect_lt(diff(lon_span(lon)), 51)
+  # and the naive answer, which this replaces, really was the whole globe
+  expect_gt(diff(range(lon)), 359)
+})
+
+test_that("a range that does not cross the antimeridian is left in -180..180", {
+  # North Atlantic, straddling the prime meridian: 0..360 would be the wide one
+  expect_equal(lon_span(c(-30, -5, 0, 20)), c(-30, 20))
+  # entirely western hemisphere (Gulf of Mexico) — no wrap, no shift
+  expect_equal(lon_span(c(-97.5, -90, -81.2)), c(-97.5, -81.2))
+  # entirely eastern hemisphere
+  expect_equal(lon_span(c(12, 90, 140)), c(12, 140))
+})
+
+test_that("a truly circumglobal range keeps the -180..180 frame", {
+  # straddles BOTH cut points, so neither frame is narrow: answer unchanged
+  lon <- seq(-180, 180, by = 10)
+  expect_equal(lon_span(lon), c(-180, 180))
+})
+
+test_that("lon_span returns xmax > 180 so fitBounds crosses the dateline", {
+  s <- lon_span(c(170, -170))
+  expect_gt(s[2], 180)          # NOT wrapped back: west must stay west of east
+  expect_lt(s[1], s[2])
+})
+
+test_that("lon_span handles degenerate input", {
+  expect_equal(lon_span(numeric(0)), c(NA_real_, NA_real_))
+  expect_equal(lon_span(c(NA, NaN)),  c(NA_real_, NA_real_))
+  expect_equal(lon_span(c(-120, NA)), c(-120, -120))   # a single point is a point
+})
+
+test_that("lon_span_agg is the same rule as lon_span", {
+  for (lon in list(c(-179.9, 179.9), c(-30, 20), c(12, 140), seq(-180, 180, 20))) {
+    l360 <- ifelse(lon < 0, lon + 360, lon)
+    expect_equal(
+      lon_span_agg(min(lon), max(lon), min(l360), max(l360)),
+      lon_span(lon))
+  }
+})
+
+test_that("lon_span_agg degrades to the -180..180 frame when the 0-360 pair is missing", {
+  expect_equal(lon_span_agg(-30, 20, NA, NA), c(-30, 20))
+  expect_equal(lon_span_agg(NA, NA, 10, 20),  c(NA_real_, NA_real_))
+})
+
+test_that("a whole-world bbox is rejected as a camera target", {
+  # what native_asset stores for a wraparound COG: correct for the ASSET,
+  # useless for the CAMERA
+  expect_true (bbox_spans_globe(c(-180, 38.55, 180, 66.45)))
+  expect_true (bbox_spans_globe(NULL))
+  expect_true (bbox_spans_globe(c(-180, NA, 180, 66)))
+  expect_false(bbox_spans_globe(c(160.025, 47.975, 209.975, 66.175)))  # the fixed span
+  expect_false(bbox_spans_globe(c(-97.5, 18, -81.2, 31)))
+})
+
+test_that("cell_lonlat(wrap = FALSE) already satisfies the lon_span rule on usa05", {
+  # usa05's own frame runs 141.10 E east across the dateline, so an unwrapped
+  # Aleutian extent needs no further correction — lon_span is a no-op on it.
+  g  <- grid_spec_for("usa05")
+  ll <- cell_lonlat(c(700, 3000), g, wrap = FALSE)$lon
+  expect_equal(lon_span(ifelse(ll >= 180, ll - 360, ll)), range(ll))
+})

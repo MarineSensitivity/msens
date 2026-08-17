@@ -126,6 +126,82 @@ cell_lonlat <- function(cell_id, grid, wrap = TRUE) {
   data.frame(lon = lon, lat = grid$ymax - (row - 0.5) * grid$resy)
 }
 
+#' Minimal longitude span of a distribution, antimeridian-aware
+#'
+#' `min(lon)`/`max(lon)` is the wrong extent for anything that crosses the
+#' antimeridian. A North Pacific species with cells at 165 E and 155 W has a
+#' -180..180 span of ~360 deg -- the whole globe -- so `fitBounds` centres the
+#' camera on longitude 0 and the viewer lands off Iceland while the animal lives
+#' in the Bering Sea (apps#9). The span that describes it is 165..205.
+#'
+#' The rule: measure the span in BOTH frames (-180..180 and 0..360) and keep the
+#' narrower one. Longitudes are periodic, so the two frames cut the circle at
+#' opposite points (0 deg and 180 deg) and a distribution can straddle at most
+#' one of them unless it genuinely encircles the globe -- in which case both
+#' spans are wide and the -180..180 answer is returned unchanged.
+#'
+#' The returned `xmax` may exceed 180. That is deliberate and is what MapLibre
+#' wants: `map.fitBounds([160, 48, 210, 66])` centres at 185 -> -175 (verified
+#' in-browser). Wrapping it back into -180..180 would put west east of east and
+#' fit the COMPLEMENT of the intended box.
+#'
+#' @param lon numeric vector of longitudes in `[-180, 180]` (non-finite dropped)
+#' @return `c(xmin, xmax)`; `c(NA, NA)` when nothing is finite
+#' @export
+#' @concept grid
+#' @examples
+#' lon_span(c(-179, -160, 170, 178))   # 170 205  (Bering Sea, not the globe)
+#' lon_span(c(-30, 0, 20))             # -30 20   (Atlantic; frame unchanged)
+lon_span <- function(lon) {
+  lon <- lon[is.finite(lon)]
+  if (!length(lon)) return(c(NA_real_, NA_real_))
+  l360 <- ifelse(lon < 0, lon + 360, lon)
+  lon_span_agg(min(lon), max(lon), min(l360), max(l360))
+}
+
+#' @rdname lon_span
+#'
+#' @details
+#' `lon_span_agg()` is the same rule applied to aggregates already computed
+#' elsewhere -- the form the apps use, because the four `min`/`max` come back
+#' from one DuckDB query over millions of cells and must not be pulled into R
+#' just to be reduced. Keeping both forms on one implementation is what stops
+#' the SQL path and the vector path from drifting apart.
+#'
+#' @param x0,x1 min and max longitude in the -180..180 frame
+#' @param w0,w1 min and max longitude in the 0..360 frame
+#' @export
+#' @concept grid
+lon_span_agg <- function(x0, x1, w0, w1) {
+  if (!is.finite(x0) || !is.finite(x1)) return(c(NA_real_, NA_real_))
+  if (!is.finite(w0) || !is.finite(w1)) return(c(x0, x1))
+  # A range that straddles BOTH cut points is genuinely circumglobal, and the
+  # 0..360 frame can still come out a few degrees narrower by pure accident of
+  # where its gap falls. Shifting the frame on that margin would report a
+  # circumglobal distribution as a 350 deg box starting at 0 -- narrower than the
+  # truth and no more useful. Say the whole globe plainly instead, so
+  # bbox_spans_globe() can reject it and the caller falls back.
+  if ((w1 - w0) < (x1 - x0) && (w1 - w0) < 350) c(w0, w1) else c(x0, x1)
+}
+
+#' Does a bounding box span so much longitude that it cannot frame anything?
+#'
+#' A whole-world extent is a legitimate answer for an ASSET (a global raster of a
+#' wraparound range really does run -180..180) and a useless one for a CAMERA: it
+#' says "look at everything", which shows the user nothing. Callers use this to
+#' reject such a box and fall back to a data-derived extent, the same way they
+#' already treat a missing one.
+#'
+#' @param bb numeric `c(xmin, ymin, xmax, ymax)`, or `NULL`
+#' @param max_span widest longitude span still considered informative, degrees
+#' @return `TRUE` when `bb` is absent, non-finite, or spans `>= max_span`
+#' @export
+#' @concept grid
+bbox_spans_globe <- function(bb, max_span = 350) {
+  if (is.null(bb) || length(bb) != 4L || !all(is.finite(bb))) return(TRUE)
+  (bb[3] - bb[1]) >= max_span
+}
+
 #' Cell id at a longitude/latitude (inverse of [cell_lonlat()])
 #'
 #' Pure arithmetic on the grid definition -- no raster read. The cell-id COGs are
