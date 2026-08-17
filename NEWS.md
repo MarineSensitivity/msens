@@ -1,3 +1,13 @@
+# msens 0.33.0
+
+* **`product_urls(ver, access)`**: where a release's four sibling products live — the two apps, the
+  book, and the project home. The MST had no links between them: the scores Table of Species links
+  out to a species map with no way back (apps#11), and the book's app links sit only on its Preface
+  (docs#6). One definition so a nav added to any of them cannot disagree with the rest. Links are
+  **version-preserving** (`?ver=` carried), because a bare `/scores` silently moves a v7 reader onto
+  the promoted release — exactly the confusion these navs exist to remove — and a `restricted`
+  release uses the preview host's PATH form instead, since Cloudflare Access scopes by path.
+
 # msens 0.32.0
 
 * **`lon_span()` / `lon_span_agg()`**: the minimal longitude span of a distribution, measured in

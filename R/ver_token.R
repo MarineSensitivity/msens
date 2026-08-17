@@ -128,3 +128,50 @@ preview_docs_url <- function(ver, base = atlas_preview_url()) {
   if (!.is_ver(ver)) stop(sprintf("'%s' is not a version label", ver), call. = FALSE)
   sprintf("%s/docs/%s/", base, ver)
 }
+
+#' Where this release's sibling products live
+#'
+#' The MST is four things a reader moves between — two apps, the book, and the
+#' project home — and each has been a dead end from the others: the scores table
+#' links out to a species map with no way back, and the book's app links sit only
+#' on its Preface (apps#11, docs#6). This is the one definition of that link set,
+#' so a nav added to any of them cannot disagree with the rest.
+#'
+#' **Version-preserving is the point.** A bare link to `/scores` from a v7 session
+#' silently moves the reader to the promoted release, which is precisely the
+#' confusion these navs exist to remove — so `?ver=` is always carried. On a
+#' `restricted` release the version is the URL PATH on the signed-in preview host
+#' instead ([preview_app_url()]), because Cloudflare Access scopes its per-version
+#' policies by path; sending such a reviewer to `?ver=` on the public host would
+#' show them nothing.
+#'
+#' @param ver version label, e.g. `v8`
+#' @param access `public` or `restricted` — from [atlas_ver_access()]
+#' @param app_base public app host
+#' @param docs_base public docs base (GitHub Pages)
+#' @param home project landing page
+#' @return named character vector: `scores`, `species`, `docs`, `home`
+#' @export
+#' @concept version
+#' @examples
+#' product_urls("v7")
+#' product_urls("v9", access = "restricted")
+product_urls <- function(ver, access = "public",
+                         app_base  = "https://app.marinesensitivity.org",
+                         docs_base = "https://marinesensitivity.org/docs",
+                         home      = "https://marinesensitivity.org") {
+  if (!.is_ver(ver)) stop(sprintf("'%s' is not a version label", ver), call. = FALSE)
+  access <- match.arg(access, c("public", "restricted"))
+  if (identical(access, "restricted"))
+    return(c(scores  = preview_app_url("scores",  ver),
+             species = preview_app_url("species", ver),
+             docs    = preview_docs_url(ver),
+             # the landing page is neither versioned nor gated
+             home    = home))
+  app_base  <- sub("/+$", "", app_base)
+  docs_base <- sub("/+$", "", docs_base)
+  c(scores  = sprintf("%s/scores/?ver=%s",  app_base, ver),
+    species = sprintf("%s/species/?ver=%s", app_base, ver),
+    docs    = sprintf("%s/%s/", docs_base, ver),
+    home    = home)
+}

@@ -72,3 +72,34 @@ test_that("preview URLs put the version in the PATH, never in the query", {
   withr::local_envvar(MS_PREVIEW_URL = "https://review.example.org/")
   expect_equal(preview_app_url("scores", "v9"), "https://review.example.org/v9/scores/")
 })
+
+# product_urls: the one link set the navs share (apps#11, docs#6) ------------
+
+test_that("a public release's product links carry the version as ?ver=", {
+  u <- product_urls("v7")
+  expect_equal(u[["scores"]],  "https://app.marinesensitivity.org/scores/?ver=v7")
+  expect_equal(u[["species"]], "https://app.marinesensitivity.org/species/?ver=v7")
+  expect_equal(u[["docs"]],    "https://marinesensitivity.org/docs/v7/")
+  expect_equal(u[["home"]],    "https://marinesensitivity.org")
+  # the regression this exists to prevent: a bare /scores would silently move a
+  # v7 reader onto the promoted release
+  expect_true(all(grepl("ver=v7", u[c("scores", "species")])))
+})
+
+test_that("a restricted release's product links use the preview host's PATH form", {
+  withr::local_envvar(MS_PREVIEW_URL = "https://p.example.org")
+  u <- product_urls("v9", access = "restricted")
+  expect_equal(u[["scores"]],  "https://p.example.org/v9/scores/")
+  expect_equal(u[["species"]], "https://p.example.org/v9/species/")
+  expect_equal(u[["docs"]],    "https://p.example.org/docs/v9/")
+  # Cloudflare Access scopes by path, so ?ver= must NOT appear on these
+  expect_false(any(grepl("?ver=", u[c("scores", "species", "docs")], fixed = TRUE)))
+  # ... but the landing page is neither versioned nor gated
+  expect_equal(u[["home"]], "https://marinesensitivity.org")
+})
+
+test_that("product_urls names all four products and rejects a non-version", {
+  expect_equal(names(product_urls("v4b")), c("scores", "species", "docs", "home"))
+  expect_error(product_urls("latest"), "not a version label")
+  expect_error(product_urls("v8", access = "secret"))
+})
