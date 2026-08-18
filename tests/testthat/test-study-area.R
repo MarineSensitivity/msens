@@ -30,9 +30,11 @@ test_that("angular distance is great-circle, so the dateline is not a wall", {
 })
 
 test_that("zoom tightens as the radius shrinks, and is clamped", {
-  z <- vapply(c(90, 60, 20, 10, 5), view_zoom, 0)
+  # radii chosen to stay inside the clamps, so this tests the CURVE not the clamp
+  z <- vapply(c(40, 20, 10, 5), view_zoom, 0)
   expect_true(all(diff(z) > 0))              # smaller radius -> higher zoom
   expect_true(all(z >= 1.2 & z <= 5))
+  expect_equal(diff(z), rep(1, 3), tolerance = 1e-9)   # one zoom level per halving
   expect_equal(view_zoom(0), 5)              # degenerate: fully zoomed in
   expect_equal(view_zoom(NA), 5)
   expect_equal(view_zoom(180), 1.2)          # whole globe: clamped out
@@ -125,7 +127,9 @@ test_that("mec_center works across the antimeridian and on degenerate input", {
 
 test_that("view_zoom leaves a margin so the area is not flush to the edge", {
   expect_lt(view_zoom(20, margin = 0.10), view_zoom(20, margin = 0))
-  expect_equal(view_zoom(20, margin = 0), log2(360 / 40) + 0.55, tolerance = 1e-9)
+  expect_equal(view_zoom(20, margin = 0), 6.75 - log2(20), tolerance = 1e-9)
+  # z 2.5 shows ~20 deg of vertical half-extent (measured in-browser)
+  expect_equal(view_zoom(20, margin = 0), 2.43, tolerance = 0.02)
 })
 
 test_that("the region presets frame their own ecoregions", {

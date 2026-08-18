@@ -132,6 +132,28 @@ mec_center <- function(lon, lat, iter = 300L) {
 
 #' Zoom that frames a given angular radius
 #'
+#' MEASURED, not derived. The formula this replaces -- `log2(360 / span) + 0.55`
+#' -- was inherited from the bbox-fitting code and is about 1.3 zoom levels too
+#' tight on a globe, which is why Alaska came up cropped: it asked for z 3.64 to
+#' show a 19.2 degree radius, and z 3.64 actually shows 8.7.
+#'
+#' Probed in-browser on the deployed map by un-projecting the mid-point of the
+#' canvas's top edge, which is the binding constraint because the viewport is
+#' wider than it is tall:
+#'
+#' | zoom | vertical half-extent | horizontal half-extent |
+#' |------|---------------------|------------------------|
+#' | 2.00 | 30.2 deg            | 65.1 deg               |
+#' | 2.50 | 20.1                | 48.0                   |
+#' | 3.00 | 13.8                | 27.0                   |
+#' | 3.64 |  8.7                | 15.9                   |
+#' | 4.00 |  6.7                | 12.0                   |
+#'
+#' `log2(half_extent)` falls almost exactly 1 per zoom level, so
+#' `zoom = C - log2(radius)`. C solves to 6.74-6.92 across that range; 6.75 is
+#' taken deliberately from the low end, since erring small zooms OUT and showing
+#' a little too much is the harmless direction.
+#'
 #' @param radius_deg angular radius from the centre, degrees
 #' @param margin fraction to inflate the radius by before computing the zoom, so
 #'   the area sits inside the frame rather than flush against its edge
@@ -140,7 +162,7 @@ mec_center <- function(lon, lat, iter = 300L) {
 #' @concept study_area
 view_zoom <- function(radius_deg, margin = 0.10) {
   if (!is.finite(radius_deg) || radius_deg <= 0) return(5)
-  max(1.2, min(5, log2(360 / (2 * radius_deg * (1 + margin))) + 0.55))
+  max(1.2, min(5, 6.75 - log2(radius_deg * (1 + margin))))
 }
 
 #' Canonical study areas — one set, every release
@@ -163,7 +185,7 @@ study_areas <- function() {
     label = c("All US waters", "Alaska", "Atlantic", "Gulf of America", "Pacific"),
     lon   = c(-101.304, -164.654, -67.627, -89.089, -171.570),
     lat   = c(  46.900,   63.327,  29.862,  26.251,   28.541),
-    zoom  = c(   2.16,     3.64,    4.00,    5.00,     2.36),
+    zoom  = c(   2.16,     2.35,    2.71,    3.74,     1.20),
     ecoregions = c("CAC CBS EBS EGOA GOA HAR NECS PIS PUR SECS WAOR WCGOA",
                    "CBS EBS GOA HAR", "NECS PUR SECS", "EGOA WCGOA", "CAC PIS WAOR"),
     stringsAsFactors = FALSE)
@@ -175,13 +197,13 @@ study_areas <- function() {
 #' are reproducible rather than magic.
 #'
 #' @param x an `sf` of ecoregion polygons with `region_key` and `ecoregion_key`
-#' @param quantile_r quantile of angular distance used to set the zoom; the max
-#'   would let a single far islet zoom the whole view out
+#' @param zoom_full zoom for the `FULL` preset, which is a chosen framing of the
+#'   North American block rather than a fit (see below)
 #' @param labels named character vector of region labels
 #' @return the same shape as [study_areas()]
 #' @export
 #' @concept study_area
-study_area_views <- function(x, quantile_r = 0.99,
+study_area_views <- function(x, zoom_full = 2.16,
                              labels = c(FULL = "All US waters", AK = "Alaska",
                                         AT = "Atlantic", GA = "Gulf of America",
                                         PA = "Pacific")) {
@@ -231,9 +253,9 @@ study_area_views <- function(x, quantile_r = 0.99,
   # geometry, and `Pacific` is where the islands live. Stated here rather than
   # left to look like an oversight: the picker cannot show everything at once,
   # and this is which half it chooses.
+  # ... and its zoom is a chosen framing, not a computed fit: fitting the whole
+  # 59 degree radius would zoom back out past the point of the compromise.
   ct_full <- sphere_centroid(V$lon, V$lat)
-  a_full  <- angular_distance(ct_full, V$lon, V$lat)
-  rbind(row("FULL", rep(TRUE, nrow(V)), ct_full,
-            view_zoom(stats::quantile(a_full, quantile_r), margin = 0)),
+  rbind(row("FULL", rep(TRUE, nrow(V)), ct_full, zoom_full),
         do.call(rbind, lapply(sort(unique(V$region)), one_region)))
 }

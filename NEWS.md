@@ -10,8 +10,12 @@
   twenty-fifth of the area, so its centre landed on the US west coast and the zoom pulled back to a
   whole-globe view to reach Guam. Alaska moves to (-164.7, 63.3) z 3.64 and the Pacific to
   (-171.6, 28.5) z 2.36, a mid-Pacific view holding Hawaii, the Marianas and American Samoa.
-* `view_zoom()` gains `margin` (default 10%) so an area sits inside its frame rather than flush
-  against the edge.
+* **`view_zoom()` is now measured rather than derived**, and gains `margin` (default 10%). The
+  inherited `log2(360 / span) + 0.55` came from bbox-fitting and is ~1.3 zoom levels too tight on a
+  globe: it asked for z 3.64 to show a 19.2-degree radius, and z 3.64 actually shows **8.7**. Probed
+  in-browser on the deployed map (z 2.0 -> 30.2 deg of vertical half-extent, 2.5 -> 20.1, 3.0 -> 13.8,
+  3.64 -> 8.7, 4.0 -> 6.7), `log2(half_extent)` falls almost exactly 1 per zoom level, giving
+  `zoom = 6.75 - log2(radius)`. Alaska lands at z 2.35 and the Pacific at 1.20.
 * `FULL` is unchanged and now says why in the code: the EEZ spans **more than a hemisphere** (Guam
   is about 180 degrees from Puerto Rico), so no globe view can hold it. Its minimum enclosing circle
   is a 70-degree radius centred at (-143.5, 47.3) — the Pacific, with the Gulf and the entire east

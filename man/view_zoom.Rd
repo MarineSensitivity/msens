@@ -16,6 +16,27 @@ the area sits inside the frame rather than flush against its edge}
 a MapLibre zoom, clamped to \verb{[1.2, 5]}
 }
 \description{
-Zoom that frames a given angular radius
+MEASURED, not derived. The formula this replaces -- \code{log2(360 / span) + 0.55}
+-- was inherited from the bbox-fitting code and is about 1.3 zoom levels too
+tight on a globe, which is why Alaska came up cropped: it asked for z 3.64 to
+show a 19.2 degree radius, and z 3.64 actually shows 8.7.
+}
+\details{
+Probed in-browser on the deployed map by un-projecting the mid-point of the
+canvas's top edge, which is the binding constraint because the viewport is
+wider than it is tall:\tabular{lll}{
+   zoom \tab vertical half-extent \tab horizontal half-extent \cr
+   2.00 \tab 30.2 deg \tab 65.1 deg \cr
+   2.50 \tab 20.1 \tab 48.0 \cr
+   3.00 \tab 13.8 \tab 27.0 \cr
+   3.64 \tab 8.7 \tab 15.9 \cr
+   4.00 \tab 6.7 \tab 12.0 \cr
+}
+
+
+\code{log2(half_extent)} falls almost exactly 1 per zoom level, so
+\code{zoom = C - log2(radius)}. C solves to 6.74-6.92 across that range; 6.75 is
+taken deliberately from the low end, since erring small zooms OUT and showing
+a little too much is the harmless direction.
 }
 \concept{study_area}

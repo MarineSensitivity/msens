@@ -6,7 +6,7 @@
 \usage{
 study_area_views(
   x,
-  quantile_r = 0.99,
+  zoom_full = 2.16,
   labels = c(FULL = "All US waters", AK = "Alaska", AT = "Atlantic", GA =
     "Gulf of America", PA = "Pacific")
 )
@@ -14,8 +14,8 @@ study_area_views(
 \arguments{
 \item{x}{an \code{sf} of ecoregion polygons with \code{region_key} and \code{ecoregion_key}}
 
-\item{quantile_r}{quantile of angular distance used to set the zoom; the max
-would let a single far islet zoom the whole view out}
+\item{zoom_full}{zoom for the \code{FULL} preset, which is a chosen framing of the
+North American block rather than a fit (see below)}
 
 \item{labels}{named character vector of region labels}
 }
