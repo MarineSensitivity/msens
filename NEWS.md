@@ -1,3 +1,21 @@
+# msens 0.35.0
+
+* **Canonical study areas** (`study_areas()`, `study_area_views()`): camera presets derived from the
+  ecoregion `region_key` rollup — `FULL` plus AK / AT / GA / PA — shared across every release. Once
+  a study area only moves the camera (apps#13) the presets are geography, not a property of a
+  release, so v7 can finally offer an Atlantic view despite having no Atlantic subregion: the old
+  ones were dissolved from a 2026 program that has no Atlantic areas (apps#14).
+* **`sphere_centroid()`, `angular_distance()`, `view_zoom()`**: the geometry behind them, on the unit
+  sphere. Two of the twelve ecoregions cross the antimeridian — a bounding box calls the Pacific
+  Island Territories a 360-degree span when it is 67.5 — so there is no wrapping special case,
+  because there is no wrapping. Centres use the **unweighted** vertex mean: weighting by area put
+  "All US waters" at (-158.6, 39.6), out in the north Pacific with the Gulf and east coast behind the
+  horizon, because PIS alone is 5.8M km2 of open ocean. Unweighted gives (-101.3, 46.9).
+* `study_area_views()` extracts vertices per feature and drops EMPTY parts, because
+  `st_cast(., "MULTIPOINT")` silently returns nothing for a MULTIPOLYGON whose FIRST part is
+  EMPTY — which is exactly how PIS is stored, so the largest ecoregion vanished from the
+  derivation without a warning.
+
 # msens 0.34.0
 
 * **Content-addressed Parquet** (`parquet_digest()`, `parquet_manifest()`, `parquet_sync_plan()`):
