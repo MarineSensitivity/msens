@@ -4,10 +4,13 @@
 \alias{view_zoom}
 \title{Zoom that frames a given angular radius}
 \usage{
-view_zoom(radius_deg)
+view_zoom(radius_deg, margin = 0.1)
 }
 \arguments{
 \item{radius_deg}{angular radius from the centre, degrees}
+
+\item{margin}{fraction to inflate the radius by before computing the zoom, so
+the area sits inside the frame rather than flush against its edge}
 }
 \value{
 a MapLibre zoom, clamped to \verb{[1.2, 5]}

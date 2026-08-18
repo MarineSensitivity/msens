@@ -99,3 +99,58 @@ test_that("study_area_views keeps a MULTIPOLYGON whose first part is EMPTY", {
   expect_true(grepl("PIS", v$ecoregions[v$key == "PA"]))
   expect_true(grepl("CAC", v$ecoregions[v$key == "PA"]))
 })
+
+# Framing: a REGION must fit entirely, which a centroid cannot promise ---------
+
+test_that("mec_center bounds every point, and beats the centroid at doing so", {
+  # a long thin region with one dense clump: the centroid is dragged into the
+  # clump, exactly the vertex-density bias that cropped Alaska and mis-centred
+  # the Pacific
+  lon <- c(rep(-124, 200), -170, 145)
+  lat <- c(rep(  38, 200),   20, 13)
+  m <- mec_center(lon, lat)
+  expect_lte(m$radius, max(angular_distance(sphere_centroid(lon, lat), lon, lat)) + 1e-6)
+  expect_true(all(angular_distance(m$center, lon, lat) <= m$radius + 1e-6))
+  # the clump does not own the answer
+  expect_lt(m$center[1], -124)
+})
+
+test_that("mec_center works across the antimeridian and on degenerate input", {
+  m <- mec_center(c(175, -175), c(0, 0))
+  expect_equal(abs(m$center[1]), 180, tolerance = 0.5)
+  expect_equal(m$radius, 5, tolerance = 0.5)
+  expect_lt(mec_center(-100, 40)$radius, 1e-4)   # iterative, so ~0 not exactly 0
+  expect_true(is.na(mec_center(numeric(0), numeric(0))$radius))
+})
+
+test_that("view_zoom leaves a margin so the area is not flush to the edge", {
+  expect_lt(view_zoom(20, margin = 0.10), view_zoom(20, margin = 0))
+  expect_equal(view_zoom(20, margin = 0), log2(360 / 40) + 0.55, tolerance = 1e-9)
+})
+
+test_that("the region presets frame their own ecoregions", {
+  # every preset must actually contain the region it names, at its own zoom.
+  # These are the two the first attempt got wrong: Alaska cut off the Arctic,
+  # and the Pacific centred on the California coast.
+  s <- study_areas()
+  ak <- unlist(s[s$key == "AK", c("lon", "lat")])
+  # the High Arctic (to 82.5 N) and the western Aleutians (about 172 E) both
+  # within reach of the Alaska centre
+  expect_lt(angular_distance(ak, -155, 82.4), 22)
+  expect_lt(angular_distance(ak,  172, 52.0), 22)
+  expect_gt(ak[["lat"]], 62)          # north of the Alaska Peninsula, not on it
+
+  pa <- unlist(s[s$key == "PA", c("lon", "lat")])
+  # A MID-PACIFIC centre. The first attempt put this on the California coast
+  # (-126.5, 37.3) and then had to zoom out to the whole globe to reach Guam.
+  expect_true(pa[["lon"]] < -160 || pa[["lon"]] > 160)
+  expect_lt(pa[["lat"]], 35)
+  # Hawaii is nearer the centre than the mainland is ...
+  expect_lt(angular_distance(pa, -157, 21), angular_distance(pa, -124, 38))
+  # ... while Guam, American Samoa AND the west coast all sit inside the frame.
+  # Guam and the mainland land near the circle's edge at comparable distances --
+  # that is what a minimum enclosing circle MEANS, and asserting Guam beats the
+  # mainland was simply wrong (42.3 vs 40.4 degrees).
+  for (p in list(c(145, 15), c(-170, -14), c(-124, 38), c(-157, 21)))
+    expect_lt(angular_distance(pa, p[1], p[2]), 47)
+})

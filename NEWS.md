@@ -1,3 +1,23 @@
+# msens 0.36.0
+
+* **`mec_center()`** — the smallest circle containing every point (Badoiu-Clarkson on the sphere).
+  The four regional study areas are now framed by it, so a region fits its view by construction.
+  The centroid could not promise that: it is pulled toward wherever vertices are dense, which for
+  polygon boundaries means wherever the coastline is crinkliest rather than where the region is.
+  That bias was visible — Alaska centred at 60.2 N, south of its Arctic ecoregions, and cut off
+  Beaufort and the High Arctic; the Pacific was worse in the other direction, since California and
+  Washington/Oregon hold 154,878 vertices against the Pacific Island Territories' 14,305 for a
+  twenty-fifth of the area, so its centre landed on the US west coast and the zoom pulled back to a
+  whole-globe view to reach Guam. Alaska moves to (-164.7, 63.3) z 3.64 and the Pacific to
+  (-171.6, 28.5) z 2.36, a mid-Pacific view holding Hawaii, the Marianas and American Samoa.
+* `view_zoom()` gains `margin` (default 10%) so an area sits inside its frame rather than flush
+  against the edge.
+* `FULL` is unchanged and now says why in the code: the EEZ spans **more than a hemisphere** (Guam
+  is about 180 degrees from Puerto Rico), so no globe view can hold it. Its minimum enclosing circle
+  is a 70-degree radius centred at (-143.5, 47.3) — the Pacific, with the Gulf and the entire east
+  coast behind the horizon: the correct answer to the wrong question. `FULL` therefore frames the
+  North American block, and `Pacific` is where the islands live.
+
 # msens 0.35.0
 
 * **Canonical study areas** (`study_areas()`, `study_area_views()`): camera presets derived from the

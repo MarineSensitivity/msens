@@ -87,15 +87,60 @@ angular_distance <- function(center, lon, lat) {
   acos(pmin(1, pmax(-1, as.numeric(X %*% c0)))) / r
 }
 
+#' Centre of the smallest circle containing every point
+#'
+#' The framing rule for a REGION: by construction it minimises the distance to
+#' the farthest point, so a zoom derived from its radius shows all of the region
+#' and no more. A centroid cannot promise that -- it is pulled toward wherever
+#' the points are dense, which for polygon vertices means wherever the coastline
+#' is crinkliest, not where the region is.
+#'
+#' That bias was not academic: weighting Alaska by vertex count put its centre
+#' at 60.2 N, south of the Arctic ecoregions, and the view cut off Beaufort and
+#' the High Arctic entirely. The Pacific was worse in the other direction --
+#' California and Washington/Oregon hold 154,878 vertices against the Pacific
+#' Island Territories' 14,305, for a twenty-fifth of the area, so the centre
+#' landed on the US west coast and the zoom had to pull back to a whole-globe
+#' view to reach Guam.
+#'
+#' Badoiu-Clarkson: step toward the current farthest point by 1/(i+1). Converges
+#' quickly and needs no convex hull on the sphere.
+#'
+#' @param lon,lat numeric degrees
+#' @param iter iterations
+#' @return list with `center` (`c(lon, lat)`) and `radius` in degrees
+#' @export
+#' @concept study_area
+mec_center <- function(lon, lat, iter = 300L) {
+  ok <- is.finite(lon) & is.finite(lat)
+  lon <- lon[ok]; lat <- lat[ok]
+  if (!length(lon)) return(list(center = c(NA_real_, NA_real_), radius = NA_real_))
+  r <- pi / 180
+  xyz <- function(a, b) c(cos(b * r) * cos(a * r), cos(b * r) * sin(a * r), sin(b * r))
+  ct <- sphere_centroid(lon, lat)
+  if (anyNA(ct)) ct <- c(lon[1], lat[1])
+  for (i in seq_len(iter)) {
+    j  <- which.max(angular_distance(ct, lon, lat))
+    m  <- xyz(ct[1], ct[2]) + (xyz(lon[j], lat[j]) - xyz(ct[1], ct[2])) / (i + 1)
+    n  <- sqrt(sum(m^2))
+    if (!is.finite(n) || n < .Machine$double.eps) break
+    m  <- m / n
+    ct <- c(atan2(m[2], m[1]) / r, atan2(m[3], sqrt(m[1]^2 + m[2]^2)) / r)
+  }
+  list(center = ct, radius = max(angular_distance(ct, lon, lat)))
+}
+
 #' Zoom that frames a given angular radius
 #'
 #' @param radius_deg angular radius from the centre, degrees
+#' @param margin fraction to inflate the radius by before computing the zoom, so
+#'   the area sits inside the frame rather than flush against its edge
 #' @return a MapLibre zoom, clamped to `[1.2, 5]`
 #' @export
 #' @concept study_area
-view_zoom <- function(radius_deg) {
+view_zoom <- function(radius_deg, margin = 0.10) {
   if (!is.finite(radius_deg) || radius_deg <= 0) return(5)
-  max(1.2, min(5, log2(360 / (2 * radius_deg)) + 0.55))
+  max(1.2, min(5, log2(360 / (2 * radius_deg * (1 + margin))) + 0.55))
 }
 
 #' Canonical study areas — one set, every release
@@ -116,9 +161,9 @@ study_areas <- function() {
   data.frame(
     key   = c("FULL", "AK", "AT", "GA", "PA"),
     label = c("All US waters", "Alaska", "Atlantic", "Gulf of America", "Pacific"),
-    lon   = c(-101.304, -153.991, -75.921, -87.552, -126.454),
-    lat   = c(  46.900,   60.225,  35.721,  28.406,   37.322),
-    zoom  = c(   2.16,     4.02,    4.40,    4.92,     1.82),
+    lon   = c(-101.304, -164.654, -67.627, -89.089, -171.570),
+    lat   = c(  46.900,   63.327,  29.862,  26.251,   28.541),
+    zoom  = c(   2.16,     3.64,    4.00,    5.00,     2.36),
     ecoregions = c("CAC CBS EBS EGOA GOA HAR NECS PIS PUR SECS WAOR WCGOA",
                    "CBS EBS GOA HAR", "NECS PUR SECS", "EGOA WCGOA", "CAC PIS WAOR"),
     stringsAsFactors = FALSE)
@@ -160,18 +205,35 @@ study_area_views <- function(x, quantile_r = 0.99,
   }))
   stopifnot("no vertices extracted" = !is.null(V) && nrow(V) > 0)
 
-  one <- function(key, sel) {
-    s  <- V[sel, , drop = FALSE]
-    ct <- sphere_centroid(s$lon, s$lat)
-    a  <- angular_distance(ct, s$lon, s$lat)
+  row <- function(key, sel, ct, zoom) {
+    s <- V[sel, , drop = FALSE]
     data.frame(key = key,
                label = unname(if (key %in% names(labels)) labels[[key]] else key),
-               lon = round(ct[1], 3), lat = round(ct[2], 3),
-               zoom = round(view_zoom(stats::quantile(a, quantile_r)), 2),
+               lon = round(ct[1], 3), lat = round(ct[2], 3), zoom = round(zoom, 2),
                ecoregions = paste(sort(unique(s$eco)), collapse = " "),
                stringsAsFactors = FALSE)
   }
-  regions <- sort(unique(V$region))
-  rbind(one("FULL", rep(TRUE, nrow(V))),
-        do.call(rbind, lapply(regions, function(r) one(r, V$region == r))))
+
+  # A REGION is framed by its minimum enclosing circle, so all of it fits.
+  one_region <- function(r) {
+    sel <- V$region == r
+    m   <- mec_center(V$lon[sel], V$lat[sel])
+    row(r, sel, m$center, view_zoom(m$radius))
+  }
+
+  # FULL is the one deliberate compromise. The EEZ spans MORE THAN A HEMISPHERE
+  # -- Guam sits about 180 degrees from Puerto Rico -- so no globe view can hold
+  # it, and asking for the smallest enclosing circle gives a 70 degree radius
+  # centred at (-143.5, 47.3): the Pacific, with the Gulf and the whole east
+  # coast behind the horizon. It is the correct answer to the wrong question.
+  #
+  # So FULL frames the NORTH AMERICAN block instead, at the centroid of the
+  # geometry, and `Pacific` is where the islands live. Stated here rather than
+  # left to look like an oversight: the picker cannot show everything at once,
+  # and this is which half it chooses.
+  ct_full <- sphere_centroid(V$lon, V$lat)
+  a_full  <- angular_distance(ct_full, V$lon, V$lat)
+  rbind(row("FULL", rep(TRUE, nrow(V)), ct_full,
+            view_zoom(stats::quantile(a_full, quantile_r), margin = 0)),
+        do.call(rbind, lapply(sort(unique(V$region)), one_region)))
 }
