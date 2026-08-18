@@ -154,15 +154,26 @@ mec_center <- function(lon, lat, iter = 300L) {
 #' taken deliberately from the low end, since erring small zooms OUT and showing
 #' a little too much is the harmless direction.
 #'
+#' The lower clamp is 1.7, not 0. Past roughly there the globe stops growing to
+#' meet the viewport and simply shrinks inside it -- a sphere shows at most a
+#' hemisphere, so zooming out further buys nothing and costs the frame. The
+#' Pacific hits this: its enclosing radius of 46.5 deg asks for z 1.07, which
+#' rendered the globe as a small ball with empty space around it.
+#'
+#' The table above is the VERTICAL half-extent, which is the binding constraint
+#' for a tall region. A wide one like the Pacific -- Guam to California -- has
+#' about twice that horizontally to spend, which is what makes the clamp safe
+#' rather than merely tolerable.
+#'
 #' @param radius_deg angular radius from the centre, degrees
 #' @param margin fraction to inflate the radius by before computing the zoom, so
 #'   the area sits inside the frame rather than flush against its edge
-#' @return a MapLibre zoom, clamped to `[1.2, 5]`
+#' @return a MapLibre zoom, clamped to `[1.7, 5]`
 #' @export
 #' @concept study_area
 view_zoom <- function(radius_deg, margin = 0.10) {
   if (!is.finite(radius_deg) || radius_deg <= 0) return(5)
-  max(1.2, min(5, 6.75 - log2(radius_deg * (1 + margin))))
+  max(1.7, min(5, 6.75 - log2(radius_deg * (1 + margin))))
 }
 
 #' Canonical study areas — one set, every release
@@ -185,7 +196,7 @@ study_areas <- function() {
     label = c("All US waters", "Alaska", "Atlantic", "Gulf of America", "Pacific"),
     lon   = c(-101.304, -164.654, -67.627, -89.089, -171.570),
     lat   = c(  46.900,   63.327,  29.862,  26.251,   28.541),
-    zoom  = c(   2.16,     2.35,    2.71,    3.74,     1.20),
+    zoom  = c(   2.16,     2.35,    2.71,    3.74,     1.70),
     ecoregions = c("CAC CBS EBS EGOA GOA HAR NECS PIS PUR SECS WAOR WCGOA",
                    "CBS EBS GOA HAR", "NECS PUR SECS", "EGOA WCGOA", "CAC PIS WAOR"),
     stringsAsFactors = FALSE)

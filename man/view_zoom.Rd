@@ -13,7 +13,7 @@ view_zoom(radius_deg, margin = 0.1)
 the area sits inside the frame rather than flush against its edge}
 }
 \value{
-a MapLibre zoom, clamped to \verb{[1.2, 5]}
+a MapLibre zoom, clamped to \verb{[1.7, 5]}
 }
 \description{
 MEASURED, not derived. The formula this replaces -- \code{log2(360 / span) + 0.55}
@@ -38,5 +38,16 @@ wider than it is tall:\tabular{lll}{
 \code{zoom = C - log2(radius)}. C solves to 6.74-6.92 across that range; 6.75 is
 taken deliberately from the low end, since erring small zooms OUT and showing
 a little too much is the harmless direction.
+
+The lower clamp is 1.7, not 0. Past roughly there the globe stops growing to
+meet the viewport and simply shrinks inside it -- a sphere shows at most a
+hemisphere, so zooming out further buys nothing and costs the frame. The
+Pacific hits this: its enclosing radius of 46.5 deg asks for z 1.07, which
+rendered the globe as a small ball with empty space around it.
+
+The table above is the VERTICAL half-extent, which is the binding constraint
+for a tall region. A wide one like the Pacific -- Guam to California -- has
+about twice that horizontally to spend, which is what makes the clamp safe
+rather than merely tolerable.
 }
 \concept{study_area}

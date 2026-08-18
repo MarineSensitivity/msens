@@ -31,13 +31,14 @@ test_that("angular distance is great-circle, so the dateline is not a wall", {
 
 test_that("zoom tightens as the radius shrinks, and is clamped", {
   # radii chosen to stay inside the clamps, so this tests the CURVE not the clamp
-  z <- vapply(c(40, 20, 10, 5), view_zoom, 0)
+  z <- vapply(c(20, 10, 5, 2.5), view_zoom, 0)
   expect_true(all(diff(z) > 0))              # smaller radius -> higher zoom
-  expect_true(all(z >= 1.2 & z <= 5))
+  expect_true(all(z >= 1.7 & z <= 5))
   expect_equal(diff(z), rep(1, 3), tolerance = 1e-9)   # one zoom level per halving
   expect_equal(view_zoom(0), 5)              # degenerate: fully zoomed in
   expect_equal(view_zoom(NA), 5)
-  expect_equal(view_zoom(180), 1.2)          # whole globe: clamped out
+  expect_equal(view_zoom(180), 1.7)          # whole globe: clamped, since a sphere
+  # shows at most a hemisphere and zooming out further only shrinks it
 })
 
 test_that("the baked presets are the four ecoregion regions plus the whole", {
@@ -52,7 +53,7 @@ test_that("the baked presets are the four ecoregion regions plus the whole", {
   expect_length(eco, 12)
   expect_true("PIS" %in% eco)                # the one st_cast used to drop
   expect_true(all(is.finite(c(s$lon, s$lat, s$zoom))))
-  expect_true(all(s$zoom >= 1.2 & s$zoom <= 5))
+  expect_true(all(s$zoom >= 1.7 & s$zoom <= 5))
 })
 
 test_that("no preset centre sits in the wrong ocean", {
