@@ -1,3 +1,21 @@
+# msens 0.34.0
+
+* **Content-addressed Parquet** (`parquet_digest()`, `parquet_manifest()`, `parquet_sync_plan()`):
+  a digest of what a table *contains*, so the three copies of a release — build machine, server, S3
+  — can be compared without comparing bytes. Parquet cannot be compared by bytes: the same rows
+  written twice differ in the footer, the row groups and the compression, and a re-partitioned
+  dataset differs again while meaning exactly the same thing, so `rsync` both re-transfers gigabytes
+  that did not change and cannot tell you two copies are genuinely identical.
+
+  The digest is `bit_xor` over `md5_number(row || multiplicity)` grouped by the row, plus a schema
+  digest. It is **order-independent** (a re-sort, re-partition or parallel write cannot move it),
+  **mtime-independent**, and a true **multiset** hash — grouping to (row, count) first is what stops
+  XOR cancelling duplicate rows in pairs. `NULL` stays distinct from `''`, and the schema digest
+  catches a rename that leaves every value identical. Verified to return the same digest under
+  DuckDB 1.5.2 and 1.5.5, which is the point of comparing across machines.
+
+  Measured: the whole v8 `tables/` set (445 MB, 13 tables, 17M-row `cell`) digests in ~16 s.
+
 # msens 0.33.0
 
 * **`product_urls(ver, access)`**: where a release's four sibling products live — the two apps, the
