@@ -30,8 +30,9 @@ test_that("angular distance is great-circle, so the dateline is not a wall", {
 })
 
 test_that("zoom tightens as the radius shrinks, and is clamped", {
-  # radii chosen to stay inside the clamps, so this tests the CURVE not the clamp
-  z <- vapply(c(20, 10, 5, 2.5), view_zoom, 0)
+  # radii chosen to stay inside BOTH clamps (z 1.7 at r~30, z 5 at r~3.1), so
+  # this tests the CURVE and not the clamping at either end
+  z <- vapply(c(28, 14, 7, 3.5), view_zoom, 0)
   expect_true(all(diff(z) > 0))              # smaller radius -> higher zoom
   expect_true(all(z >= 1.7 & z <= 5))
   expect_equal(diff(z), rep(1, 3), tolerance = 1e-9)   # one zoom level per halving
