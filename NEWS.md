@@ -21,6 +21,8 @@ v9 — AquaX (`ax`) joins AquaMaps as a second suitability dataset and supersede
   window, with per-model scalars (AUC / TSS / cutoff) as GDAL metadata: the *native*
   representation for a source that already is a raster on the grid.
 * `grid_for_ver("v9")` → `global05`.
+* `cog_from_tif()` expands `~` (GDAL does not) and errors when nothing was written — under
+  `quiet = TRUE` a tilde path had failed silently, and a downstream check then sampled zero COGs.
 
 # msens 0.36.0
 

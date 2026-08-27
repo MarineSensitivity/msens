@@ -131,3 +131,8 @@ test_that("cog_from_tif keeps values bit-exact, crops to the data window, carrie
   expect_true(grepl("AUC=0.99", info) && grepl("cutoff=460", info))
   expect_true(grepl("LAYOUT=COG", info))
 })
+
+test_that("cog_from_tif fails loudly on a bad source rather than writing nothing", {
+  skip_if_not_installed("sf")
+  expect_error(cog_from_tif(tempfile(fileext = ".tif"), tempfile(fileext = ".tif")), "file.exists")
+})

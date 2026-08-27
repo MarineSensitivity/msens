@@ -375,6 +375,10 @@ rbind_fill <- function(a, b) {
 #' @export
 #' @concept publish
 cog_from_tif <- function(src, out, band = 1, crop = TRUE, metadata = list(), overview = TRUE) {
+  # GDAL does not expand `~` -- R's file.exists() does, so a tilde path passes the check here
+  # and then fails inside gdal_utils, which under quiet = TRUE reports nothing. Expand, and
+  # treat a missing output as the error it is.
+  src <- path.expand(src); out <- path.expand(out)
   stopifnot(file.exists(src))
   opts <- c("-of", "COG", "-b", as.character(band),
             "-co", "COMPRESS=DEFLATE", "-co", "BLOCKSIZE=256",
@@ -384,6 +388,8 @@ cog_from_tif <- function(src, out, band = 1, crop = TRUE, metadata = list(), ove
     opts <- c(opts, "-projwin", sprintf("%.10g", c(e[1], e[4], e[2], e[3])))   # ulx uly lrx lry
   }
   for (k in names(metadata)) opts <- c(opts, "-mo", sprintf("%s=%s", k, as.character(metadata[[k]])))
-  sf::gdal_utils("translate", src, out, options = opts, quiet = TRUE)
+  ok <- sf::gdal_utils("translate", src, out, options = opts, quiet = TRUE)
+  if (!isTRUE(ok) || !file.exists(out))
+    stop(sprintf("gdal_translate -of COG failed for %s -> %s", src, out), call. = FALSE)
   invisible(out)
 }
