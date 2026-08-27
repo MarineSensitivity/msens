@@ -4,7 +4,10 @@
 \alias{merge_sql}
 \title{v8 per-taxon merge rules (single source of truth)}
 \usage{
-merge_sql()
+merge_sql(suit_ds = "am")
+}
+\arguments{
+\item{suit_ds}{character vector of suitability dataset keys (default \code{"am"})}
 }
 \value{
 named list of SQL strings: \code{b_range}, \code{b_am_rng} (CREATE OR REPLACE TABLE),
@@ -23,9 +26,9 @@ The batch caller must first materialize three input relations in the connection:
 \item{\code{b}}{\verb{(ms_merge_key, ds_key, cell_id, val)} — the raw model cells for a batch of taxa
 (all datasets; \code{ds_key = 'am'} is AquaMaps, anything else is a range/expert dataset).}
 \item{\code{taxon}}{\verb{(ms_merge_key, er_score, ...)} — governing extinction-risk score per taxon.}
-\item{\code{taxon_flags}}{\verb{(ms_merge_key, has_am, has_range)} — GLOBAL presence flags from the
-crosswalk \code{taxon_model} (has_range = the taxon has ANY non-am dataset anywhere, NOT just in
-the US). This global scope is what enforces the IUCN-range constraint — see below.}
+\item{\code{taxon_flags}}{\verb{(ms_merge_key, has_suit, has_range)} — GLOBAL presence flags from the
+crosswalk \code{taxon_model} (has_range = the taxon has ANY non-suitability dataset anywhere, NOT
+just in the US). This global scope is what enforces the IUCN-range constraint — see below.}
 \item{\code{us_cells}}{\code{(cell_id)} — the in-USA cell ids (scoring extent).}
 }
 
@@ -56,10 +59,17 @@ the whole am footprint, which painted raw AquaMaps over-prediction into every me
 the walrus surface, reaching 9.75 degrees N — while \verb{$us} stayed correct and the manifest hash,
 which fingerprints only \verb{$us}, could not see it (MarineSensitivity/apps#8). \code{test-merge.R} now
 asserts \verb{$global} has no cell outside the range footprint.
+
+\strong{Which dataset is "suitability"} is the \code{suit_ds} argument: \code{"am"} alone through v8;
+\code{c("am", "ax")} from v9, when AquaX joins AquaMaps as a second suitability source. Every other
+\code{ds_key} is a range/expert dataset. Two suitability datasets for one taxon at one cell would
+simply \code{max()} here — which is why supersession (AquaX replacing AquaMaps inside the AquaX
+mask) is applied \emph{before} this, on the merge input, by \code{\link[=supersede_sql]{supersede_sql()}}: this function
+never sees an \code{am} cell it should ignore.
 }
 \examples{
 \dontrun{
-  msq <- merge_sql()
+  msq <- merge_sql(c("am", "ax"))
   DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch

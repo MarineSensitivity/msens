@@ -113,3 +113,21 @@ test_that("registry rows missing a key column are rejected, not silently classed
   expect_error(registry_merge(bad, am_model),  "missing registry key column")
   expect_error(registry_merge(am_model, bad),  "missing registry key column")
 })
+
+test_that("cog_from_tif keeps values bit-exact, crops to the data window, carries metadata", {
+  skip_if_not_installed("terra")
+  skip_if_not_installed("sf")
+  r <- terra::rast(nrows = 10, ncols = 10, xmin = 0, xmax = 0.5, ymin = 0, ymax = 0.5, crs = "EPSG:4326")
+  v <- rep(NA_real_, 100); v[c(34, 35, 44, 45)] <- c(47.5, 930, 512, 61)   # a 2x2 block, NA elsewhere
+  terra::values(r) <- v
+  src <- tempfile(fileext = ".tif"); out <- tempfile(fileext = ".tif")
+  terra::writeRaster(c(r, r * 0 + 0.99), src, overwrite = TRUE, NAflag = -9999)   # 2 bands like AquaX
+  cog_from_tif(src, out, band = 1, metadata = list(AUC = 0.99, cutoff = 460))
+  o <- terra::rast(out)
+  expect_equal(terra::nlyr(o), 1)
+  expect_equal(dim(o)[1:2], c(2, 2))                                 # cropped to the block
+  expect_equal(sort(terra::values(o, mat = FALSE)), c(47.5, 61, 512, 930))
+  info <- sf::gdal_utils("info", out, quiet = TRUE)
+  expect_true(grepl("AUC=0.99", info) && grepl("cutoff=460", info))
+  expect_true(grepl("LAYOUT=COG", info))
+})

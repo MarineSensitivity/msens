@@ -11,9 +11,9 @@
 #'   \item{`b`}{`(ms_merge_key, ds_key, cell_id, val)` — the raw model cells for a batch of taxa
 #'     (all datasets; `ds_key = 'am'` is AquaMaps, anything else is a range/expert dataset).}
 #'   \item{`taxon`}{`(ms_merge_key, er_score, ...)` — governing extinction-risk score per taxon.}
-#'   \item{`taxon_flags`}{`(ms_merge_key, has_am, has_range)` — GLOBAL presence flags from the
-#'     crosswalk `taxon_model` (has_range = the taxon has ANY non-am dataset anywhere, NOT just in
-#'     the US). This global scope is what enforces the IUCN-range constraint — see below.}
+#'   \item{`taxon_flags`}{`(ms_merge_key, has_suit, has_range)` — GLOBAL presence flags from the
+#'     crosswalk `taxon_model` (has_range = the taxon has ANY non-suitability dataset anywhere, NOT
+#'     just in the US). This global scope is what enforces the IUCN-range constraint — see below.}
 #'   \item{`us_cells`}{`(cell_id)` — the in-USA cell ids (scoring extent).}
 #' }
 #'
@@ -45,31 +45,45 @@
 #' which fingerprints only `$us`, could not see it (MarineSensitivity/apps#8). `test-merge.R` now
 #' asserts `$global` has no cell outside the range footprint.
 #'
+#' \strong{Which dataset is "suitability"} is the `suit_ds` argument: `"am"` alone through v8;
+#' `c("am", "ax")` from v9, when AquaX joins AquaMaps as a second suitability source. Every other
+#' `ds_key` is a range/expert dataset. Two suitability datasets for one taxon at one cell would
+#' simply `max()` here — which is why supersession (AquaX replacing AquaMaps inside the AquaX
+#' mask) is applied \emph{before} this, on the merge input, by [supersede_sql()]: this function
+#' never sees an `am` cell it should ignore.
+#'
+#' @param suit_ds character vector of suitability dataset keys (default `"am"`)
 #' @return named list of SQL strings: `b_range`, `b_am_rng` (CREATE OR REPLACE TABLE),
 #'   `global` and `us` (SELECT).
 #' @concept merge
 #' @export
 #' @examples
 #' \dontrun{
-#'   msq <- merge_sql()
+#'   msq <- merge_sql(c("am", "ax"))
 #'   DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
 #'   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
 #'   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch
 #' }
-merge_sql <- function() {
+merge_sql <- function(suit_ds = "am") {
+  stopifnot(is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)))
+  suit <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   list(
-    # range footprint (non-am) valued by the taxon's governing er_score
+    # range footprint (non-suitability datasets) valued by the taxon's governing er_score
     b_range = paste(
       "CREATE OR REPLACE TABLE b_range AS",
       "SELECT DISTINCT b.ms_merge_key, b.cell_id, t.er_score::DOUBLE AS er",
-      "FROM b JOIN taxon t ON b.ms_merge_key = t.ms_merge_key WHERE b.ds_key <> 'am'"),
-    # am AT range cells only -> range-footprint max(er, am-at-range). The JOIN to b_range IS the
-    # mask: am beyond the expert range never enters either output surface, and am-only taxa (no
-    # b_range rows) drop out of the global surface entirely.
+      "FROM b JOIN taxon t ON b.ms_merge_key = t.ms_merge_key",
+      sprintf("WHERE b.ds_key NOT IN (%s)", suit)),
+    # suitability AT range cells only -> range-footprint max(er, suit-at-range). The JOIN to
+    # b_range IS the mask: suitability beyond the expert range never enters either output surface,
+    # and suit-only taxa (no b_range rows) drop out of the global surface entirely. (The table keeps
+    # its historical name b_am_rng; from v9 it holds whichever suitability dataset survives
+    # supersession at that cell.)
     b_am_rng = paste(
       "CREATE OR REPLACE TABLE b_am_rng AS",
       "SELECT b.ms_merge_key, b.cell_id, max(b.val) am_val",
-      "FROM b JOIN b_range USING (ms_merge_key, cell_id) WHERE b.ds_key = 'am' GROUP BY 1, 2"),
+      "FROM b JOIN b_range USING (ms_merge_key, cell_id)",
+      sprintf("WHERE b.ds_key IN (%s) GROUP BY 1, 2", suit)),
     # GLOBAL viz surface = whole range footprint, masked: max(er, am-at-range)
     global = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
@@ -85,8 +99,48 @@ merge_sql <- function() {
       "UNION ALL",
       "SELECT b.ms_merge_key AS mdl_key, b.cell_id, b.val::DOUBLE AS val",
       "FROM b JOIN us_cells u ON b.cell_id = u.cell_id",
-      "WHERE b.ds_key = 'am' AND b.ms_merge_key IN (SELECT ms_merge_key FROM taxon_flags WHERE NOT has_range)")
+      sprintf("WHERE b.ds_key IN (%s)", suit),
+      "AND b.ms_merge_key IN (SELECT ms_merge_key FROM taxon_flags WHERE NOT has_range)")
   )
+}
+
+#' Supersession predicate: one suitability dataset replaces another inside a mask
+#'
+#' From v9, AquaX (`ax`) is a newer model of the same thing as AquaMaps (`am`) — but it was
+#' delivered only over the US study area (its own ocean mask, 586,276 cells; NOT the same set as
+#' `cell.in_usa`, which has 53,818 deep Aleutian / NW-Hawaiian cells AquaX never modeled). The
+#' rule is therefore \strong{per taxon, inside the mask}: for a taxon that has a superseding
+#' model, the superseded dataset's cells that fall inside the mask are dropped from the merge
+#' input; outside the mask (the rest of the world, and the uncovered US cells) the old dataset
+#' carries on. Applied to BOTH output surfaces, since it filters the input they share.
+#'
+#' Why a filter on the input rather than a `coalesce()` inside [merge_sql()]: a per-cell coalesce
+#' would keep an AquaMaps cell wherever AquaX has \emph{no} value — i.e. exactly where the newer
+#' model says the species is absent — which defeats the point of superseding it. Dropping the old
+#' cells over the whole mask lets AquaX's absences be absences.
+#'
+#' Which taxa are superseded is a TABLE the caller materializes (`taxa`, one `ms_merge_key` per
+#' row), not derived here from "has a superseding model", because the policy question — does an
+#' AquaX run that predicted \emph{no} US presence also supersede? (v9: no, `AX_ABSENT_SUPERSEDES`)
+#' — belongs in the notebook, where it is a flag and a table a reviewer can read.
+#'
+#' @param superseded ds_key whose cells are dropped inside the mask (default `"am"`)
+#' @param taxa relation holding `ms_merge_key` of the taxa to supersede (default `"supersede"`)
+#' @param mask relation holding the `cell_id`s of the superseding dataset's extent (default `"ax_mask"`)
+#' @param src alias of the relation being filtered, with `ds_key`, `ms_merge_key`, `cell_id`
+#' @return a SQL predicate (no leading `WHERE`) that is TRUE for rows to KEEP
+#' @concept merge
+#' @export
+#' @examples
+#' supersede_sql()
+#' \dontrun{ DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql(src = "mc"))) }
+supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask", src = "mc") {
+  stopifnot(is.character(superseded), length(superseded) == 1, nzchar(superseded))
+  sprintf(paste(
+    "NOT (%s.ds_key = '%s'",
+    "AND %s.ms_merge_key IN (SELECT ms_merge_key FROM %s)",
+    "AND %s.cell_id IN (SELECT cell_id FROM %s))"),
+    src, superseded, src, taxa, src, mask)
 }
 
 #' Turtle multiplicative merge rule
@@ -97,7 +151,9 @@ merge_sql <- function() {
 #' `greatest(that, ch)`. Reads a source relation `src` with `(ms_merge_key, ds_key, cell_id, val)`.
 #'
 #' @param turtle_ds character; ds_key of the turtle DPS extinction-risk dataset.
-#' @param suit_ds character; ds_key of the AquaMaps suitability dataset (usually `"am"`).
+#' @param suit_ds character vector; ds_key(s) of the suitability dataset(s) (`"am"`, or
+#'   `c("am", "ax")` from v9 — after [supersede_sql()] at most one survives per cell, and `max()`
+#'   over the survivors is the value).
 #' @param ch_keys character vector of critical-habitat ds_keys that override with a max (may be empty).
 #' @param src character; name of the source relation to read (default `"turtle_src"`).
 #' @return SQL string selecting `(mdl_key, cell_id, val)` — the whole-range turtle surface.
@@ -106,9 +162,10 @@ merge_sql <- function() {
 #' @export
 turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src") {
   ch_sql <- if (length(ch_keys)) paste(sprintf("'%s'", ch_keys), collapse = ", ") else "''"
+  suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   glue::glue(
     "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key = '{turtle_ds}' GROUP BY 1, 2),\n",
-    "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key = '{suit_ds}'   GROUP BY 1, 2),\n",
+    "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2),\n",
     "     ch   AS (SELECT ms_merge_key, cell_id, max(val) ch_value   FROM {src} WHERE ds_key IN ({ch_sql})   GROUP BY 1, 2),\n",
     "     mult AS (SELECT er.ms_merge_key, er.cell_id,\n",
     "                greatest(1, CAST(round(er.er_value * coalesce(suit.suit_value, 1) / 100.0) AS INTEGER)) AS val\n",

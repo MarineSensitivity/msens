@@ -154,3 +154,53 @@ cells_from_raster <- function(r, cellid_tif, method = "bilinear",
   d <- terra::as.data.frame(s, na.rm = TRUE)
   tibble::tibble(cell_id = as.integer(d$cell_id), val = round(d$v, 2))   # `val` not `value`
 }
+
+#' `(cell_id, val)` from a raster ALREADY on the cell grid (no resample)
+#'
+#' The v8+ `global05` grid was anchored to the shared 0.05° [-180,180] topology of Bio-Oracle
+#' and AquaX so that such a raster maps to `cell_id` by \strong{position}: pixel `i` of the
+#' source is pixel `i` of the cell-id COG. This reads the cell ids at the source's non-NA
+#' pixels rather than assuming `cell_id == i` — on `global05` the two coincide (and the AquaX
+#' ingest asserts it), while a lookup-image grid (`usa05`'s `r_cellid.tif`) carries ids that
+#' are not positions. Land pixels (`NA` in the cell-id raster) are dropped.
+#'
+#' No resample, no zero-fill, no land mask: the source's own values define coverage.
+#'
+#' @param x a `SpatRaster` (one layer) or a path; `band` selects the layer from a path
+#' @param cellid_tif path to the grid's cell-id COG, OR an integer vector of cell ids read
+#'   from it once (`terra::values(rast(cellid_tif), mat = FALSE)`) — pass the vector when
+#'   calling in a loop, so the 100 MB id raster is read once per worker, not once per model
+#' @param band layer index when `x` is a path (default 1)
+#' @param scale multiply source values by this (AquaX 0–1000 → `0.1` gives the [0,100] scale)
+#' @param min_value drop scaled values below this (default 1, like AquaMaps)
+#' @param digits rounding of `val` (default 2)
+#' @param tol extent tolerance in degrees (default 1e-4; the cell-id COG carries ~6e-6 of
+#'   float drift against the nominal grid)
+#' @return a tibble `(cell_id integer, val double)`
+#' @export
+#' @concept ingest
+#' @importFrom tibble tibble
+cells_from_aligned_raster <- function(x, cellid_tif, band = 1, scale = 1, min_value = 1,
+                                      digits = 2, tol = 1e-4) {
+  r <- if (inherits(x, "SpatRaster")) x else terra::rast(x, lyrs = band)
+  stopifnot(terra::nlyr(r) == 1)
+  if (is.character(cellid_tif)) {
+    stopifnot(file.exists(cellid_tif))
+    rc <- terra::rast(cellid_tif)
+    if (!identical(as.integer(dim(r)[1:2]), as.integer(dim(rc)[1:2])))
+      stop(sprintf("raster is %d x %d but the cell grid is %d x %d — not on this grid",
+                   dim(r)[1], dim(r)[2], dim(rc)[1], dim(rc)[2]), call. = FALSE)
+    d <- max(abs(as.vector(terra::ext(r)) - as.vector(terra::ext(rc))))
+    if (d > tol) stop(sprintf("raster extent differs from the cell grid by %.2g deg (> tol %.2g)", d, tol),
+                      call. = FALSE)
+    ids <- terra::values(rc, mat = FALSE)
+  } else {
+    ids <- cellid_tif
+    if (length(ids) != terra::ncell(r))
+      stop(sprintf("cell-id vector has %d values but the raster has %d pixels", length(ids), terra::ncell(r)),
+           call. = FALSE)
+  }
+  v   <- terra::values(r, mat = FALSE) * scale
+  idx <- which(!is.na(v) & v >= min_value & !is.na(ids))
+  tibble::tibble(cell_id = as.integer(ids[idx]), val = round(v[idx], digits))
+}

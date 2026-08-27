@@ -9,7 +9,9 @@ turtle_sql(turtle_ds, suit_ds, ch_keys, src = "turtle_src")
 \arguments{
 \item{turtle_ds}{character; ds_key of the turtle DPS extinction-risk dataset.}
 
-\item{suit_ds}{character; ds_key of the AquaMaps suitability dataset (usually \code{"am"}).}
+\item{suit_ds}{character vector; ds_key(s) of the suitability dataset(s) (\code{"am"}, or
+\code{c("am", "ax")} from v9 — after \code{\link[=supersede_sql]{supersede_sql()}} at most one survives per cell, and \code{max()}
+over the survivors is the value).}
 
 \item{ch_keys}{character vector of critical-habitat ds_keys that override with a max (may be empty).}
 

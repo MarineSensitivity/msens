@@ -354,3 +354,36 @@ rbind_fill <- function(a, b) {
   for (nm in setdiff(names(a), names(b))) b[[nm]] <- NA
   rbind(a, b[names(a)])
 }
+
+#' COG from a delivered GeoTIFF, values bit-exact (the *native* representation)
+#'
+#' For a source that already IS a raster on the cell grid (AquaX), the native representation
+#' is the delivered band itself, not a re-painting of the ingested cells: `gdal_translate -of
+#' COG` of one band, cropped to the data window (a US-masked global raster is mostly NoData),
+#' with the per-model scalars a reviewer needs (AUC / TSS / cutoff) written as GDAL metadata.
+#' Complements [publish_cog()], which paints `(cell_id, val)` and is the *model* representation.
+#'
+#' @param src path to the source GeoTIFF
+#' @param out output path (`.tif`)
+#' @param band band index to publish (default 1)
+#' @param crop crop to the band's non-NoData window (default `TRUE`)
+#' @param metadata named list written as `-mo KEY=VALUE` items
+#' @param overview build internal overviews (default `TRUE`, nearest)
+#' @return `out` (invisibly)
+#' @importFrom sf gdal_utils
+#' @importFrom terra rast trim ext
+#' @export
+#' @concept publish
+cog_from_tif <- function(src, out, band = 1, crop = TRUE, metadata = list(), overview = TRUE) {
+  stopifnot(file.exists(src))
+  opts <- c("-of", "COG", "-b", as.character(band),
+            "-co", "COMPRESS=DEFLATE", "-co", "BLOCKSIZE=256",
+            "-co", if (overview) "OVERVIEW_RESAMPLING=NEAREST" else "OVERVIEWS=NONE")
+  if (crop) {
+    e <- terra::ext(terra::trim(terra::rast(src, lyrs = band)))
+    opts <- c(opts, "-projwin", sprintf("%.10g", c(e[1], e[4], e[2], e[3])))   # ulx uly lrx lry
+  }
+  for (k in names(metadata)) opts <- c(opts, "-mo", sprintf("%s=%s", k, as.character(metadata[[k]])))
+  sf::gdal_utils("translate", src, out, options = opts, quiet = TRUE)
+  invisible(out)
+}

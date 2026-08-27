@@ -39,7 +39,7 @@
 # which grid each release's cell_id indexes
 .GRID_VER <- c(v1 = "usa05", v2 = "usa05", v3 = "usa05", v4 = "usa05",
                v4b = "usa05", v5 = "usa05", v6 = "usa05", v7 = "usa05",
-               v8 = "global05")
+               v8 = "global05", v9 = "global05")
 
 #' The grid registry
 #'

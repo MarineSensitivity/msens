@@ -1,3 +1,27 @@
+# msens 0.37.0
+
+v9 — AquaX (`ax`) joins AquaMaps as a second suitability dataset and supersedes it in US waters.
+
+* **`merge_sql(suit_ds = "am")`** — which dataset(s) are *suitability* (everything else is a range)
+  is now an argument; `c("am", "ax")` from v9. The five v8 fixtures produce identical output under
+  the generalized rule (asserted). `turtle_sql()` likewise accepts a vector of suitability keys.
+* **`supersede_sql()`** — the v9 rule: for a taxon in the `supersede` table, the superseded
+  dataset's cells inside the superseding dataset's mask (`ax_mask`) are dropped from the merge
+  INPUT, so both output surfaces see AquaX where AquaX was modeled and AquaMaps everywhere else
+  (the rest of the world *and* the 53,818 `in_usa` cells AquaX never covered). A filter on the
+  input rather than a per-cell coalesce, so AquaX's absences are absences. Which taxa supersede
+  is the caller's table (v9 flag `AX_ABSENT_SUPERSEDES`). Fixtures: `T_ax_both`, `T_ax_only`,
+  `T_ax_new`, a control run without supersession, a turtle with `ax`.
+* **`sp_cat_from_taxonomy()`** — the `sp_cat` rule lifted out of `merge_taxon.qmd` so the AquaX
+  ingest can report species by component before a merge exists; one test row per branch.
+* **`cells_from_aligned_raster()`** — `(cell_id, val)` from a raster already on the cell grid
+  (AquaX): reads the ids at the source's non-NA pixels (accepts a pre-read id vector for loops),
+  scales (`0.1` for AquaX's 0–1000), thresholds, drops land; refuses another grid.
+* **`cog_from_tif()`** — bit-exact COG of one band of a delivered GeoTIFF, cropped to its data
+  window, with per-model scalars (AUC / TSS / cutoff) as GDAL metadata: the *native*
+  representation for a source that already is a raster on the grid.
+* `grid_for_ver("v9")` → `global05`.
+
 # msens 0.36.0
 
 * **`mec_center()`** — the smallest circle containing every point (Badoiu-Clarkson on the sphere).
