@@ -2,12 +2,12 @@
 % Please edit documentation in R/merge.R
 \name{turtle_sql}
 \alias{turtle_sql}
-\title{Turtle multiplicative merge rule}
+\title{Spatial-ER (turtle) multiplicative merge rule}
 \usage{
 turtle_sql(turtle_ds, suit_ds, ch_keys, src = "turtle_src")
 }
 \arguments{
-\item{turtle_ds}{character; ds_key of the turtle DPS extinction-risk dataset.}
+\item{turtle_ds}{character vector; ds_key(s) of the per-cell extinction-risk dataset(s).}
 
 \item{suit_ds}{character vector; ds_key(s) of the suitability dataset(s) (\code{"am"}, or
 \code{c("am", "ax")} from v9 — after \code{\link[=supersede_sql]{supersede_sql()}} at most one survives per cell, and \code{max()}
@@ -21,9 +21,17 @@ over the survivors is the value).}
 SQL string selecting \verb{(mdl_key, cell_id, val)} — the whole-range turtle surface.
 }
 \description{
-Sea turtles merge differently: the DPS extinction-risk surface (\code{turtle_ds}) is multiplied by the
-AquaMaps suitability (\code{suit_ds}), floored at 1 over the ER footprint, then critical-habitat
-datasets (\code{ch_keys}) override with a max. \code{val = greatest(1, round(er * suit / 100))} then
-\code{greatest(that, ch)}. Reads a source relation \code{src} with \verb{(ms_merge_key, ds_key, cell_id, val)}.
+Taxa whose extinction risk is SPATIAL — a per-cell ER surface built from Distinct Population
+Segment polygons (sea turtles from SWOT + NMFS DPS since v4b; from v9.1 any species with NMFS
+DPS boundaries, e.g. the humpback whale, via \code{dps_nmfs}) — merge differently: the per-cell ER
+surface (\code{turtle_ds}, one or more datasets) is multiplied by the suitability (\code{suit_ds}),
+floored at 1 over the ER footprint, then critical-habitat datasets (\code{ch_keys}) override with a
+max. \code{val = greatest(1, round(er * suit / 100))} then \code{greatest(that, ch)}. Reads a source
+relation \code{src} with \verb{(ms_merge_key, ds_key, cell_id, val)}.
+}
+\details{
+This is what keeps an Endangered species from painting flat: the plain rule values every
+range cell at the taxon's governing ER (\code{max(er, suit)} = 100 everywhere for \code{NMFS:EN}), while
+here the ER varies by DPS and the suitability still shows through.
 }
 \concept{merge}

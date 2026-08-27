@@ -1,5 +1,12 @@
 # msens 0.38.0
 
+* **`turtle_sql(turtle_ds = <vector>)`** — the spatial-ER (multiplicative) rule now takes one or
+  more per-cell ER datasets. From v9.1 the humpback whale (and any species with NMFS Distinct
+  Population Segment boundaries) merges like the sea turtles: a `dps_nmfs` surface — the IUCN range
+  at the species' baseline ER (IUCN + MMPA floor), overlaid by each listed DPS's polygons at its
+  own status — multiplied by AquaX/AquaMaps suitability. The plain rule valued every range cell at
+  the taxon's governing ER, which `parse_noaa_status()` had set to `NMFS:EN` species-wide from
+  DPSs that breed outside US waters, so the humpback painted a flat 100 across 14.7 M cells.
 * **`zone_style()`, `zone_line_args()`, `zone_label_args()`** — the one table of how each
   spatial unit is drawn, for every app: Program Areas (and v1's Planning Areas) white 1px with
   white labels; Ecoregions black 3px with larger black, haloed labels; Subregions a dashed

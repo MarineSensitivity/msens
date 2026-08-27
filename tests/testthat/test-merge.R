@@ -254,3 +254,19 @@ test_that("turtle rule accepts several suitability datasets (ax supersedes am in
   # cell 2: outside the mask -> suit = am 40 -> round(60*40/100) = 24, then ch 90 overrides
   expect_equal(key_set(res, "T_turtle"), c("1:16", "2:90"))
 })
+
+test_that("spatial-ER rule accepts several ER datasets (turtles + NMFS DPS species): ER varies by cell", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a humpback-like taxon: IUCN-range baseline 21 (LC + MMPA) everywhere, an Endangered DPS polygon
+  # at cell 1 (100) and a Threatened one at cell 2 (50); suitability 80 / 80 / 40
+  src <- data.frame(
+    ms_merge_key = "T_dps",
+    ds_key  = c("dps_nmfs", "dps_nmfs", "dps_nmfs", "ax", "ax", "ax"),
+    cell_id = c(1L, 2L, 3L, 1L, 2L, 3L),
+    val     = c(100, 50, 21, 80, 80, 40), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "turtle_src", src)
+  res <- DBI::dbGetQuery(con, turtle_sql(c("turtles", "dps_nmfs"), c("am", "ax"), character(0), src = "turtle_src"))
+  # cell 1: 100*80/100 = 80; cell 2: 50*80/100 = 40; cell 3: round(21*40/100) = 8 -- NOT a flat 100
+  expect_equal(key_set(res, "T_dps"), c("1:80", "2:40", "3:8"))
+})

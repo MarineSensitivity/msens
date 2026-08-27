@@ -143,14 +143,21 @@ supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask
     src, superseded, src, taxa, src, mask)
 }
 
-#' Turtle multiplicative merge rule
+#' Spatial-ER (turtle) multiplicative merge rule
 #'
-#' Sea turtles merge differently: the DPS extinction-risk surface (`turtle_ds`) is multiplied by the
-#' AquaMaps suitability (`suit_ds`), floored at 1 over the ER footprint, then critical-habitat
-#' datasets (`ch_keys`) override with a max. `val = greatest(1, round(er * suit / 100))` then
-#' `greatest(that, ch)`. Reads a source relation `src` with `(ms_merge_key, ds_key, cell_id, val)`.
+#' Taxa whose extinction risk is SPATIAL — a per-cell ER surface built from Distinct Population
+#' Segment polygons (sea turtles from SWOT + NMFS DPS since v4b; from v9.1 any species with NMFS
+#' DPS boundaries, e.g. the humpback whale, via `dps_nmfs`) — merge differently: the per-cell ER
+#' surface (`turtle_ds`, one or more datasets) is multiplied by the suitability (`suit_ds`),
+#' floored at 1 over the ER footprint, then critical-habitat datasets (`ch_keys`) override with a
+#' max. `val = greatest(1, round(er * suit / 100))` then `greatest(that, ch)`. Reads a source
+#' relation `src` with `(ms_merge_key, ds_key, cell_id, val)`.
 #'
-#' @param turtle_ds character; ds_key of the turtle DPS extinction-risk dataset.
+#' This is what keeps an Endangered species from painting flat: the plain rule values every
+#' range cell at the taxon's governing ER (`max(er, suit)` = 100 everywhere for `NMFS:EN`), while
+#' here the ER varies by DPS and the suitability still shows through.
+#'
+#' @param turtle_ds character vector; ds_key(s) of the per-cell extinction-risk dataset(s).
 #' @param suit_ds character vector; ds_key(s) of the suitability dataset(s) (`"am"`, or
 #'   `c("am", "ax")` from v9 — after [supersede_sql()] at most one survives per cell, and `max()`
 #'   over the survivors is the value).
@@ -163,8 +170,9 @@ supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask
 turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src") {
   ch_sql <- if (length(ch_keys)) paste(sprintf("'%s'", ch_keys), collapse = ", ") else "''"
   suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
+  er_sql   <- paste(sprintf("'%s'", turtle_ds), collapse = ", ")
   glue::glue(
-    "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key = '{turtle_ds}' GROUP BY 1, 2),\n",
+    "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key IN ({er_sql}) GROUP BY 1, 2),\n",
     "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2),\n",
     "     ch   AS (SELECT ms_merge_key, cell_id, max(val) ch_value   FROM {src} WHERE ds_key IN ({ch_sql})   GROUP BY 1, 2),\n",
     "     mult AS (SELECT er.ms_merge_key, er.cell_id,\n",
