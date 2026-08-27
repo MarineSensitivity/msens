@@ -157,6 +157,8 @@ mdl_key_parse <- function(mdl_key) {
 #' @concept mdl_key
 assign_mdl_id <- function(mdl_key, published = NULL) {
   mdl_key <- as.character(mdl_key)
+  if (anyNA(mdl_key) || any(!nzchar(mdl_key)))
+    stop("`mdl_key` has NA/empty values — a model without a key cannot be partitioned", call. = FALSE)
   keys    <- sort(unique(mdl_key))
   if (is.null(published) || !nrow(published)) {
     ids <- stats::setNames(seq_along(keys), keys)
@@ -165,6 +167,13 @@ assign_mdl_id <- function(mdl_key, published = NULL) {
   if (!all(c("mdl_key", "mdl_id") %in% names(published)))
     stop("`published` must have columns `mdl_key` and `mdl_id`", call. = FALSE)
   pub <- published[!duplicated(published$mdl_key), c("mdl_key", "mdl_id")]
+  # a published registry can carry a keyless row (v9's first push did: a crosswalk species with no
+  # surface); it names no partition, so it is dropped rather than allowed to poison max() with NA
+  bad <- is.na(pub$mdl_key) | !nzchar(as.character(pub$mdl_key)) | is.na(pub$mdl_id)
+  if (any(bad)) {
+    warning(sprintf("`published` has %d row(s) with NA mdl_key/mdl_id — ignored", sum(bad)), call. = FALSE)
+    pub <- pub[!bad, , drop = FALSE]
+  }
   if (anyDuplicated(pub$mdl_id))
     stop("`published` has duplicate `mdl_id` — it is not a valid partition key", call. = FALSE)
   ids <- stats::setNames(as.integer(pub$mdl_id), as.character(pub$mdl_key))

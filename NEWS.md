@@ -1,5 +1,8 @@
 # msens 0.38.0
 
+* `assign_mdl_id()` ignores (with a warning) a published row whose `mdl_key`/`mdl_id` is NA and
+  refuses NA input keys: v9's first registry push carried one keyless crosswalk row, whose NA id
+  made `max()` NA — every new model would have been assigned `NA` and the stability guard failed.
 * **`turtle_sql(turtle_ds = <vector>)`** — the spatial-ER (multiplicative) rule now takes one or
   more per-cell ER datasets. From v9.1 the humpback whale (and any species with NMFS Distinct
   Population Segment boundaries) merges like the sea turtles: a `dps_nmfs` surface — the IUCN range

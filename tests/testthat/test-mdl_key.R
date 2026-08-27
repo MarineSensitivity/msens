@@ -194,3 +194,10 @@ test_that("dataset_is_scored() assumes every dataset is scored when the relation
   # silently drop real inputs from the docs, which is worse than claiming all of them
   expect_equal(dataset_is_scored(c("am", "bl"), NULL), c(TRUE, TRUE))
 })
+
+test_that("assign_mdl_id ignores a keyless published row and refuses NA keys", {
+  pub <- data.frame(mdl_key = c("a", "c", NA), mdl_id = c(1L, 2L, NA), stringsAsFactors = FALSE)
+  expect_warning(ids <- assign_mdl_id(c("b", "a", "c"), pub), "NA mdl_key")
+  expect_equal(ids, c(3L, 1L, 2L))            # published kept, new key appended above the real max
+  expect_error(assign_mdl_id(c("a", NA)), "NA/empty")
+})
