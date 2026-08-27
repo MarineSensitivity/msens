@@ -107,12 +107,12 @@ merge_sql <- function(suit_ds = "am") {
 #' Supersession predicate: one suitability dataset replaces another inside a mask
 #'
 #' From v9, AquaX (`ax`) is a newer model of the same thing as AquaMaps (`am`) — but it was
-#' delivered only over the US study area (its own ocean mask, 586,276 cells; NOT the same set as
-#' `cell.in_usa`, which has 53,818 deep Aleutian / NW-Hawaiian cells AquaX never modeled). The
-#' rule is therefore \strong{per taxon, inside the mask}: for a taxon that has a superseding
-#' model, the superseded dataset's cells that fall inside the mask are dropped from the merge
-#' input; outside the mask (the rest of the world, and the uncovered US cells) the old dataset
-#' carries on. Applied to BOTH output surfaces, since it filters the input they share.
+#' delivered only over the US study area (its own mask: the union over models of their modeled
+#' pixels — one model's NA area is its range crop, i.e. the model saying absent — so the mask is
+#' the union, measured against `cell.in_usa` by the ingest). The rule is therefore \strong{per
+#' taxon, inside the mask}: for a taxon that has a superseding model, the superseded dataset's
+#' cells that fall inside the mask are dropped from the merge input; outside the mask (the rest
+#' of the world, and any US cell no model reaches) the old dataset carries on. Applied to BOTH output surfaces, since it filters the input they share.
 #'
 #' Why a filter on the input rather than a `coalesce()` inside [merge_sql()]: a per-cell coalesce
 #' would keep an AquaMaps cell wherever AquaX has \emph{no} value — i.e. exactly where the newer

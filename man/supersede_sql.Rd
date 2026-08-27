@@ -25,12 +25,12 @@ a SQL predicate (no leading \code{WHERE}) that is TRUE for rows to KEEP
 }
 \description{
 From v9, AquaX (\code{ax}) is a newer model of the same thing as AquaMaps (\code{am}) — but it was
-delivered only over the US study area (its own ocean mask, 586,276 cells; NOT the same set as
-\code{cell.in_usa}, which has 53,818 deep Aleutian / NW-Hawaiian cells AquaX never modeled). The
-rule is therefore \strong{per taxon, inside the mask}: for a taxon that has a superseding
-model, the superseded dataset's cells that fall inside the mask are dropped from the merge
-input; outside the mask (the rest of the world, and the uncovered US cells) the old dataset
-carries on. Applied to BOTH output surfaces, since it filters the input they share.
+delivered only over the US study area (its own mask: the union over models of their modeled
+pixels — one model's NA area is its range crop, i.e. the model saying absent — so the mask is
+the union, measured against \code{cell.in_usa} by the ingest). The rule is therefore \strong{per
+taxon, inside the mask}: for a taxon that has a superseding model, the superseded dataset's
+cells that fall inside the mask are dropped from the merge input; outside the mask (the rest
+of the world, and any US cell no model reaches) the old dataset carries on. Applied to BOTH output surfaces, since it filters the input they share.
 }
 \details{
 Why a filter on the input rather than a \code{coalesce()} inside \code{\link[=merge_sql]{merge_sql()}}: a per-cell coalesce
