@@ -18,7 +18,7 @@ greatest(that, ch). Reads a source relation src with (ms_merge_key, ds_key, cell
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.36.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.37.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -66,7 +66,9 @@ datasets (<code>ch_keys</code>) override with a max. <code>val = greatest(1, rou
 
 
 <dt id="arg-suit-ds">suit_ds<a class="anchor" aria-label="anchor" href="#arg-suit-ds"></a></dt>
-<dd><p>character; ds_key of the AquaMaps suitability dataset (usually <code>"am"</code>).</p></dd>
+<dd><p>character vector; ds_key(s) of the suitability dataset(s) (<code>"am"</code>, or
+<code>c("am", "ax")</code> from v9 — after <code><a href="supersede_sql.html">supersede_sql()</a></code> at most one survives per cell, and <code><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max()</a></code>
+over the survivors is the value).</p></dd>
 
 
 <dt id="arg-ch-keys">ch_keys<a class="anchor" aria-label="anchor" href="#arg-ch-keys"></a></dt>

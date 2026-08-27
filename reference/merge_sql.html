@@ -20,7 +20,7 @@ being silently lost by a wrong sequence or minor tweak."><script async src="http
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.36.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.37.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,9 +57,17 @@ being silently lost by a wrong sequence or minor tweak.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">merge_sql</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">merge_sql</span><span class="op">(</span>suit_ds <span class="op">=</span> <span class="st">"am"</span><span class="op">)</span></span></code></pre></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h2>
+
+
+<dl><dt id="arg-suit-ds">suit_ds<a class="anchor" aria-label="anchor" href="#arg-suit-ds"></a></dt>
+<dd><p>character vector of suitability dataset keys (default <code>"am"</code>)</p></dd>
+
+</dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>named list of SQL strings: <code>b_range</code>, <code>b_am_rng</code> (CREATE OR REPLACE TABLE),
@@ -75,9 +83,9 @@ being silently lost by a wrong sequence or minor tweak.</p>
 <dd><p><code>(ms_merge_key, er_score, ...)</code> — governing extinction-risk score per taxon.</p></dd>
 
 <dt><code>taxon_flags</code></dt>
-<dd><p><code>(ms_merge_key, has_am, has_range)</code> — GLOBAL presence flags from the
-crosswalk <code>taxon_model</code> (has_range = the taxon has ANY non-am dataset anywhere, NOT just in
-the US). This global scope is what enforces the IUCN-range constraint — see below.</p></dd>
+<dd><p><code>(ms_merge_key, has_suit, has_range)</code> — GLOBAL presence flags from the
+crosswalk <code>taxon_model</code> (has_range = the taxon has ANY non-suitability dataset anywhere, NOT
+just in the US). This global scope is what enforces the IUCN-range constraint — see below.</p></dd>
 
 <dt><code>us_cells</code></dt>
 <dd><p><code>(cell_id)</code> — the in-USA cell ids (scoring extent).</p></dd>
@@ -104,12 +112,18 @@ the whole am footprint, which painted raw AquaMaps over-prediction into every me
 the walrus surface, reaching 9.75 degrees N — while <code>$us</code> stayed correct and the manifest hash,
 which fingerprints only <code>$us</code>, could not see it (MarineSensitivity/apps#8). <code>test-merge.R</code> now
 asserts <code>$global</code> has no cell outside the range footprint.</p>
+<p><strong>Which dataset is "suitability"</strong> is the <code>suit_ds</code> argument: <code>"am"</code> alone through v8;
+<code>c("am", "ax")</code> from v9, when AquaX joins AquaMaps as a second suitability source. Every other
+<code>ds_key</code> is a range/expert dataset. Two suitability datasets for one taxon at one cell would
+simply <code><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max()</a></code> here — which is why supersession (AquaX replacing AquaMaps inside the AquaX
+mask) is applied <em>before</em> this, on the merge input, by <code><a href="supersede_sql.html">supersede_sql()</a></code>: this function
+never sees an <code>am</code> cell it should ignore.</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span>  <span class="va">msq</span> <span class="op">&lt;-</span> <span class="fu">merge_sql</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="va">msq</span> <span class="op">&lt;-</span> <span class="fu">merge_sql</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"am"</span>, <span class="st">"ax"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_range</span><span class="op">)</span>; <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbExecute.html" class="external-link">dbExecute</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">b_am_rng</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="va">us</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">us</span><span class="op">)</span>      <span class="co"># US scoring surface for the batch</span></span></span>
 <span class="r-in"><span>  <span class="va">gl</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">msq</span><span class="op">$</span><span class="va">global</span><span class="op">)</span>  <span class="co"># global whole-range surface for the batch</span></span></span>
