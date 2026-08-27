@@ -75,15 +75,17 @@ test_that("preview URLs put the version in the PATH, never in the query", {
 
 # product_urls: the one link set the navs share (apps#11, docs#6) ------------
 
-test_that("a public release's product links carry the version as ?ver=", {
+test_that("a public release's product links put the version in the PATH", {
   u <- product_urls("v7")
-  expect_equal(u[["scores"]],  "https://app.marinesensitivity.org/scores/?ver=v7")
-  expect_equal(u[["species"]], "https://app.marinesensitivity.org/species/?ver=v7")
+  expect_equal(u[["scores"]],  "https://app.marinesensitivity.org/v7/scores/")
+  expect_equal(u[["species"]], "https://app.marinesensitivity.org/v7/species/")
   expect_equal(u[["docs"]],    "https://marinesensitivity.org/docs/v7/")
   expect_equal(u[["home"]],    "https://marinesensitivity.org")
   # the regression this exists to prevent: a bare /scores would silently move a
-  # v7 reader onto the promoted release
-  expect_true(all(grepl("ver=v7", u[c("scores", "species")])))
+  # v7 reader onto the promoted release. Since 2026-08-27 the version rides the
+  # path on BOTH hosts, so no product link should carry ?ver= at all.
+  expect_true(all(grepl("/v7/", u[c("scores", "species", "docs")], fixed = TRUE)))
+  expect_false(any(grepl("?ver=", u, fixed = TRUE)))
 })
 
 test_that("a restricted release's product links use the preview host's PATH form", {

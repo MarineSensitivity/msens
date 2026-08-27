@@ -170,8 +170,13 @@ product_urls <- function(ver, access = "public",
              home    = home))
   app_base  <- sub("/+$", "", app_base)
   docs_base <- sub("/+$", "", docs_base)
-  c(scores  = sprintf("%s/scores/?ver=%s",  app_base, ver),
-    species = sprintf("%s/species/?ver=%s", app_base, ver),
+  # THE VERSION IS THE PATH on the public host too (2026-08-27), the same shape
+  # the preview host uses, so a URL means the same thing wherever it points and a
+  # reader can see the version without parsing a query. `?ver=` still resolves --
+  # Caddy 301s it to the path (server/caddy/app_version_routes.caddy) -- so every
+  # published deep link keeps working.
+  c(scores  = sprintf("%s/%s/scores/",  app_base, ver),
+    species = sprintf("%s/%s/species/", app_base, ver),
     docs    = sprintf("%s/%s/", docs_base, ver),
     home    = home)
 }

@@ -1,5 +1,14 @@
 # msens 0.37.0
 
+* **`product_urls()` puts the version in the PATH for public releases too** —
+  `https://app.marinesensitivity.org/v7/scores/` rather than `/scores/?ver=v7`, matching the shape
+  the signed-in preview host already used. One scheme across both hosts means a URL reads the same
+  way wherever it points, and a reader can see which release they are looking at without parsing a
+  query. `?ver=` keeps working: Caddy 301s it to the canonical path
+  (`server/caddy/app_version_routes.caddy`), so published deep links and reports still resolve.
+
+# msens 0.37.0
+
 v9 — AquaX (`ax`) joins AquaMaps as a second suitability dataset and supersedes it in US waters.
 
 * **`merge_sql(suit_ds = "am")`** — which dataset(s) are *suitability* (everything else is a range)
