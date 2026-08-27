@@ -32,7 +32,9 @@ test_that("functions the workflows/apps call are actually exported", {
     "content_hashes", "content_key", "content_url", "cog_store_index",
     "publish_cog", "publish_pmtiles",
     # serving helpers the apps use
-    "cog_tile_url", "cog_point_value", "add_cell_tiles", "version_picker_html"
+    "cog_tile_url", "cog_point_value", "add_cell_tiles", "version_picker_html",
+    # how the apps draw spatial units (one table for both maps)
+    "zone_style", "zone_line_args", "zone_label_args"
   ) %in% exported))
 })
 

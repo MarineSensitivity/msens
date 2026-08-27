@@ -1,3 +1,14 @@
+# msens 0.38.0
+
+* **`zone_style()`, `zone_line_args()`, `zone_label_args()`** — the one table of how each
+  spatial unit is drawn, for every app: Program Areas (and v1's Planning Areas) white 1px with
+  white labels; Ecoregions black 3px with larger black, haloed labels; Subregions a dashed
+  context line with NO labels (their boundaries are the ecoregion rollup, so a label there just
+  doubled the ecoregion's). The scores app had painted all three identically in white and
+  labelled all three, so "CEC" sat on "CAC" and "AK" on "ALA"; the species app hand-coded its
+  own pair. Both now call these.
+* `add_pmline()` passes `line_dasharray` through to the line layer.
+
 # msens 0.37.0
 
 * **`product_urls()` puts the version in the PATH for public releases too** —

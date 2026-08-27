@@ -170,6 +170,7 @@ add_pmline <- function(m, outlines) {
         line_color   = ol$line_color   %||% "gray",
         line_opacity = ol$line_opacity %||% 1,
         line_width   = ol$line_width   %||% 1,
+        line_dasharray = ol$line_dasharray,
         filter       = ol$filter,
         before_id    = ol$before_id)
   }
