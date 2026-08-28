@@ -23,7 +23,7 @@ SQL string selecting \verb{(mdl_key, cell_id, val)} — the whole-range turtle s
 \description{
 Taxa whose extinction risk is SPATIAL — a per-cell ER surface built from Distinct Population
 Segment polygons (sea turtles from SWOT + NMFS DPS since v4b; from v9.1 any species with NMFS
-DPS boundaries, e.g. the humpback whale, via \code{dps_nmfs}) — merge differently: the per-cell ER
+DPS boundaries — but those now use \code{\link[=dps_sql]{dps_sql()}}, which keeps the distribution as the model) merge differently: the per-cell ER
 surface (\code{turtle_ds}, one or more datasets) is multiplied by the suitability (\code{suit_ds}),
 floored at 1 over the ER footprint, then critical-habitat datasets (\code{ch_keys}) override with a
 max. \code{val = greatest(1, round(er * suit / 100))} then \code{greatest(that, ch)}. Reads a source

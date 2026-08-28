@@ -1,3 +1,15 @@
+# msens 0.39.0
+
+* **`dps_sql(dps_ds, suit_ds, src)`** — the merge rule for NMFS DPS-listed species (`dps_nmfs`),
+  replacing their pass through `turtle_sql()`. The merged value is the **distribution** — the
+  suitability surface (AquaX / AquaMaps) masked to the extinction-risk footprint, valued at the ER
+  where no suitability model covers a cell — and the per-cell ER is returned **beside** it (`er`)
+  for scoring to multiply in (`extrisk = er × val / 100`), exactly as the taxon-level `er_score`
+  is for every other species. Under the turtle rule the humpback's ER of 1 across 99.8 % of its
+  range collapsed the merged surface to 1 everywhere except critical habitat: the app drew the
+  weight, not the whale. Sea turtles keep `turtle_sql()` unchanged. Fixture in `test-merge.R`
+  asserts the value, the ER, the scoring identity, and the turtle-rule regression.
+
 # msens 0.38.0
 
 * `assign_mdl_id()` ignores (with a warning) a published row whose `mdl_key`/`mdl_id` is NA and

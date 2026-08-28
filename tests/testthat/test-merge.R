@@ -255,7 +255,7 @@ test_that("turtle rule accepts several suitability datasets (ax supersedes am in
   expect_equal(key_set(res, "T_turtle"), c("1:16", "2:90"))
 })
 
-test_that("spatial-ER rule accepts several ER datasets (turtles + NMFS DPS species): ER varies by cell", {
+test_that("turtle rule accepts several ER datasets (generic): ER varies by cell", {
   skip_if_not_installed("glue")
   con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   # a humpback-like taxon: IUCN-range baseline 21 (LC + MMPA) everywhere, an Endangered DPS polygon
@@ -269,4 +269,33 @@ test_that("spatial-ER rule accepts several ER datasets (turtles + NMFS DPS speci
   res <- DBI::dbGetQuery(con, turtle_sql(c("turtles", "dps_nmfs"), c("am", "ax"), character(0), src = "turtle_src"))
   # cell 1: 100*80/100 = 80; cell 2: 50*80/100 = 40; cell 3: round(21*40/100) = 8 -- NOT a flat 100
   expect_equal(key_set(res, "T_dps"), c("1:80", "2:40", "3:8"))
+})
+
+test_that("NMFS DPS rule (dps_sql): merged val is the SUITABILITY masked to the ER footprint; ER rides beside it", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a humpback-like taxon: ER 100 (EN critical habitat) at cell 1, 50 (TN) at cell 2, 20 (MMPA
+  # baseline over the IUCN range) at cells 3-4; AquaX 80/40 at cells 1-2, AquaMaps 30 at cell 2
+  # (max with ax -> 40), nothing at cell 3, and AquaMaps 60 at cell 5 which is OUTSIDE the ER
+  # footprint and must be masked away like any am cell beyond the range
+  src <- data.frame(
+    ms_merge_key = "T_dps",
+    ds_key  = c("dps_nmfs", "dps_nmfs", "dps_nmfs", "dps_nmfs", "ax", "ax", "am", "am", "am"),
+    cell_id = c(1L, 2L, 3L, 4L, 1L, 2L, 2L, 4L, 5L),
+    val     = c(100, 50, 20, 20, 80, 40, 30, 5, 60), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  res <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src"))
+  res <- res[order(res$cell_id), ]
+  # the model is the distribution: suitability where modeled (cells 1, 2, 4 -- NOT max(er, suit):
+  # cell 4 keeps AquaMaps' 5 under an ER of 20), the ER as the fitting point where nothing models
+  # the cell (cell 3), and nothing beyond the ER footprint (cell 5)
+  expect_equal(key_set(res, "T_dps"), c("1:80", "2:40", "3:20", "4:5"))
+  expect_equal(res$er, c(100, 50, 20, 20))
+  # ...and scoring recovers exactly what the turtle rule would have baked in, one step later
+  expect_equal(res$er * res$val / 100, c(80, 20, 4, 1))
+  # regression: the turtle rule on the same input is what painted the humpback 1 outside habitat
+  DBI::dbExecute(con, "CREATE TABLE turtle_src AS SELECT * FROM dps_src")
+  old <- DBI::dbGetQuery(con, turtle_sql("dps_nmfs", SUIT, character(0), src = "turtle_src"))
+  # (cell 3: round(20 * coalesce(NULL, 1) / 100) = 0 -> floored to 1; cell 4: round(20 * 5 / 100) = 1)
+  expect_equal(key_set(old, "T_dps"), c("1:80", "2:20", "3:1", "4:1"))
 })

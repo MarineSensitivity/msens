@@ -147,7 +147,7 @@ supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask
 #'
 #' Taxa whose extinction risk is SPATIAL — a per-cell ER surface built from Distinct Population
 #' Segment polygons (sea turtles from SWOT + NMFS DPS since v4b; from v9.1 any species with NMFS
-#' DPS boundaries, e.g. the humpback whale, via `dps_nmfs`) — merge differently: the per-cell ER
+#' DPS boundaries — but those now use [dps_sql()], which keeps the distribution as the model) merge differently: the per-cell ER
 #' surface (`turtle_ds`, one or more datasets) is multiplied by the suitability (`suit_ds`),
 #' floored at 1 over the ER footprint, then critical-habitat datasets (`ch_keys`) override with a
 #' max. `val = greatest(1, round(er * suit / 100))` then `greatest(that, ch)`. Reads a source
@@ -181,5 +181,49 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src") {
     "SELECT m.ms_merge_key AS mdl_key, m.cell_id,\n",
     "       CAST(greatest(m.val, coalesce(ch.ch_value, 0)) AS DOUBLE) AS val\n",
     "FROM mult m LEFT JOIN ch USING (ms_merge_key, cell_id)",
+    .trim = FALSE)
+}
+
+#' Merge rule for NMFS DPS-listed species: the model stays the distribution, ER rides beside it
+#'
+#' For species whose ESA listing is scoped below the species — Distinct Population Segments, ESUs,
+#' subspecies (`dps_nmfs`: humpback whale, Southern Resident killer whale, the salmonid ESUs, …) —
+#' extinction risk varies across the range, but unlike the sea turtles ([turtle_sql()]) the risk is
+#' NOT multiplied into the merged value. The merged model is the **distribution**: the suitability
+#' surface (`suit_ds`, max over the survivors of [supersede_sql()]) masked to the ER footprint (the
+#' species' IUCN range ∪ its listed entities' habitat, i.e. the same range mask every other taxon
+#' gets), and where no suitability model covers a footprint cell the cell is valued at its ER — the
+#' plain rule's "fitting point" (`greatest(er, coalesce(suit, 0))` reduces to `er` there). The
+#' per-cell ER is returned **beside** the value (`er`) for `score_cell_metrics` to multiply in,
+#' exactly as the taxon-level `er_score` is for every other species: `extrisk = er × val / 100`.
+#'
+#' Why not the turtle rule: `round(er × suit / 100)` with the humpback's ER of 1 across 99.8 % of
+#' its range collapsed the merged surface to 1 everywhere except critical habitat — the merged
+#' model showed the *weight*, not the whale. Critical-habitat datasets are not an input here (the
+#' caller excludes `ch_*` from `src`): `dps_nmfs` already carries every designation with its own
+#' entity's status, while `ch_*` carries the species-level status.
+#'
+#' @param dps_ds character vector; ds_key(s) of the per-cell extinction-risk dataset(s) (`"dps_nmfs"`).
+#' @param suit_ds character vector; suitability ds_key(s) (`c("am", "ax")` from v9).
+#' @param src character; name of the source relation `(ms_merge_key, ds_key, cell_id, val)`.
+#' @return SQL string selecting `(mdl_key, cell_id, val, er)` — the whole-range surface with its
+#'   per-cell extinction risk.
+#' @examples
+#' cat(dps_sql("dps_nmfs", c("am", "ax")))
+#' @concept merge
+#' @importFrom glue glue
+#' @export
+dps_sql <- function(dps_ds, suit_ds, src = "dps_src") {
+  stopifnot(is.character(dps_ds),  length(dps_ds)  >= 1, all(nzchar(dps_ds)),
+            is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)))
+  er_sql   <- paste(sprintf("'%s'", dps_ds),  collapse = ", ")
+  suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
+  glue::glue(
+    "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key IN ({er_sql})   GROUP BY 1, 2),\n",
+    "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2)\n",
+    "SELECT er.ms_merge_key AS mdl_key, er.cell_id,\n",
+    "       CAST(coalesce(suit.suit_value, er.er_value) AS DOUBLE) AS val,\n",
+    "       CAST(er.er_value AS DOUBLE) AS er\n",
+    "FROM er LEFT JOIN suit USING (ms_merge_key, cell_id)",
     .trim = FALSE)
 }
