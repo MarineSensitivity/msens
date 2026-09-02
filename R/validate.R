@@ -182,17 +182,7 @@ pra_score_delta <- function(con_a, con_b,
   q <- function(con, lbl) {
     zc <- .value_col(con, "zone")           # programarea_key string
     mc <- .value_col(con, "zone_metric")    # numeric score
-    # pin to a zone set when both asked for and available; a release predating
-    # the column keeps the fld filter rather than silently comparing nothing
-    has_zs <- "zone_set_key" %in%
-      DBI::dbGetQuery(con, "PRAGMA table_info('zone')")$name
-    where <- if (!is.null(zone_set_key) && has_zs) {
-      n <- DBI::dbGetQuery(con, glue::glue(
-        "SELECT count(*) n FROM zone WHERE zone_set_key = '{zone_set_key}'"))$n
-      if (!n) stop(sprintf("%s: no zones for zone_set_key '%s'", lbl, zone_set_key),
-                   call. = FALSE)
-      glue::glue("z.zone_set_key = '{zone_set_key}'")
-    } else glue::glue("z.fld = 'programarea_key'")
+    where <- .zone_where(con, "programarea_key", zone_set_key, lbl)
     glue::glue("
       SELECT z.{zc} AS programarea_key, zm.{mc} AS score
       FROM zone z
@@ -204,6 +194,64 @@ pra_score_delta <- function(con_a, con_b,
     DBI::dbGetQuery(con_a, q(con_a, labels[1])),
     DBI::dbGetQuery(con_b, q(con_b, labels[2])),
     key = "programarea_key", value = "score", labels = labels)
+}
+
+#' WHERE clause selecting one spatial unit's zones (internal)
+#'
+#' Pins to `zone_set_key` when both asked for and available; a release predating
+#' the column keeps the `fld` filter rather than silently comparing nothing, and
+#' naming a zone set the release lacks is an error, not an empty join.
+#'
+#' @param con a DBI connection to an `sdm.duckdb`
+#' @param fld zone field, e.g. `"programarea_key"`
+#' @param zone_set_key optional `{zone_type}_{YYYY-MM}`
+#' @param lbl label used in the error message
+#' @return a length-1 glue string for use after `WHERE` (table alias `z`)
+#' @keywords internal
+.zone_where <- function(con, fld, zone_set_key, lbl) {
+  has_zs <- "zone_set_key" %in%
+    DBI::dbGetQuery(con, "PRAGMA table_info('zone')")$name
+  if (!is.null(zone_set_key) && has_zs) {
+    n <- DBI::dbGetQuery(con, glue::glue(
+      "SELECT count(*) n FROM zone WHERE zone_set_key = '{zone_set_key}'"))$n
+    if (!n) stop(sprintf("%s: no zones for zone_set_key '%s'", lbl, zone_set_key),
+                 call. = FALSE)
+    glue::glue("z.zone_set_key = '{zone_set_key}'")
+  } else glue::glue("z.fld = '{fld}'")
+}
+
+#' Every zone-level score of one spatial unit, across all metrics
+#'
+#' The long-form reader that feeds [zone_score_delta()]: one row per
+#' (zone, metric) for the zones of `fld` — Program Areas by default — in one
+#' release's `sdm.duckdb`. Schema-adaptive like [pra_score_delta()] (`value` in
+#' v1–v7, `val` in v8+) and pinnable to a zone set the same way, so a v6 database
+#' (no `zone_set_key` column) and a v9 database can be read with one call each
+#' and compared with [zone_score_delta()].
+#'
+#' @param con a DBI connection to a release's `sdm.duckdb`
+#' @param fld zone field to read (default `"programarea_key"`)
+#' @param zone_set_key optional `{zone_type}_{YYYY-MM}` to pin the spatial unit;
+#'   errors if a connection carries the column but not that value
+#' @param label version label for error messages (default `"db"`)
+#' @return a tibble of `zone_key`, `metric_key`, `score`
+#' @export
+#' @concept validate
+#' @importFrom DBI dbGetQuery
+#' @importFrom glue glue
+#' @importFrom tibble as_tibble
+zone_scores <- function(con, fld = "programarea_key", zone_set_key = NULL, label = "db") {
+  zc <- .value_col(con, "zone")
+  mc <- .value_col(con, "zone_metric")
+  where <- .zone_where(con, fld, zone_set_key, label)
+  DBI::dbGetQuery(con, glue::glue("
+    SELECT z.{zc} AS zone_key, m.metric_key, zm.{mc} AS score
+    FROM zone z
+    JOIN zone_metric zm USING(zone_seq)
+    JOIN metric m USING(metric_seq)
+    WHERE {where}
+    ORDER BY zone_key, metric_key")) |>
+    tibble::as_tibble()
 }
 
 #' Compare per-zone scores between two releases, across every metric

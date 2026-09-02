@@ -185,3 +185,31 @@ test_that("zone_score_delta() reports metrics unique to one release rather than 
 test_that("zone_score_delta() rejects a frame missing the columns it needs", {
   expect_error(zone_score_delta(data.frame(x = 1), data.frame(x = 1)), "zone_key")
 })
+
+
+# zone_scores() -- the long-form reader behind zone_score_delta(), so the
+# per-component comparison in compare_versions.qmd reads each release ONCE.
+test_that("zone_scores() returns every (zone, metric) of the unit, on either schema", {
+  skip_if_not_installed("duckdb")
+  new <- mk_scored(scores = c(A = 50, B = 60))
+  DBI::dbExecute(new, "INSERT INTO metric VALUES (2,'extrisk_fish_ecoregion_rescaled')")
+  DBI::dbExecute(new, "INSERT INTO zone_metric VALUES (1,2,10),(2,2,20)")
+  s <- zone_scores(new, zone_set_key = "programarea_2026-01", label = "new")
+  expect_named(s, c("zone_key", "metric_key", "score"))
+  expect_equal(nrow(s), 4L)
+  expect_equal(s$score[s$zone_key == "B" & s$metric_key == "extrisk_fish_ecoregion_rescaled"], 20)
+
+  # v1-v7 schema: no zone_set_key column, so the fld filter carries it
+  old <- mk_scored(with_zs = FALSE, scores = c(A = 40, B = 60))
+  s_old <- zone_scores(old, zone_set_key = "programarea_2026-01", label = "old")
+  expect_equal(nrow(s_old), 2L)
+
+  # and the two feed zone_score_delta() directly
+  d <- zone_score_delta(s_old, s, labels = c("old", "new"))
+  expect_equal(d$n_zones_shared, 2L)
+  expect_equal(d$metrics_only_b, "extrisk_fish_ecoregion_rescaled")
+  expect_equal(d$by_metric$mean_delta, 5)   # (50-40 + 60-60) / 2
+
+  # a zone set the release lacks is an error, never an empty frame
+  expect_error(zone_scores(new, zone_set_key = "programarea_1999-01"), "no zones for zone_set_key")
+})

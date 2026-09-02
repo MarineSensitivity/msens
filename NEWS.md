@@ -1,3 +1,10 @@
+# msens 0.40.0
+
+* **`zone_scores(con, fld, zone_set_key)`** — long-form reader of every (zone, metric) score of one
+  spatial unit in a release's `sdm.duckdb`; schema-adaptive (`value` v1–v7 / `val` v8+) and
+  pinnable to a zone set like `pra_score_delta()`. Feeds `zone_score_delta()` so
+  `workflows/compare_versions.qmd` reads each release once for the per-component comparison.
+
 # msens 0.39.0
 
 * **`dps_sql(dps_ds, suit_ds, src)`** — the merge rule for NMFS DPS-listed species (`dps_nmfs`),
