@@ -213,3 +213,40 @@ test_that("zone_scores() returns every (zone, metric) of the unit, on either sch
   # a zone set the release lacks is an error, never an empty frame
   expect_error(zone_scores(new, zone_set_key = "programarea_1999-01"), "no zones for zone_set_key")
 })
+
+
+test_that("zone_scored_flds() names the units that carry the metric, with zone counts", {
+  skip_if_not_installed("duckdb")
+  con <- mk_scored(scores = c(A = 50, B = 60))           # 2 program areas with the composite
+  DBI::dbExecute(con, "INSERT INTO zone VALUES (3,'planarea_key','P1','planarea_2025-06')")
+  DBI::dbExecute(con, "INSERT INTO metric VALUES (2,'extrisk_fish')")
+  DBI::dbExecute(con, "INSERT INTO zone_metric VALUES (3,2,1)")   # planarea has fish, NOT the composite
+  f <- zone_scored_flds(con)
+  expect_equal(unname(f), "programarea_key")
+  expect_equal(names(f), "2")
+  expect_equal(unname(zone_scored_flds(con, "extrisk_fish")), "planarea_key")
+  expect_length(zone_scored_flds(con, "nope"), 0)
+})
+
+# zone_crosswalk() -- the v1 Planning Area <-> Program Area bridge. The rule:
+# only the SAME polygon is compared; a subset (the Gulf Program Areas inside
+# their Planning Areas) is reported with its IoU and NOT marked identical.
+test_that("zone_crosswalk() pairs identical polygons and refuses subsets", {
+  skip_if_not_installed("sf")
+  sq <- function(x0, y0, w = 1, h = 1) sf::st_polygon(list(rbind(c(x0, y0), c(x0 + w, y0),
+                                                                 c(x0 + w, y0 + h), c(x0, y0 + h), c(x0, y0))))
+  a <- sf::st_sf(planarea_key = c("COK", "WGA", "CGA", "HAW"),
+                 geometry = sf::st_sfc(sq(0, 0), sq(10, 0, 2), sq(12, 0, 2), sq(50, 50)), crs = 4326)
+  b <- sf::st_sf(programarea_key = c("COK", "GAA"), planarea_key = c("COK", "WGA,CGA"),
+                 geometry = sf::st_sfc(sq(0, 0), sq(11, 0, 2)), crs = 4326)   # GAA = half of WGA + half of CGA
+  x <- zone_crosswalk(a, b, "planarea_key", "programarea_key", hint = "planarea_key")
+  expect_equal(x$key_b, c("COK", "GAA"))
+  expect_equal(x$identical, c(TRUE, FALSE))
+  expect_equal(x$iou[x$key_b == "COK"], 1)
+  expect_equal(x$iou[x$key_b == "GAA"], 0.5)          # 2 of the 4 km^2 union
+  # without a hint the candidates are every intersecting pair, same verdicts
+  y <- zone_crosswalk(a, b, "planarea_key", "programarea_key")
+  expect_true(y$identical[y$key_a == "COK" & y$key_b == "COK"])
+  expect_false(any(y$identical[y$key_b == "GAA"]))
+  expect_false("HAW" %in% y$key_a)                     # nothing to compare it with
+})

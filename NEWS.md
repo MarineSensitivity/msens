@@ -1,3 +1,14 @@
+# msens 0.41.0
+
+* **`zone_crosswalk(a, b, key_a, key_b, iou_min, hint)`** — pairs zones of two layers only where they
+  are the SAME polygon (intersection/union ≥ 0.999), so v1's 36 Planning Areas can be compared with
+  the 20 Program Areas where they coincide (18 do; the two Gulf of America Program Areas are subsets
+  and are reported, not compared).
+* **`zone_scored_flds(con, metric_key)`** — which zone fields of a release carry a metric, so a
+  comparison picks the unit each side actually scored (v1: Planning Areas; v2+: Program Areas).
+* `compare_versions.qmd` (workflows) uses both to compare any two releases, listing zones and
+  components present on one side only beside the compared ones.
+
 # msens 0.40.0
 
 * **`zone_scores(con, fld, zone_set_key)`** — long-form reader of every (zone, metric) score of one

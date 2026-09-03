@@ -341,3 +341,88 @@ zone_score_delta <- function(a, b, labels = c("a", "b")) {
     metrics_only_a  = setdiff(mets_a, mets_b),
     metrics_only_b  = setdiff(mets_b, mets_a))
 }
+
+#' Which zone fields of a release carry a given metric
+#'
+#' A release scores some spatial units and merely carries others: v1 has the
+#' composite on Planning Areas and ecoregions, v6 on Program Areas only. Read the
+#' `fld` values whose zones have `metric_key`, so a comparison can pick the unit
+#' each side actually scored instead of assuming Program Areas.
+#'
+#' @param con a DBI connection to a release's `sdm.duckdb`
+#' @param metric_key metric to look for (default [METRIC_SCORE_DEFAULT])
+#' @return character vector of `fld` values (e.g. `"programarea_key"`), with the
+#'   number of zones as names; empty if no unit carries the metric
+#' @export
+#' @concept validate
+#' @importFrom DBI dbGetQuery
+#' @importFrom glue glue
+zone_scored_flds <- function(con, metric_key = METRIC_SCORE_DEFAULT) {
+  d <- DBI::dbGetQuery(con, glue::glue("
+    SELECT z.fld, count(DISTINCT z.zone_seq) AS n
+    FROM zone z
+    JOIN zone_metric zm USING(zone_seq)
+    JOIN metric m USING(metric_seq)
+    WHERE m.metric_key = '{metric_key}'
+    GROUP BY z.fld ORDER BY z.fld"))
+  stats::setNames(d$fld, d$n)
+}
+
+#' Crosswalk two zone layers by geometric identity
+#'
+#' Pairs a zone of `a` with a zone of `b` only when the two polygons are the SAME
+#' polygon — intersection over union at least `iou_min` — so two releases scored on
+#' differently named units (v1's 36 Planning Areas, v2+'s 20 Program Areas) can be
+#' compared where, and only where, they measured the same place. Measured on the
+#' 2025 Planning Areas vs the 2026 Program Areas: 18 of 20 Program Areas are
+#' identical to a Planning Area (IoU 1.0000); the two Gulf of America Program
+#' Areas are subsets (IoU 0.59, 0.15) and must NOT be compared, and 15 Planning
+#' Areas (Atlantic, Hawai'i, Pacific islands) have no Program Area at all.
+#'
+#' Candidate pairs come from `hint` when given (a column of `b` naming zones of
+#' `a`, e.g. `programarea` rows carry `planarea_key = "CGA,EGA"`), else every pair
+#' that intersects; either way the geometry decides. Planar areas in the layer's
+#' CRS (`sf::sf_use_s2(FALSE)` while computing).
+#'
+#' @param a,b `sf` polygon layers
+#' @param key_a,key_b name of the zone-key column in each
+#' @param iou_min minimum intersection/union to call two zones identical (default
+#'   `0.999`)
+#' @param hint optional column of `b` listing (comma-separated) `key_a` values to
+#'   test against; a hint with more than one key is tested as their union
+#' @return a data frame of every candidate pair: `key_a`, `key_b`, `iou`,
+#'   `identical` (logical); the compared set is `identical == TRUE`
+#' @export
+#' @concept validate
+zone_crosswalk <- function(a, b, key_a, key_b, iou_min = 0.999, hint = NULL) {
+  stopifnot(inherits(a, "sf"), inherits(b, "sf"), key_a %in% names(a), key_b %in% names(b))
+  old <- sf::sf_use_s2(FALSE); on.exit(sf::sf_use_s2(old), add = TRUE)
+  a <- sf::st_make_valid(a); b <- sf::st_make_valid(b)
+  ga <- sf::st_geometry(a); gb <- sf::st_geometry(b)
+  ka <- as.character(a[[key_a]]); kb <- as.character(b[[key_b]])
+  iou <- function(g, h) {
+    ai <- suppressWarnings(as.numeric(sf::st_area(sf::st_intersection(g, h))))
+    au <- suppressWarnings(as.numeric(sf::st_area(sf::st_union(g, h))))
+    if (!length(ai) || !is.finite(au) || au == 0) 0 else sum(ai) / au
+  }
+  rows <- lapply(seq_along(kb), function(j) {
+    if (!is.null(hint)) {
+      keys <- trimws(strsplit(as.character(b[[hint]][j]), ",")[[1]])
+      keys <- keys[keys %in% ka]
+      if (!length(keys)) return(NULL)
+      data.frame(key_a = paste(keys, collapse = ","), key_b = kb[j],
+                 iou = iou(gb[j], sf::st_union(ga[ka %in% keys])), stringsAsFactors = FALSE)
+    } else {
+      hits <- which(lengths(suppressMessages(sf::st_intersects(ga, gb[j]))) > 0)
+      if (!length(hits)) return(NULL)
+      data.frame(key_a = ka[hits], key_b = kb[j],
+                 iou = vapply(hits, function(i) iou(gb[j], ga[i]), numeric(1)),
+                 stringsAsFactors = FALSE)
+    }
+  })
+  out <- do.call(rbind, Filter(Negate(is.null), rows))
+  if (is.null(out)) out <- data.frame(key_a = character(), key_b = character(), iou = numeric())
+  out$iou <- round(out$iou, 4)
+  out$identical <- out$iou >= iou_min
+  out[order(-out$iou, out$key_b), ]
+}
