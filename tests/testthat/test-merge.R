@@ -299,3 +299,99 @@ test_that("NMFS DPS rule (dps_sql): merged val is the SUITABILITY masked to the 
   # (cell 3: round(20 * coalesce(NULL, 1) / 100) = 0 -> floored to 1; cell 4: round(20 * 5 / 100) = 1)
   expect_equal(key_set(old, "T_dps"), c("1:80", "2:20", "3:1", "4:1"))
 })
+
+# v7.1 core habitat: turtle_sql(suit_min, fill, half_even, ch_outer). ONE fixture, four parameter
+# sets, so a change to any knob shows as a value change rather than a missing category.
+#   ER   {1:100, 2:100, 3:100, 4:50, 5:50, 7:100}   the SWOT/DPS footprint
+#   suit {1:80, 2:49, 4:51, 5:53, 7:10}             AquaMaps; cells 3 and 6 have NONE
+#   CH   {3:100, 6:100, 7:50}                       3 = CH with no suitability at all,
+#                                                   6 = CH OUTSIDE the ER footprint,
+#                                                   7 = CH whose suitability is below the cut
+# Cells 3 and 7 are the guard for "the trap": with fill = NA they have no `mult` row, so a CH join
+# hung off `mult` (v8/v9's LEFT JOIN) drops them -- critical habitat silently trimmed.
+turtle_v7b_con <- function() {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  ts  <- data.frame(
+    ms_merge_key = "T_turtle",
+    ds_key  = c(rep("turtles", 6),        rep("am", 5),        rep("ch", 3)),
+    cell_id = c(1L, 2L, 3L, 4L, 5L, 7L,   1L, 2L, 4L, 5L, 7L,  3L, 6L, 7L),
+    val     = c(100, 100, 100, 50, 50, 100, 80, 49, 51, 53, 10, 100, 100, 50),
+    stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "turtle_src", ts)
+  con
+}
+
+test_that("v7.1 core habitat: suit_min drops sub-threshold suitability, fill = NA drops the cell", {
+  skip_if_not_installed("glue")
+  con <- turtle_v7b_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  res <- DBI::dbGetQuery(con, turtle_sql(
+    "turtles", "am", "ch", src = "turtle_src",
+    suit_min = 50, fill = NA, half_even = TRUE, ch_outer = TRUE))
+
+  # 1 -> 80 (100*80/100), 2 dropped (suit 49 < 50, no fill, no CH), 3 -> 100 (CH, no suitability),
+  # 4 -> 26 (25.5 half-even), 5 -> 26 (26.5 half-even), 6 -> 100 (CH outside ER), 7 -> 50 (CH)
+  expect_equal(key_set(res, "T_turtle"), c("1:80", "3:100", "4:26", "5:26", "6:100", "7:50"))
+
+  # PERMANENT REGRESSION "critical habitat is never trimmed": cells 3 and 7 carry no retained
+  # suitability, so they have no multiplied value -- and must still be present at the
+  # designation's own value. Joining CH to `mult` instead of the ER footprint loses both.
+  ch <- res[res$cell_id %in% c(3L, 6L, 7L), ]
+  expect_equal(nrow(ch), 3L)
+  expect_equal(ch$val[order(ch$cell_id)], c(100, 100, 50))
+
+  # PERMANENT REGRESSION "half-even rounding: 26.5 -> 26" (DuckDB round() gives 27; R, and every
+  # stored v1-v7 value, gives 26). Cell 4 (25.5 -> 26) agrees either way, so cell 5 is the test.
+  expect_equal(res$val[res$cell_id == 5L], 26)
+
+  # the threshold is a filter on suitability, never on the ER footprint: cell 2 is dropped only
+  # because fill = NA leaves it nothing, and no CH covers it
+  expect_equal(nrow(res[res$cell_id == 2L, ]), 0L)
+})
+
+test_that("v7.1 core habitat: ch_outer = FALSE drops CH outside the ER footprint, keeps CH inside", {
+  skip_if_not_installed("glue")
+  con <- turtle_v7b_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  res <- DBI::dbGetQuery(con, turtle_sql(
+    "turtles", "am", "ch", src = "turtle_src",
+    suit_min = 50, fill = NA, half_even = TRUE, ch_outer = FALSE))
+
+  # cell 6 (CH, no ER) is gone; cells 3 and 7 (CH inside the footprint) are NOT -- ch_outer is
+  # about the footprint union, never about trimming designated habitat
+  expect_equal(key_set(res, "T_turtle"), c("1:80", "3:100", "4:26", "5:26", "7:50"))
+})
+
+test_that("v7.1 core habitat: defaults reproduce the v8/v9 rule byte-for-byte", {
+  skip_if_not_installed("glue")
+  con <- turtle_v7b_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  res <- DBI::dbGetQuery(con, turtle_sql("turtles", "am", "ch", src = "turtle_src"))
+
+  # today's values on the same inputs: nothing thresholded (2 -> 49, 7 -> 10 then CH 50), the
+  # floor-of-1 fill on cell 3 overridden by CH, DuckDB round() (5 -> 27), no CH union (6 absent)
+  expect_equal(key_set(res, "T_turtle"), c("1:80", "2:49", "3:100", "4:26", "5:27", "7:50"))
+})
+
+test_that("v7.1 core habitat: suit_min with fill = 1 re-creates the fringe as a field of 1s", {
+  skip_if_not_installed("glue")
+  con <- turtle_v7b_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  res <- DBI::dbGetQuery(con, turtle_sql(
+    "turtles", "am", "ch", src = "turtle_src",
+    suit_min = 50, fill = 1, half_even = TRUE, ch_outer = TRUE))
+
+  # cell 2's suitability (49) is thresholded away and comes straight back at the floor: the
+  # footprint does NOT shrink, which is why threshold-with-fill raised the Aleutian Arc
+  # (70.9 -> 74.5) under the ecoregional rescale. Asserted so the behaviour is explicit.
+  expect_equal(res$val[res$cell_id == 2L], 1)
+  expect_equal(key_set(res, "T_turtle"),
+               c("1:80", "2:1", "3:100", "4:26", "5:26", "6:100", "7:50"))
+})
+
+test_that("turtle_sql validates its arguments", {
+  skip_if_not_installed("glue")
+  expect_error(turtle_sql("turtles", "am", "ch", suit_min = -1))
+  expect_error(turtle_sql("turtles", "am", "ch", suit_min = c(0, 50)))
+  expect_error(turtle_sql("turtles", "am", "ch", fill = c(1, 2)))
+  expect_error(turtle_sql("turtles", "am", "ch", half_even = NA))
+  expect_error(turtle_sql("turtles", "am", "ch", ch_outer = "yes"))
+  expect_error(turtle_sql(character(0), "am", "ch"))
+  expect_error(turtle_sql("turtles", "am", "ch", src = c("a", "b")))
+})

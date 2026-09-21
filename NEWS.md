@@ -3,6 +3,19 @@
 * **`.GRID_VER` gains `v7b = "usa05"`** — the v7.1 patch release id (`grid.R`), a surgical patch of
   the public v7 release on the same `usa05` grid. Registered so `grid_for_ver("v7b")` resolves
   rather than erroring on an unknown version.
+* **`turtle_sql()` gains the v7.1 core-habitat knobs** — `suit_min` (suitability strictly below it
+  is absent BEFORE the multiply), `fill` (suitability assumed for an ER cell with none retained;
+  `NA` drops the cell unless critical habitat covers it, replacing the floor-of-1 range fill),
+  `half_even` (`round_even()`, R's rounding, which is what built v1–v7 and what DuckDB `round()`
+  disagrees with on 28,598 v7 cells), and `ch_outer` (keep critical-habitat cells outside the ER
+  footprint, v1–v7's union). **All four default to the v8/v9 behaviour**, so existing callers are
+  unchanged. Documented: `suit_min > 0` with `fill = 1` does not shrink a footprint — it re-creates
+  the thresholded fringe as a field of 1s, which an ecoregional min–max then stretches back over
+  0–100 (the Aleutian Arc 70.9 → 74.5 case).
+* **Critical habitat is never trimmed**: `ch_keys` now join the ER footprint rather than the
+  multiplied value, so a CH cell whose suitability was thresholded away — or that never had one —
+  survives at its designation's value under `fill = NA`. New fixtures in `test-merge.R` assert this
+  (and half-even's 26.5 → 26) as permanent regressions.
 
 # msens 0.41.0
 

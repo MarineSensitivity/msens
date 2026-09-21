@@ -157,30 +157,94 @@ supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask
 #' range cell at the taxon's governing ER (`max(er, suit)` = 100 everywhere for `NMFS:EN`), while
 #' here the ER varies by DPS and the suitability still shows through.
 #'
+#' @section Core habitat (`suit_min`, `fill`) — v7.1:
+#' The defaults (`suit_min = 0`, `fill = 1`, `half_even = FALSE`, `ch_outer = FALSE`) reproduce the
+#' v8/v9 rule exactly. v7.1 thresholds the suitability term *before* the multiply
+#' (`suit_min = 50`, AquaMaps' own core-habitat default) and drops the floor-of-1 range fill
+#' (`fill = NA`), because a threshold alone removes none of it: for five of the six sea turtles
+#' half to nine tenths of the merged US area is fill, with no suitability value at all.
+#'
+#' `suit_min > 0` **with `fill = 1` kept** does not shrink a footprint, it RE-CREATES the fringe as
+#' a field of 1s: every cell whose suitability fell below the cut comes back at the floor. Under an
+#' ecoregional min–max rescale that field is then stretched back over 0–100, which is why the
+#' Aleutian Arc goes UP (70.9 → 74.5) under that combination. `fill = NA` is the pairing that means
+#' "no core habitat here".
+#'
+#' Critical habitat is never trimmed by either knob: `ch_keys` join the **ER footprint**, not the
+#' multiplied value, so a CH cell whose suitability was thresholded away (or that never had one)
+#' survives at its designation's value. `ch_outer = TRUE` additionally keeps CH cells that lie
+#' outside the ER footprint (v1–v7 unioned them; 31 such cells exist in v7).
+#'
 #' @param turtle_ds character vector; ds_key(s) of the per-cell extinction-risk dataset(s).
 #' @param suit_ds character vector; ds_key(s) of the suitability dataset(s) (`"am"`, or
 #'   `c("am", "ax")` from v9 — after [supersede_sql()] at most one survives per cell, and `max()`
 #'   over the survivors is the value).
 #' @param ch_keys character vector of critical-habitat ds_keys that override with a max (may be empty).
 #' @param src character; name of the source relation to read (default `"turtle_src"`).
+#' @param suit_min numeric; suitability strictly below this is ABSENT, before the multiply
+#'   (default `0` = keep everything; v7.1 uses `50`).
+#' @param fill numeric or `NA`; suitability assumed for an ER cell with none retained (default `1`,
+#'   the v1–v9 floor-of-1 range fill). `NA` DROPS such a cell unless critical habitat covers it.
+#' @param half_even logical; `TRUE` rounds half-to-even (`round_even()`, what R does and what built
+#'   v1–v7; DuckDB `round()` differs on 28,598 v7 cells where ER = 50). Default `FALSE`.
+#' @param ch_outer logical; `TRUE` keeps critical-habitat cells OUTSIDE the ER footprint (v1–v7's
+#'   union). Default `FALSE`.
 #' @return SQL string selecting `(mdl_key, cell_id, val)` — the whole-range turtle surface.
 #' @concept merge
 #' @importFrom glue glue
 #' @export
-turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src") {
-  ch_sql <- if (length(ch_keys)) paste(sprintf("'%s'", ch_keys), collapse = ", ") else "''"
-  suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
+turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
+                       suit_min = 0, fill = 1, half_even = FALSE, ch_outer = FALSE) {
+  stopifnot(
+    is.character(turtle_ds), length(turtle_ds) >= 1, all(nzchar(turtle_ds)),
+    is.character(suit_ds),   length(suit_ds)   >= 1, all(nzchar(suit_ds)),
+    is.character(ch_keys),
+    is.character(src), length(src) == 1, nzchar(src),
+    is.numeric(suit_min), length(suit_min) == 1, !is.na(suit_min), suit_min >= 0,
+    length(fill) == 1, is.na(fill) || (is.numeric(fill) && fill >= 0),
+    is.logical(half_even), length(half_even) == 1, !is.na(half_even),
+    is.logical(ch_outer),  length(ch_outer)  == 1, !is.na(ch_outer))
+
+  ch_sql   <- if (length(ch_keys)) paste(sprintf("'%s'", ch_keys), collapse = ", ") else "''"
+  suit_sql <- paste(sprintf("'%s'", suit_ds),   collapse = ", ")
   er_sql   <- paste(sprintf("'%s'", turtle_ds), collapse = ", ")
+
+  # the threshold is a filter on the suitability ROWS, so it applies before max() over datasets
+  min_sql  <- if (suit_min > 0) glue::glue(" AND val >= {suit_min}") else ""
+  # R (and every v1-v7 value) rounds half-to-even; DuckDB round() rounds half-away-from-zero
+  rnd      <- if (half_even) "round_even"  else "round"
+  rnd_arg  <- if (half_even) ", 0"         else ""
+  # fill = NA leaves the multiplied value NULL, so the ER cell survives only if CH covers it
+  drop_unfilled <- is.na(fill)
+  suit_expr <- if (drop_unfilled) "suit.suit_value" else glue::glue("coalesce(suit.suit_value, {fill})")
+  mult_val  <- glue::glue(
+    "greatest(1, CAST({rnd}(er.er_value * {suit_expr} / 100.0{rnd_arg}) AS INTEGER))")
+  if (drop_unfilled)
+    mult_val <- glue::glue("CASE WHEN suit.suit_value IS NULL THEN NULL ELSE {mult_val} END")
+
+  # CH joins the ER FOOTPRINT, never `mult`: a CH cell with no retained suitability has no
+  # multiplied value, and hanging the join off `mult` would silently trim it (v7.1's whole concern)
+  ch_join <- if (ch_outer)
+    glue::glue(
+      "SELECT coalesce(m.ms_merge_key, c.ms_merge_key) AS mdl_key,\n",
+      "       coalesce(m.cell_id, c.cell_id) AS cell_id,\n",
+      "       CAST(greatest(coalesce(m.val, 0), coalesce(c.ch_value, 0)) AS DOUBLE) AS val\n",
+      "FROM mult m FULL JOIN ch c ON m.ms_merge_key = c.ms_merge_key AND m.cell_id = c.cell_id\n",
+      "WHERE coalesce(m.val, c.ch_value) IS NOT NULL", .trim = FALSE)
+  else
+    glue::glue(
+      "SELECT m.ms_merge_key AS mdl_key, m.cell_id,\n",
+      "       CAST(greatest(coalesce(m.val, 0), coalesce(ch.ch_value, 0)) AS DOUBLE) AS val\n",
+      "FROM mult m LEFT JOIN ch USING (ms_merge_key, cell_id)\n",
+      "WHERE coalesce(m.val, ch.ch_value) IS NOT NULL", .trim = FALSE)
+
   glue::glue(
     "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key IN ({er_sql}) GROUP BY 1, 2),\n",
-    "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2),\n",
+    "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}){min_sql} GROUP BY 1, 2),\n",
     "     ch   AS (SELECT ms_merge_key, cell_id, max(val) ch_value   FROM {src} WHERE ds_key IN ({ch_sql})   GROUP BY 1, 2),\n",
-    "     mult AS (SELECT er.ms_merge_key, er.cell_id,\n",
-    "                greatest(1, CAST(round(er.er_value * coalesce(suit.suit_value, 1) / 100.0) AS INTEGER)) AS val\n",
+    "     mult AS (SELECT er.ms_merge_key, er.cell_id, {mult_val} AS val\n",
     "              FROM er LEFT JOIN suit USING (ms_merge_key, cell_id))\n",
-    "SELECT m.ms_merge_key AS mdl_key, m.cell_id,\n",
-    "       CAST(greatest(m.val, coalesce(ch.ch_value, 0)) AS DOUBLE) AS val\n",
-    "FROM mult m LEFT JOIN ch USING (ms_merge_key, cell_id)",
+    "{ch_join}",
     .trim = FALSE)
 }
 

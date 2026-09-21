@@ -4,7 +4,16 @@
 \alias{turtle_sql}
 \title{Spatial-ER (turtle) multiplicative merge rule}
 \usage{
-turtle_sql(turtle_ds, suit_ds, ch_keys, src = "turtle_src")
+turtle_sql(
+  turtle_ds,
+  suit_ds,
+  ch_keys,
+  src = "turtle_src",
+  suit_min = 0,
+  fill = 1,
+  half_even = FALSE,
+  ch_outer = FALSE
+)
 }
 \arguments{
 \item{turtle_ds}{character vector; ds_key(s) of the per-cell extinction-risk dataset(s).}
@@ -16,6 +25,18 @@ over the survivors is the value).}
 \item{ch_keys}{character vector of critical-habitat ds_keys that override with a max (may be empty).}
 
 \item{src}{character; name of the source relation to read (default \code{"turtle_src"}).}
+
+\item{suit_min}{numeric; suitability strictly below this is ABSENT, before the multiply
+(default \code{0} = keep everything; v7.1 uses \code{50}).}
+
+\item{fill}{numeric or \code{NA}; suitability assumed for an ER cell with none retained (default \code{1},
+the v1–v9 floor-of-1 range fill). \code{NA} DROPS such a cell unless critical habitat covers it.}
+
+\item{half_even}{logical; \code{TRUE} rounds half-to-even (\code{round_even()}, what R does and what built
+v1–v7; DuckDB \code{round()} differs on 28,598 v7 cells where ER = 50). Default \code{FALSE}.}
+
+\item{ch_outer}{logical; \code{TRUE} keeps critical-habitat cells OUTSIDE the ER footprint (v1–v7's
+union). Default \code{FALSE}.}
 }
 \value{
 SQL string selecting \verb{(mdl_key, cell_id, val)} — the whole-range turtle surface.
@@ -34,4 +55,24 @@ This is what keeps an Endangered species from painting flat: the plain rule valu
 range cell at the taxon's governing ER (\code{max(er, suit)} = 100 everywhere for \code{NMFS:EN}), while
 here the ER varies by DPS and the suitability still shows through.
 }
+\section{Core habitat (\code{suit_min}, \code{fill}) — v7.1}{
+
+The defaults (\code{suit_min = 0}, \code{fill = 1}, \code{half_even = FALSE}, \code{ch_outer = FALSE}) reproduce the
+v8/v9 rule exactly. v7.1 thresholds the suitability term \emph{before} the multiply
+(\code{suit_min = 50}, AquaMaps' own core-habitat default) and drops the floor-of-1 range fill
+(\code{fill = NA}), because a threshold alone removes none of it: for five of the six sea turtles
+half to nine tenths of the merged US area is fill, with no suitability value at all.
+
+\code{suit_min > 0} \strong{with \code{fill = 1} kept} does not shrink a footprint, it RE-CREATES the fringe as
+a field of 1s: every cell whose suitability fell below the cut comes back at the floor. Under an
+ecoregional min–max rescale that field is then stretched back over 0–100, which is why the
+Aleutian Arc goes UP (70.9 → 74.5) under that combination. \code{fill = NA} is the pairing that means
+"no core habitat here".
+
+Critical habitat is never trimmed by either knob: \code{ch_keys} join the \strong{ER footprint}, not the
+multiplied value, so a CH cell whose suitability was thresholded away (or that never had one)
+survives at its designation's value. \code{ch_outer = TRUE} additionally keeps CH cells that lie
+outside the ER footprint (v1–v7 unioned them; 31 such cells exist in v7).
+}
+
 \concept{merge}
