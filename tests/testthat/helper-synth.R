@@ -316,3 +316,21 @@ with_synth <- function(gen, f) {
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   f(con)
 }
+
+# A manifest shaped like a PUBLISHED one: exactly one `zones[]` row per field.
+# `manifest_build()` on a release with two tables for a field emits both rows, which
+# decides nothing -- v2's real manifest.json names ply_subregions_2025 and that is
+# what a caller must hand in.
+synth_manifest <- function(con, gen, base = "https://example.invalid/marine-atlas") {
+  m <- manifest_build(con, gen, base = base)
+  if (!is.null(m$zones) && is.data.frame(m$zones) && nrow(m$zones)) {
+    drop <- m$zones$fld == "subregion_key" & m$zones$tbl == "ply_subregions_2026"
+    if (any(drop)) {
+      m$zones <- m$zones[!drop, , drop = FALSE]
+      rownames(m$zones) <- NULL
+      if (is.null(m$zones$zone_set_key)) m$zones$zone_set_key <- NA_character_
+      m$zones$zone_set_key[m$zones$fld == "subregion_key"] <- "subregion_2025-08"
+    }
+  }
+  m
+}

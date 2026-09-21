@@ -6,7 +6,7 @@ gens <- c("v9", "v7", "v7b", "v2")
 BASE <- "https://example.invalid/marine-atlas"
 
 build <- function(con, gen, ...) {
-  m <- manifest_build(con, gen, base = BASE)
+  m <- synth_manifest(con, gen, BASE)
   d <- file.path(withr::local_tempdir(.local_envir = parent.frame()), "app")
   list(dir = d, manifest = m,
        out = app_bundle_build(con, gen, d, manifest = m, base = BASE, ...))
@@ -16,7 +16,7 @@ build <- function(con, gen, ...) {
 
 test_that("every builder validates its own output against its schema", {
   for (gen in gens) with_synth(gen, function(con) {
-    m <- manifest_build(con, gen, base = BASE)
+    m <- synth_manifest(con, gen, BASE)
     expect_silent(app_boot(con, gen, m, tables = list()))
     expect_silent(app_taxa(con, gen))
     expect_type(app_taxon_shards(con, gen), "list")
@@ -26,7 +26,7 @@ test_that("every builder validates its own output against its schema", {
 
 test_that("a deliberately malformed object FAILS schema validation", {
   with_synth("v9", function(con) {
-    m <- manifest_build(con, "v9", base = BASE)
+    m <- synth_manifest(con, "v9", BASE)
     good <- app_boot(con, "v9", m, tables = list())
 
     # 1. a required key removed
@@ -196,7 +196,7 @@ test_that("a merged bbox is in the lon_span_agg frame and null when it spans the
 
 test_that("boot.json zone metrics equal zone_metric exactly, keyed by metric_key", {
   for (gen in gens) with_synth(gen, function(con) {
-    z  <- app_zones(con)$programarea
+    z  <- app_zones(con, chosen = app_zone_tbl(con, synth_manifest(con, gen, BASE)))$programarea
     vz <- sdm_val_col(con, "zone"); vm <- sdm_val_col(con, "zone_metric")
     pub <- DBI::dbGetQuery(con, glue::glue("
       SELECT z.{vz} AS zkey, m.metric_key, zm.{vm} AS val
@@ -243,19 +243,19 @@ test_that("the v7.1 _coverage metrics ride along as `coverage`, optional by pres
 
 test_that("the v7.1 `methods` table rides along, optional by presence", {
   with_synth("v7b", function(con) {
-    b <- app_boot(con, "v7b", manifest_build(con, "v7b", base = BASE))
+    b <- app_boot(con, "v7b", synth_manifest(con, "v7b", BASE))
     expect_length(b$methods, 4)
     expect_true(all(vapply(b$methods, function(m) nzchar(m$method_key), TRUE)))
   })
   with_synth("v9", function(con) {
-    b <- app_boot(con, "v9", manifest_build(con, "v9", base = BASE))
+    b <- app_boot(con, "v9", synth_manifest(con, "v9", BASE))
     expect_null(b$methods)
   })
 })
 
 test_that("layers exclude every metric key with no cell rows", {
   for (gen in gens) with_synth(gen, function(con) {
-    b <- app_boot(con, gen, manifest_build(con, gen, base = BASE))
+    b <- app_boot(con, gen, synth_manifest(con, gen, BASE))
     keys <- vapply(b$layers, function(l) l$metric_key, "")
     expect_false(any(grepl("_prepctareaweighting$|_ecoregion_(min|max)$|_coverage$", keys)),
                  info = gen)
@@ -269,12 +269,12 @@ test_that("layers exclude every metric key with no cell rows", {
 
 test_that("the grid block is the registry's, for both grids", {
   with_synth("v9", function(con) {
-    g <- app_boot(con, "v9", manifest_build(con, "v9", base = BASE))$grid
+    g <- app_boot(con, "v9", synth_manifest(con, "v9", BASE))$grid
     expect_equal(g$nc, 7200L); expect_equal(g$grid_id, "global05")
     expect_false(g$lon360); expect_equal(g$tile$size, 50L)
   })
   with_synth("v7", function(con) {
-    g <- app_boot(con, "v7", manifest_build(con, "v7", base = BASE))$grid
+    g <- app_boot(con, "v7", synth_manifest(con, "v7", BASE))$grid
     expect_equal(g$nc, 3103L); expect_equal(g$grid_id, "usa05")
     expect_true(g$lon360); expect_equal(g$xmin, 141.10)
   })
@@ -289,7 +289,7 @@ test_that("palettes are 11 stops of #RRGGBB and cover every colormap the release
   }
   expect_error(app_palettes("not_a_ramp"), "no ramp for colormap")
   with_synth("v9", function(con) {
-    b <- app_boot(con, "v9", manifest_build(con, "v9", base = BASE))
+    b <- app_boot(con, "v9", synth_manifest(con, "v9", BASE))
     expect_true("spectral_r" %in% names(b$palettes))
   })
 })
@@ -297,7 +297,7 @@ test_that("palettes are 11 stops of #RRGGBB and cover every colormap the release
 test_that("flower_default is versioned, per subregion, and never leaks across releases", {
   with_synth("v9", function(con) {
     # the synthetic release has no subregion zones: an empty OBJECT, not a shared file
-    b <- app_boot(con, "v9", manifest_build(con, "v9", base = BASE))
+    b <- app_boot(con, "v9", synth_manifest(con, "v9", BASE))
     expect_true(grepl('"flower_default":\\{\\}', app_json(b)))
   })
 })
@@ -461,7 +461,7 @@ test_that("in_usa / in_pra are NULL on a release that has no such column", {
 
 test_that("zone_taxon is normalized to ONE schema, er_score always a 0-1 fraction", {
   for (gen in gens) with_synth(gen, function(con) {
-    d <- app_zone_taxon(con)
+    d <- app_zone_taxon(con, app_zone_tbl(con, synth_manifest(con, gen, BASE)))
     expect_true(all(c("zone_fld", "zone_value", "sp_cat", "sp_common", "sp_scientific",
                       "taxon_id", "taxon_authority", "er_code", "er_score", "is_mmpa",
                       "is_mbta", "mdl_key", "area_km2", "avg_suit") %in% names(d)),
@@ -528,7 +528,7 @@ CAPS <- list(cell = TRUE, cell_model = FALSE, taxonomy = TRUE,
 
 test_that("a manifest with no `app` argument has NO `app` key at all", {
   for (gen in gens) with_synth(gen, function(con) {
-    m <- manifest_build(con, gen, base = BASE)
+    m <- synth_manifest(con, gen, BASE)
     expect_null(m$app, info = gen)
     expect_false("app" %in% names(m), info = gen)
     expect_silent(validate_manifest(m, ver = gen))
@@ -715,7 +715,7 @@ test_that("REGRESSION: a non-integral taxon_id is never rounded into another id"
     expect_match(e, "Gadus morhua", fixed = TRUE)
     expect_match(e, "12.7 -> 13", fixed = TRUE)
     expect_error(app_bundle_build(con, "v7", withr::local_tempdir(),
-                                  manifest = manifest_build(con, "v7", base = BASE),
+                                  manifest = synth_manifest(con, "v7", BASE),
                                   base = BASE), "not integral")
   })
 })
@@ -748,7 +748,7 @@ test_that("the methods block is read from `release_method`, the table v7b really
   with_synth("v7b", function(con) {
     expect_true("release_method" %in% DBI::dbListTables(con))
     expect_false("methods" %in% DBI::dbListTables(con))
-    b <- app_boot(con, "v7b", manifest_build(con, "v7b", base = BASE))
+    b <- app_boot(con, "v7b", synth_manifest(con, "v7b", BASE))
     expect_length(b$methods, 4)
   })
 })
@@ -757,7 +757,7 @@ test_that("boot$methods rows are method_key / val / description, never `value`",
   # v7b is the ONLY release with a `methods` table, so nothing real exercised this
   # until now: the rename from `value` to `val` was asserted by the schema alone.
   with_synth("v7b", function(con) {
-    b <- app_boot(con, "v7b", manifest_build(con, "v7b", base = BASE))
+    b <- app_boot(con, "v7b", synth_manifest(con, "v7b", BASE))
     expect_length(b$methods, 4)
     for (mth in b$methods) {
       expect_setequal(names(mth), c("method_key", "val", "description"))
@@ -782,7 +782,7 @@ test_that("a release with no `methods` table yields no `methods` key at all", {
   for (gen in c("v9", "v7", "v2")) with_synth(gen, function(con) {
     expect_false(any(c("release_method", "methods") %in% DBI::dbListTables(con)),
                  info = gen)
-    b <- app_boot(con, gen, manifest_build(con, gen, base = BASE))
+    b <- app_boot(con, gen, synth_manifest(con, gen, BASE))
     expect_null(b$methods, info = gen)
     expect_false("methods" %in% names(b), info = gen)
     # optional by presence means ABSENT, not an empty array an app would iterate
@@ -794,7 +794,7 @@ test_that("the smoke gate's grep for \"value\" would catch a regression", {
   # the gate reads every published JSON; reproduce that read on a written bundle
   with_synth("v7b", function(con) {
     d <- withr::local_tempdir()
-    app_bundle_build(con, "v7b", d, manifest = manifest_build(con, "v7b", base = BASE),
+    app_bundle_build(con, "v7b", d, manifest = synth_manifest(con, "v7b", BASE),
                      base = BASE)
     jsons <- list.files(d, "[.]json$", recursive = TRUE, full.names = TRUE)
     expect_gt(length(jsons), 0)
@@ -855,7 +855,8 @@ test_that("REGRESSION: zone_taxon publishes the same id text as taxon.parquet", 
   # PRECOMPUTED table read with SELECT *, so v7's DOUBLE taxon_id came straight
   # through and this object said "22725044.0" beside the other's "22725044".
   for (gen in c("v9", "v7", "v7b", "v2")) with_synth(gen, function(con) {
-    zt <- app_zone_taxon(con); tx <- app_taxon_table(con)
+    zt <- app_zone_taxon(con, app_zone_tbl(con, synth_manifest(con, gen, BASE)))
+    tx <- app_taxon_table(con)
     expect_true(all(is.na(zt$taxon_id) | grepl("^[0-9]+$", zt$taxon_id)), info = gen)
     expect_false(any(grepl("[.]0$", zt$taxon_id)), info = gen)
     # and the two objects really do join
@@ -883,7 +884,7 @@ test_that("boot$tables names exactly the Parquet objects under app/", {
   # and OPFS could never invalidate them.
   for (gen in c("v9", "v7")) with_synth(gen, function(con) {
     d <- withr::local_tempdir()
-    b <- app_bundle_build(con, gen, d, manifest = manifest_build(con, gen, base = BASE),
+    b <- app_bundle_build(con, gen, d, manifest = synth_manifest(con, gen, BASE),
                           base = BASE)
     expect_silent(app_tables_match(d, b$boot))
     for (nm in names(b$boot$tables)) expect_gt(nchar(b$boot$tables[[nm]]$digest), 8)
@@ -905,7 +906,7 @@ test_that("app_model writes the mdl_id mapping on v8+ and nothing on v1-v7", {
     expect_setequal(t$columns, c("mdl_id", "mdl_key", "ds_key"))
     expect_true(file.exists(file.path(d, "model.parquet")))
     b <- app_bundle_build(con, "v9", withr::local_tempdir(),
-                          manifest = manifest_build(con, "v9", base = BASE), base = BASE)
+                          manifest = synth_manifest(con, "v9", BASE), base = BASE)
     expect_true("model" %in% names(b$boot$tables))
   })
   for (gen in c("v7", "v2")) with_synth(gen, function(con) {
@@ -915,7 +916,7 @@ test_that("app_model writes the mdl_id mapping on v8+ and nothing on v1-v7", {
     expect_null(app_model(con, gen, d))
     expect_false(file.exists(file.path(d, "model.parquet")))
     b <- app_bundle_build(con, gen, withr::local_tempdir(),
-                          manifest = manifest_build(con, gen, base = BASE), base = BASE)
+                          manifest = synth_manifest(con, gen, BASE), base = BASE)
     expect_false("model" %in% names(b$boot$tables))
   })
 })
@@ -957,7 +958,7 @@ test_that("REGRESSION: zone_taxon ids are text without .0 when the release store
                                   WHERE column_name = 'taxon_id'")[[1]]
     expect_identical(src, "DOUBLE", info = gen)      # the fixture is the real shape
 
-    zt <- app_zone_taxon(con)
+    zt <- app_zone_taxon(con, app_zone_tbl(con, synth_manifest(con, gen, BASE)))
     expect_type(zt$taxon_id, "character")            # <- the loop, not as.character()
     expect_setequal(zt$taxon_id, c("137162", "126436", "137206"))
     expect_false(any(grepl("[.]", zt$taxon_id)), info = gen)
@@ -1025,19 +1026,18 @@ test_that("REGRESSION: a field with two zone tables publishes exactly one", {
     # the registry names ply_subregions_2025 as the source of a published zone set
     zs <- data.frame(zone_set_key = "subregion_2025-08", zone_type = "subregion",
                      source = "v1/ply_subregions_2025.gpkg", stringsAsFactors = FALSE)
-    ch <- app_zone_tbl(con, zone_sets = zs)
+    mf <- synth_manifest(con, "v2", BASE)
+    ch <- app_zone_tbl(con, mf, zone_sets = zs)
     expect_identical(ch$tbl[ch$fld == "subregion_key"], "ply_subregions_2025")
-    expect_match(ch$why[ch$fld == "subregion_key"], "published zone set")
+    expect_match(ch$why[ch$fld == "subregion_key"], "named by manifest.json", fixed = TRUE)
 
-    # geometry keys are stronger evidence still, and agree
-    ch2 <- app_zone_tbl(con, geom_keys = list(subregion = c("SR1", "SR2")))
+    # geometry keys are a CHECK on that choice, not a second opinion
+    ch2 <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR2")))
     expect_identical(ch2$tbl[ch2$fld == "subregion_key"], "ply_subregions_2025")
-    expect_match(ch2$why[ch2$fld == "subregion_key"], "exactly")
+    expect_match(ch2$why[ch2$fld == "subregion_key"], "geometry keys agree", fixed = TRUE)
 
-    # with NO evidence it falls back to the newest, and SAYS it is a guess
-    ch3 <- app_zone_tbl(con)
-    expect_identical(ch3$tbl[ch3$fld == "subregion_key"], "ply_subregions_2026")
-    expect_match(ch3$why[ch3$fld == "subregion_key"], "A GUESS")
+    # and with NO manifest there is no guess at all
+    expect_error(app_zone_tbl(con), "manifest names none of them", fixed = TRUE)
 
     # the other table's rows are DROPPED, never merged
     zt <- app_zone_taxon(con, ch)
@@ -1064,7 +1064,7 @@ test_that("the chosen zone_tbl is recorded in boot$units", {
     m$zones$zone_set_key <- "subregion_2025-08"
     m$zones$pmtiles <- "https://x/z.pmtiles"
     gk <- list(subregion = c("SR1", "SR2"))
-    ch <- app_zone_tbl(con, geom_keys = gk)
+    ch <- app_zone_tbl(con, synth_manifest(con, "v2", BASE), geom_keys = gk)
     u  <- app_units(con, m, geom_keys = gk, chosen = ch)
     sr <- Filter(function(x) x$zone_type == "subregion", u)
     expect_length(sr, 1)
@@ -1091,9 +1091,10 @@ test_that("app_zones_unique is a hard stop on a duplicated zone key", {
 test_that("every generation's bundle holds each zone exactly once", {
   for (gen in gens) with_synth(gen, function(con) {
     d <- withr::local_tempdir()
-    b <- app_bundle_build(con, gen, d, manifest = manifest_build(con, gen, base = BASE),
+    b <- app_bundle_build(con, gen, d, manifest = synth_manifest(con, gen, BASE),
                           base = BASE)
-    expect_silent(app_zones_unique(app_zone_taxon(con), b$boot))
+    expect_silent(app_zones_unique(
+      app_zone_taxon(con, app_zone_tbl(con, synth_manifest(con, gen, BASE))), b$boot))
   })
 })
 
@@ -1107,13 +1108,89 @@ test_that("the builder STOPS when duplicates reach zone_taxon anyway", {
                            SELECT * EXCLUDE (zone_tbl) FROM zone_taxon")
     expect_false("zone_tbl" %in% DBI::dbListFields(con, "zone_taxon"))
 
-    zt <- app_zone_taxon(con)                       # cannot filter: duplicates survive
+    zt <- app_zone_taxon(con, app_zone_tbl(con, synth_manifest(con, "v2", BASE)))
     k <- paste(zt$zone_fld, zt$zone_value, zt$mdl_key)
     expect_gt(length(unique(k[duplicated(k)])), 0L)
 
     expect_error(
       app_bundle_build(con, "v2", withr::local_tempdir(),
-                       manifest = manifest_build(con, "v2", base = BASE), base = BASE),
+                       manifest = synth_manifest(con, "v2", BASE), base = BASE),
       "duplicated (zone_fld, zone_value", fixed = TRUE)
+  })
+})
+
+# ---- the manifest decides, and nothing else gets a vote ----------------------
+
+test_that("the manifest's zones[].tbl chooses the table, even against the newer one", {
+  # v2's manifest.json says subregion_key -> ply_subregions_2025
+  # (zone_set_key subregion_2025-06), the OLDER of its two tables. A date guess
+  # picked ply_subregions_2026 and published AK, GA, PA, USA -- keys that match no
+  # published geometry. Two defensible answers depending on the caller is the
+  # ambiguity this rule exists to remove.
+  with_synth("v2", function(con) {
+    older <- "ply_subregions_2025"          # date_created 2025-08-06
+    newer <- "ply_subregions_2026"          # date_created 2026-01-12
+    mf <- list(zones = data.frame(
+      fld = c("programarea_key", "subregion_key"),
+      tbl = c("ply_programareas_2026", older),
+      zone_set_key = c("programarea_2026-01", "subregion_2025-08"),
+      stringsAsFactors = FALSE))
+
+    ch <- app_zone_tbl(con, mf)
+    expect_identical(ch$tbl[ch$fld == "subregion_key"], older)
+    expect_match(ch$why[ch$fld == "subregion_key"], "named by manifest.json", fixed = TRUE)
+    expect_match(ch$why[ch$fld == "subregion_key"], "subregion_2025-08", fixed = TRUE)
+    expect_false(newer %in% ch$tbl)
+
+    zt <- app_zone_taxon(con, ch)
+    expect_equal(nrow(zt), 6L)                       # 3 taxa x (1 programarea + SR1)
+    expect_false(newer %in% zt$zone_tbl)
+    z <- app_zones(con, chosen = ch)
+    expect_setequal(vapply(z$subregion, function(x) x$key, ""), c("SR1", "SR2"))
+  })
+})
+
+test_that("geometry keys that DISAGREE with the manifest stop the build", {
+  with_synth("v2", function(con) {
+    mf <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2025",
+                                  zone_set_key = "subregion_2025-08",
+                                  stringsAsFactors = FALSE))
+    # the keys of the OTHER table: the notebook was handed the wrong GeoPackage
+    expect_error(app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR3"))),
+                 "does not match the table the manifest names", fixed = TRUE)
+    expect_error(app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR3"))),
+                 "wrong GeoPackage", fixed = TRUE)
+    # ...and the right ones are recorded as agreeing
+    ch <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR2")))
+    expect_match(ch$why[ch$fld == "subregion_key"], "geometry keys agree", fixed = TRUE)
+  })
+})
+
+test_that("two tables and no manifest row is an ERROR, never a guess", {
+  with_synth("v2", function(con) {
+    expect_error(app_zone_tbl(con), "has 2 zone tables", fixed = TRUE)
+    expect_error(app_zone_tbl(con), "subregion_key", fixed = TRUE)
+    expect_error(app_zone_tbl(con), "manifest names none of them", fixed = TRUE)
+    # a manifest naming a table the release does not have is also an error
+    bad <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2030",
+                                   stringsAsFactors = FALSE))
+    expect_error(app_zone_tbl(con, bad), "holds only", fixed = TRUE)
+    # a release with ONE table per field needs no manifest at all
+    with_synth("v7", function(c7) expect_silent(app_zone_tbl(c7)))
+  })
+})
+
+test_that("the zone-set registry is a cross-check, not a chooser", {
+  with_synth("v2", function(con) {
+    mf <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2025",
+                                  stringsAsFactors = FALSE))
+    zs <- data.frame(zone_set_key = "subregion_2025-08", zone_type = "subregion",
+                     source = "v1/ply_subregions_2026.gpkg", stringsAsFactors = FALSE)
+    # the registry points at the OTHER table: the manifest still wins, and the
+    # disagreement is recorded rather than acted on
+    ch <- app_zone_tbl(con, mf, zone_sets = zs)
+    expect_identical(ch$tbl[ch$fld == "subregion_key"], "ply_subregions_2025")
+    expect_match(ch$why[ch$fld == "subregion_key"], "registry lists no such source",
+                 fixed = TRUE)
   })
 })

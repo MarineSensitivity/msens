@@ -158,81 +158,112 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
 #' `ply_subregions_2026` (AK, GA, PA, USA), two keys in common — and because
 #' `app_zone_taxon()` dropped `zone_tbl`, `(zone_fld, zone_value, key)` came out
 #' duplicated **13,077 times**: the same taxon in the same subregion with two
-#' different `area_km2` (3,394,012 and 3,527,156 for *Arenaria interpres* in AK).
-#' `boot$zones$subregion` had 6 rows, the two key sets merged, and which table won
-#' the two shared keys was unspecified. The app would have listed every taxon twice.
+#' different `area_km2`. The app would have listed every taxon twice.
 #'
-#' So a bundle publishes exactly one table per field, everywhere it is keyed by
-#' zone, and the other table's rows are **dropped, never merged**. The choice is
-#' made from evidence, in this order:
+#' @section The manifest decides:
+#' **The release's own `manifest.json` names the table.** Its `zones[]` rows carry
+#' `fld` *and* `tbl`, and v2's says `subregion_key -> ply_subregions_2025`
+#' (`zone_set_key: subregion_2025-06`). That is the first and normally the only
+#' evidence, and it is already an input of [app_bundle_build()].
 #'
-#' 1. **`geom_keys`** — the keys in the published geometry. The table whose key set
-#'    matches exactly wins; failing that, the one with the largest overlap. This is
-#'    the strongest evidence there is: it is the geometry the app will actually draw.
-#' 2. **`zone_sets`** — the zone-set registry's `source` basename. v2's
-#'    `ply_subregions_2025` is the source of the published `subregion_2025-08`
-#'    (`v1/ply_subregions_2025.gpkg`); `ply_subregions_2026` is the source of no
-#'    published subregion set at all.
-#' 3. **`date_created`**, most recent first, ties broken by the greatest `tbl`. Only
-#'    when msens has neither input — and it is recorded as such, because "newest"
-#'    is a guess: on v2 it would pick `ply_subregions_2026`, whose keys match no
-#'    published geometry.
+#' Everything else is a **check**, not a second opinion:
+#' \itemize{
+#'   \item `geom_keys` — the keys in the published geometry — must AGREE with the
+#'     manifest. A disagreement means the notebook was handed the wrong GeoPackage,
+#'     which is a defect to stop on, not a tie to break.
+#'   \item `zone_sets` — the registry's `source` basename — is a cross-check,
+#'     recorded in `why`, never a chooser.
+#' }
 #'
-#' The winner is recorded in `boot$units[].zone_tbl` so the notebook's geometry check
-#' can assert its GeoPackage holds the same keys.
+#' There is no fallback guess. A field with two tables and no manifest row is an
+#' **error**: "most recent `date_created`" looked reasonable and picked
+#' `ply_subregions_2026` for v2, whose keys match no published geometry — two
+#' defensible answers depending on who called, which is the ambiguity this rule
+#' exists to remove.
+#'
+#' The winner is recorded in `boot$units[].zone_tbl` so the notebook's geometry
+#' check can assert its GeoPackage holds the same keys.
 #'
 #' @param con a DBI connection to a release database
-#' @param geom_keys named list `zone_type -> keys present in the published geometry`
-#' @param zone_sets the zone-set registry (`data/zone_sets.csv`), or `NULL`
-#' @return a data frame `fld`, `tbl`, `why`, one row per field
+#' @param manifest the release manifest (from [manifest_build()] or
+#'   [atlas_manifest()]); its `zones[]` rows name the table per field
+#' @param geom_keys named list `zone_type -> keys present in the published geometry`,
+#'   checked against the manifest's choice
+#' @param zone_sets the zone-set registry (`data/zone_sets.csv`), cross-check only
+#' @return a data frame `fld`, `tbl`, `why`, `n_tables`, one row per field
 #' @importFrom DBI dbGetQuery dbListFields
 #' @export
 #' @concept app
-app_zone_tbl <- function(con, geom_keys = list(), zone_sets = NULL) {
+app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = NULL) {
   vz <- sdm_val_col(con, "zone")
-  has_dc <- "date_created" %in% DBI::dbListFields(con, "zone")
   d <- DBI::dbGetQuery(con, glue::glue(
     "SELECT fld, tbl, count(*) AS n,
-            {if (has_dc) 'max(date_created)' else 'CAST(NULL AS VARCHAR)'} AS dc,
             string_agg(DISTINCT CAST({vz} AS VARCHAR), ',') AS keys
        FROM zone GROUP BY 1, 2 ORDER BY 1, 2"))
-  if (!nrow(d)) return(data.frame(fld = character(), tbl = character(), why = character()))
+  if (!nrow(d)) return(data.frame(fld = character(), tbl = character(),
+                                  why = character(), n_tables = integer()))
+
+  mz <- manifest$zones
+  have_mz <- !is.null(mz) && is.data.frame(mz) && nrow(mz) &&
+             all(c("fld", "tbl") %in% names(mz))
 
   pick <- function(g) {
-    if (nrow(g) == 1L) return(list(tbl = g$tbl[1], why = "only table for this field"))
-    type <- sub("_key$", "", g$fld[1])
+    fld  <- g$fld[1]
+    type <- sub("_key$", "", fld)
 
+    if (nrow(g) == 1L) {
+      tbl <- g$tbl[1]; why <- "only table for this field"
+    } else {
+      row <- if (have_mz) mz[!is.na(mz$fld) & mz$fld == fld, , drop = FALSE] else NULL
+      if (is.null(row) || !nrow(row) || is.na(row$tbl[1]))
+        stop(sprintf(paste0(
+          "`%s` has %d zone tables (%s) and the release manifest names none of ",
+          "them.\n  Pass the manifest (its `zones[].tbl` is the deciding evidence). ",
+          "There is no fallback: guessing by date picked ply_subregions_2026 for v2, ",
+          "whose keys match no published geometry."),
+          fld, nrow(g), paste(g$tbl, collapse = ", ")), call. = FALSE)
+      if (length(unique(row$tbl)) > 1L)
+        stop(sprintf(paste0(
+          "the manifest lists %d rows for `%s` (%s), so it names no single table.\n",
+          "  A published manifest carries ONE zones[] row per field; one rebuilt ",
+          "from the database reproduces the ambiguity it is being asked to settle."),
+          nrow(row), fld, paste(unique(row$tbl), collapse = ", ")), call. = FALSE)
+      tbl <- row$tbl[1]
+      if (!tbl %in% g$tbl)
+        stop(sprintf(paste0(
+          "the manifest names `%s` for `%s`, but the release's zone table holds ",
+          "only: %s"), tbl, fld, paste(g$tbl, collapse = ", ")), call. = FALSE)
+      why <- sprintf("named by manifest.json%s",
+                     if ("zone_set_key" %in% names(row) && !is.na(row$zone_set_key[1]))
+                       sprintf(" (zone_set_key %s)", row$zone_set_key[1]) else "")
+    }
+
+    # geometry keys must AGREE; a mismatch is the wrong GeoPackage, not a tie
     gk <- geom_keys[[type]]
     if (!is.null(gk) && length(gk)) {
-      ks  <- lapply(strsplit(g$keys, ",", fixed = TRUE), sort)
-      ov  <- vapply(ks, function(k) length(intersect(k, gk)), 0L)
-      ex  <- vapply(ks, function(k) setequal(k, gk), TRUE)
-      if (any(ex)) return(list(tbl = g$tbl[which(ex)[1]],
-                               why = "keys match the published geometry exactly"))
-      if (max(ov) > 0 && sum(ov == max(ov)) == 1L)
-        return(list(tbl = g$tbl[which.max(ov)],
-                    why = sprintf("largest overlap with the published geometry (%d of %d keys)",
-                                  max(ov), length(gk))))
+      ks <- sort(strsplit(g$keys[match(tbl, g$tbl)], ",", fixed = TRUE)[[1]])
+      # SUBSET, not setequal: a key in the table but absent from the geometry is
+      # normal -- the whole-study-area rollups (`USA` on v8, `FULL` on v7) are
+      # scored and have no polygon. A key in the GEOMETRY that the table does not
+      # have is the other thing entirely: the wrong GeoPackage.
+      extra <- setdiff(gk, ks)
+      if (length(extra))
+        stop(sprintf(paste0(
+          "the geometry given for `%s` does not match the table the manifest names.\n",
+          "  manifest: %s -> %s\n  in the geometry but NOT in that table: %s\n",
+          "  A mismatch means the wrong GeoPackage was handed in; it is not a tie to break."),
+          fld, fld, tbl, paste(extra, collapse = ", ")), call. = FALSE)
+      why <- paste0(why, "; geometry keys agree")
     }
 
+    # the registry is a cross-check, recorded, never a chooser
     if (!is.null(zone_sets) && nrow(zone_sets) && "source" %in% names(zone_sets)) {
-      zt <- zone_sets[zone_sets$zone_type %in% type, , drop = FALSE]
+      zt  <- zone_sets[zone_sets$zone_type %in% type, , drop = FALSE]
       src <- sub("[.][^.]*$", "", basename(as.character(zt$source)))
-      hit <- which(g$tbl %in% src)
-      if (length(hit) == 1L)
-        return(list(tbl = g$tbl[hit],
-                    why = sprintf("source of the published zone set %s",
-                                  zt$zone_set_key[match(g$tbl[hit], src)])))
+      if (length(src)) why <- paste0(why, if (tbl %in% src)
+        "; zone-set registry agrees" else "; NOTE the zone-set registry lists no such source")
     }
-
-    if (any(!is.na(g$dc))) {
-      o <- order(g$dc, g$tbl, decreasing = TRUE, na.last = TRUE)
-      return(list(tbl = g$tbl[o][1],
-                  why = sprintf("most recent date_created (%s) -- A GUESS: no geometry keys and no zone-set registry were given",
-                                g$dc[o][1])))
-    }
-    list(tbl = sort(g$tbl, decreasing = TRUE)[1],
-         why = "greatest tbl name -- A GUESS: no evidence available")
+    list(tbl = tbl, why = why)
   }
 
   out <- do.call(rbind, lapply(split(d, d$fld), function(g) {
@@ -330,7 +361,7 @@ app_units <- function(con, manifest, geom_keys = list(), chosen = NULL) {
   z <- manifest$zones
   if (is.null(z) || !nrow(z) || !"pmtiles" %in% names(z)) return(list())
   vz <- sdm_val_col(con, "zone")
-  if (is.null(chosen)) chosen <- app_zone_tbl(con, geom_keys)
+  if (is.null(chosen)) chosen <- app_zone_tbl(con, manifest, geom_keys)
   w <- .app_zone_where(chosen, "z")
   scored <- DBI::dbGetQuery(con, glue::glue("
     SELECT DISTINCT z.{vz} AS zkey, z.fld
@@ -462,7 +493,7 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
 app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
                      zone_sets = NULL, chosen = NULL,
                      built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
-  if (is.null(chosen)) chosen <- app_zone_tbl(con, geom_keys, zone_sets)
+  if (is.null(chosen)) chosen <- app_zone_tbl(con, manifest, geom_keys, zone_sets)
   g   <- grid_spec_for(manifest$grid_id %||% grid_for_ver(ver))
   vm  <- sdm_val_col(con, "zone_metric")
   vz  <- sdm_val_col(con, "zone")
@@ -1567,7 +1598,7 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
   # resolved ONCE, so zone_taxon, boot$zones and boot$units cannot disagree
-  chosen <- app_zone_tbl(con, geom_keys, zone_sets)
+  chosen <- app_zone_tbl(con, manifest, geom_keys, zone_sets)
   wrote <- list(); failed <- list()
   put <- function(rel, obj) {
     p <- file.path(dir_out, rel)

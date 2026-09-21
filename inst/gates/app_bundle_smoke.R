@@ -68,8 +68,28 @@ chk <- function(ok, label, detail = "") {
   invisible(ok)
 }
 
+# The RELEASE's own manifest names the zone table per field, so the gate is
+# deterministic instead of running with no evidence and guessing. Order: a
+# manifest.json beside the database, then the release directory, then S3
+# (anonymous, read-only). A manifest rebuilt from `con` alone cannot decide this --
+# manifest_build() collapses the zone rows it is being asked about.
+mf_local <- c(file.path(dirname(db), "manifest.json"),
+              file.path(dirname(db), "..", ver, "manifest.json"))
+mf_local <- mf_local[file.exists(mf_local)]
+rel <- NULL; mf_src <- "(none)"
+if (length(mf_local)) {
+  rel <- jsonlite::fromJSON(mf_local[1]); mf_src <- mf_local[1]
+} else {
+  u <- sprintf("%s/%s/manifest.json", atlas_base_url(), ver)
+  rel <- tryCatch(jsonlite::fromJSON(u), error = function(e) NULL)
+  mf_src <- if (is.null(rel)) "(unreachable)" else u
+}
+say("release manifest: ", mf_src)
+
 t0 <- Sys.time()
 m  <- manifest_build(con, ver, base = atlas_base_url())
+# the published zones[] rows are the deciding evidence; keep them
+if (!is.null(rel) && !is.null(rel$zones) && is.data.frame(rel$zones)) m$zones <- rel$zones
 b  <- app_bundle_build(con, ver, dir_out, manifest = m, cell_tiles = tiles_on,
                        taxonomy_csv = if (nzchar(taxonomy_csv)) taxonomy_csv else NULL,
                        zone_sets = zone_sets)
@@ -88,7 +108,7 @@ chk(!length(b$failed), "every stage completed",
     if (length(b$failed)) paste(names(b$failed), collapse = ", ") else "")
 
 say("\n-- one zone table per field -------------------------------------------")
-ch <- app_zone_tbl(con, zone_sets = zone_sets)
+ch <- app_zone_tbl(con, m, zone_sets = zone_sets)
 for (i in seq_len(nrow(ch)))
   say(sprintf("  %-18s -> %-26s %s", ch$fld[i], ch$tbl[i],
               if (ch$n_tables[i] > 1) sprintf("(%d tables: %s)", ch$n_tables[i], ch$why[i]) else ""))
