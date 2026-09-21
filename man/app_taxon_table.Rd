@@ -4,10 +4,13 @@
 \alias{app_taxon_table}
 \title{The normalised scored-taxon table (\code{app/taxon.parquet} and the shard source)}
 \usage{
-app_taxon_table(con)
+app_taxon_table(con, n_nonintegral = NULL)
 }
 \arguments{
 \item{con}{a DBI connection to a release database}
+
+\item{n_nonintegral}{optional environment; \verb{$n} is set to the count (always 0 on
+success, since a non-zero count stops the build)}
 }
 \value{
 a data frame
@@ -21,5 +24,11 @@ arrive as typed NULLs rather than making those two releases fail outright with
 The set is the one the species app offers: \code{key} not null, the release's own
 validity (\code{is_ok} on v1-v7, \verb{is_valid_usa OR is_valid_global} on v8+), \code{is_marine}
 where the column exists, and \verb{sp_cat NOT IN ('reptile','amphibian')}.
+
+Every \code{taxon_id} is asserted to be digits only. A DOUBLE column is cast through
+an integer type \strong{only where the value is whole}, because \verb{CAST(12.7 AS HUGEINT)}
+rounds to 13 — a different and possibly existing id that nothing downstream could
+tell from a real one. A non-integral id is therefore a hard stop naming the row,
+not something to publish.
 }
 \concept{app}

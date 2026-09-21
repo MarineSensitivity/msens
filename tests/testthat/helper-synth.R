@@ -238,7 +238,10 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
     citation = c("msens", "Kaschner et al."), stringsAsFactors = FALSE))
 
   if (identical(gen, "v7b"))
-    DBI::dbWriteTable(con, "methods", data.frame(
+    # `release_method`, the name v7b's sdm.duckdb actually uses (`methods` is the
+    # MANIFEST's key for it). The fixture said `methods`, so the builder's lookup
+    # was green here and silent on the real release.
+    DBI::dbWriteTable(con, "release_method", data.frame(
       method_key = c("coverage_floor", "turtle_suit_min", "turtle_fill", "half_even"),
       value = c("0.05", "0.20", "NA", "TRUE"),
       description = paste("v7.1", c("coverage floor", "suitability floor",

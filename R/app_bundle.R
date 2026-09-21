@@ -402,9 +402,17 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     palettes       = app_palettes(.app_colormaps(con, manifest)),
     tables         = .obj(tables))
 
-  # v7.1's `methods` is OPTIONAL by presence; no other release has it
-  if ("methods" %in% DBI::dbListTables(con)) {
-    md <- DBI::dbGetQuery(con, "SELECT * FROM methods ORDER BY method_key")
+  # v7.1's methods table is OPTIONAL by presence; no other release has it.
+  #
+  # The SOURCE table is `release_method` -- that is what v7b's sdm.duckdb actually
+  # holds, and what backfill_versions.qmd maps into `manifest$methods`. Looking only
+  # for a table named `methods` found nothing on the real release and emitted no
+  # block at all, silently: the one release with methods was the one release no dry
+  # run had covered. `methods` is still accepted, for a release that already exposes
+  # it under the manifest's name.
+  mt <- intersect(c("release_method", "methods"), DBI::dbListTables(con))[1]
+  if (!is.na(mt)) {
+    md <- DBI::dbGetQuery(con, sprintf("SELECT * FROM %s ORDER BY method_key", mt))
     out$methods <- lapply(seq_len(nrow(md)), function(i)
       # `val`, not `value`: the BUNDLE never publishes the word `value` (the manifest
       # keeps its own spelling). A published object that says `value` is the one
@@ -505,8 +513,38 @@ app_datasets <- function(con) {
     d$column_type[match(col, d$column_name)]
   }, error = function(e) NA_character_)
   if (!is.na(ty) && grepl("^(DOUBLE|FLOAT|REAL|DECIMAL)", toupper(ty)))
-    sprintf("CAST(CAST(%s AS HUGEINT) AS VARCHAR)", expr)
+    # ONLY when the value is whole. `CAST(12.7 AS HUGEINT)` ROUNDS, to 13 -- so a
+    # fractional id would come out as a different, possibly existing id, and nothing
+    # downstream could tell. A non-integral id is a data error; keep its own text so
+    # the check below can name it rather than publishing a plausible lie.
+    # NULL stays NULL: `x = floor(x)` is NULL for NULL and the ELSE branch casts it.
+    # 2^53 + 1 and negatives go through HUGEINT unharmed.
+    sprintf("CASE WHEN %s = floor(%s) THEN CAST(CAST(%s AS HUGEINT) AS VARCHAR)
+                  ELSE CAST(%s AS VARCHAR) END", expr, expr, expr, expr)
   else sprintf("CAST(%s AS VARCHAR)", expr)
+}
+
+# Every published id must be digits only. A fractional taxon_id is a data error the
+# RELEASE has to hear about: publishing a rounded neighbour would hide it forever,
+# and the contract promises one shape to every consumer.
+.app_assert_integral_ids <- function(d, what = "taxon_id") {
+  x   <- d[[what]]
+  bad <- which(!is.na(x) & !grepl("^-?[0-9]+$", x))
+  n   <- length(bad)
+  if (n) {
+    ex <- utils::head(bad, 3)
+    stop(sprintf(paste0(
+      "%d of %d `%s` values are not integral, so the bundle was not written.\n",
+      "  e.g. row %s: %s = %s%s\n",
+      "  A non-integral id cannot be published: casting it to an integer ROUNDS ",
+      "(12.7 -> 13), which is a different and possibly existing id. Fix it in the ",
+      "release."),
+      n, length(x), what, paste(ex, collapse = ", "),
+      what, paste(x[ex], collapse = ", "),
+      if (!is.null(d$sci)) paste0(" (", paste(d$sci[ex], collapse = ", "), ")") else ""),
+      call. = FALSE)
+  }
+  invisible(n)
 }
 
 # the normalised taxon SELECT every app_* builder reads. One SQL, four schemas:
@@ -557,16 +595,27 @@ app_datasets <- function(con) {
 #' validity (`is_ok` on v1-v7, `is_valid_usa OR is_valid_global` on v8+), `is_marine`
 #' where the column exists, and `sp_cat NOT IN ('reptile','amphibian')`.
 #'
+#' Every `taxon_id` is asserted to be digits only. A DOUBLE column is cast through
+#' an integer type **only where the value is whole**, because `CAST(12.7 AS HUGEINT)`
+#' rounds to 13 — a different and possibly existing id that nothing downstream could
+#' tell from a real one. A non-integral id is therefore a hard stop naming the row,
+#' not something to publish.
+#'
 #' @param con a DBI connection to a release database
+#' @param n_nonintegral optional environment; `$n` is set to the count (always 0 on
+#'   success, since a non-zero count stops the build)
 #' @return a data frame
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
-app_taxon_table <- function(con) {
+app_taxon_table <- function(con, n_nonintegral = NULL) {
   d <- DBI::dbGetQuery(con, .app_taxon_sql(con))
   # rl: v1-v7 spell it redlist_code, v8+ iucn_code. Coalesce, then drop the twin.
   d$rl <- ifelse(is.na(d$rl), d$rl2, d$rl)
   d$rl2 <- NULL
+  # counted and reported on every build, and a hard stop when it is not zero
+  n <- .app_assert_integral_ids(d, "taxon_id")
+  if (is.environment(n_nonintegral)) n_nonintegral$n <- n
   d
 }
 

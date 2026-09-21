@@ -591,7 +591,7 @@ test_that("a malformed `app` block is an error, per branch", {
 
 test_that("`methods` and `app` ride together, each optional by presence", {
   with_synth("v7b", function(con) {
-    md <- DBI::dbGetQuery(con, "SELECT * FROM methods ORDER BY method_key")
+    md <- DBI::dbGetQuery(con, "SELECT * FROM release_method ORDER BY method_key")
     m <- manifest_build(con, "v7b", base = BASE,
                         extra = list(methods = md),          # backfill_versions.qmd
                         app   = list(capabilities = CAPS))   # the new argument
@@ -686,5 +686,124 @@ test_that("REGRESSION: a taxon with no merged model gets no phantom inputs", {
     # the 4th taxon is not in the picker set at all (no merged key), so it cannot
     # drag its edges in
     expect_false("Orcinus orca" %in% vapply(cards, function(cd) cd$sci, ""))
+  })
+})
+
+# ---- C: a fractional id is a data error, never a rounded neighbour -----------
+
+test_that("REGRESSION: a non-integral taxon_id is never rounded into another id", {
+  # `CAST(12.7 AS HUGEINT)` is 13. Published, that is a different and possibly
+  # EXISTING id, and nothing downstream could tell it from a real one -- the WoRMS
+  # link resolves, to the wrong animal. Cast through an integer type only where the
+  # value is whole; keep the value's own text otherwise so it can be named.
+  with_synth("v7", function(con) {
+    expect_true(all(grepl("^[0-9]+$", app_taxon_table(con)$taxon_id)))
+
+    DBI::dbExecute(con, "UPDATE taxon SET taxon_id = 12.7
+                          WHERE scientific_name = 'Gadus morhua'")
+    cast <- .app_id_cast(con, "taxon", "taxon_id", "taxon_id")
+    ids  <- DBI::dbGetQuery(con, sprintf("SELECT %s AS id FROM taxon", cast))$id
+    expect_false("13" %in% ids)           # the whole point
+    expect_true("12.7" %in% ids)
+
+    # ...and the BUILD stops, naming the row and counting them
+    e <- tryCatch(app_taxon_table(con), error = function(e) conditionMessage(e))
+    # 3, not 4: the taxon with no merged model is not in the picker set
+    expect_match(e, "1 of 3 `taxon_id` values are not integral")
+    expect_match(e, "12.7", fixed = TRUE)
+    expect_match(e, "Gadus morhua", fixed = TRUE)
+    expect_match(e, "12.7 -> 13", fixed = TRUE)
+    expect_error(app_bundle_build(con, "v7", withr::local_tempdir(),
+                                  manifest = manifest_build(con, "v7", base = BASE),
+                                  base = BASE), "not integral")
+  })
+})
+
+test_that("whole DOUBLE ids, negatives and NULL still cast cleanly", {
+  with_synth("v7", function(con) {
+    one <- function() DBI::dbGetQuery(con, sprintf(
+      "SELECT %s AS id FROM taxon WHERE scientific_name = 'Gadus morhua'",
+      .app_id_cast(con, "taxon", "taxon_id", "taxon_id")))$id
+    # a magnitude past 2^53: the double stores 9007199254740992 and the cast is
+    # exact on THAT value -- the precision limit is the column's, not the cast's
+    DBI::dbExecute(con, "UPDATE taxon SET taxon_id = 9007199254740992 WHERE scientific_name = 'Gadus morhua'")
+    expect_identical(one(), "9007199254740992")
+    DBI::dbExecute(con, "UPDATE taxon SET taxon_id = -42 WHERE scientific_name = 'Gadus morhua'")
+    expect_identical(one(), "-42")
+    DBI::dbExecute(con, "UPDATE taxon SET taxon_id = NULL WHERE scientific_name = 'Gadus morhua'")
+    expect_true(is.na(one()))
+    # a NULL id is allowed through the integrality check
+    expect_silent(.app_assert_integral_ids(
+      data.frame(taxon_id = c("1", NA_character_), stringsAsFactors = FALSE)))
+  })
+})
+
+# ---- D: `methods` / `val`, which only v7b has --------------------------------
+
+test_that("the methods block is read from `release_method`, the table v7b really has", {
+  # v7b's sdm.duckdb holds `release_method`; `methods` is the MANIFEST's key for it.
+  # Looking only for `methods` found nothing on the real release and emitted no
+  # block at all, silently -- and v7b is the only release that has one.
+  with_synth("v7b", function(con) {
+    expect_true("release_method" %in% DBI::dbListTables(con))
+    expect_false("methods" %in% DBI::dbListTables(con))
+    b <- app_boot(con, "v7b", manifest_build(con, "v7b", base = BASE))
+    expect_length(b$methods, 4)
+  })
+})
+
+test_that("boot$methods rows are method_key / val / description, never `value`", {
+  # v7b is the ONLY release with a `methods` table, so nothing real exercised this
+  # until now: the rename from `value` to `val` was asserted by the schema alone.
+  with_synth("v7b", function(con) {
+    b <- app_boot(con, "v7b", manifest_build(con, "v7b", base = BASE))
+    expect_length(b$methods, 4)
+    for (mth in b$methods) {
+      expect_setequal(names(mth), c("method_key", "val", "description"))
+      expect_false("value" %in% names(mth))
+      expect_true(nzchar(mth$method_key))
+    }
+    # ...and the published BYTES never contain the word
+    j <- app_json(b)
+    expect_false(grepl('"value"', j, fixed = TRUE))
+    expect_true(grepl('"val"', j, fixed = TRUE))
+
+    # SEEDED: rename back to `value` and both the schema and the grep go red
+    bad <- b
+    bad$methods <- lapply(b$methods, function(m)
+      list(method_key = m$method_key, value = m$val, description = m$description))
+    expect_error(app_validate(bad, "boot"), "required property 'val'")
+    expect_true(grepl('"value"', app_json(bad), fixed = TRUE))   # the gate's grep
+  })
+})
+
+test_that("a release with no `methods` table yields no `methods` key at all", {
+  for (gen in c("v9", "v7", "v2")) with_synth(gen, function(con) {
+    expect_false(any(c("release_method", "methods") %in% DBI::dbListTables(con)),
+                 info = gen)
+    b <- app_boot(con, gen, manifest_build(con, gen, base = BASE))
+    expect_null(b$methods, info = gen)
+    expect_false("methods" %in% names(b), info = gen)
+    # optional by presence means ABSENT, not an empty array an app would iterate
+    expect_false(grepl('"methods"', app_json(b), fixed = TRUE), info = gen)
+  })
+})
+
+test_that("the smoke gate's grep for \"value\" would catch a regression", {
+  # the gate reads every published JSON; reproduce that read on a written bundle
+  with_synth("v7b", function(con) {
+    d <- withr::local_tempdir()
+    app_bundle_build(con, "v7b", d, manifest = manifest_build(con, "v7b", base = BASE),
+                     base = BASE)
+    jsons <- list.files(d, "[.]json$", recursive = TRUE, full.names = TRUE)
+    expect_gt(length(jsons), 0)
+    has_value <- function(fs) Filter(function(f)
+      any(grepl('"value"', readLines(f, warn = FALSE), fixed = TRUE)), fs)
+    expect_length(has_value(jsons), 0)
+
+    # seed one: the grep must find it
+    bad <- file.path(d, "boot.json")
+    writeLines(sub('"val"', '"value"', readLines(bad, warn = FALSE), fixed = TRUE), bad)
+    expect_length(has_value(jsons), 1)
   })
 })

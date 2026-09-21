@@ -124,13 +124,14 @@ print(data.frame(
   check.names = FALSE), row.names = FALSE)
 cat("\n")
 
-fail <- character()
+fail <- character(); skipped <- character(); held <- character()
 
 ## (a) ------------------------------------------------------------------------
 if (max(tab$d_blend) > TOL_BLEND)
   fail <- c(fail, sprintf(
     "(a) blend = TRUE does not reproduce zone_metric: max |delta| %.3e > %.0e (%s)",
     max(tab$d_blend), TOL_BLEND, tab$pra[which.max(tab$d_blend)]))
+if (max(tab$d_blend) <= TOL_BLEND) held <- c(held, "(a)")
 say(sprintf("(a) blend = TRUE reproduces every published zone_metric: max |delta| %.2e <= %.0e  %s",
             max(tab$d_blend), TOL_BLEND, if (max(tab$d_blend) <= TOL_BLEND) "OK" else "FAIL"))
 
@@ -139,6 +140,7 @@ if (max(tab$d_clip) > TOL_CLIP)
   fail <- c(fail, sprintf(
     "(b) denominator = 'study_area' moves %s by %.4f > %.2f",
     tab$pra[which.max(tab$d_clip)], max(tab$d_clip), TOL_CLIP))
+if (max(tab$d_clip) <= TOL_CLIP) held <- c(held, "(b)")
 say(sprintf("(b) denominator = 'study_area' within %.1f everywhere: max %.4f (%s)  %s",
             TOL_CLIP, max(tab$d_clip), tab$pra[which.max(tab$d_clip)],
             if (max(tab$d_clip) <= TOL_CLIP) "OK" else "FAIL"))
@@ -158,6 +160,7 @@ this_tbl <- tryCatch(zone_tbl_for(con, "programarea_key", ver),
 if (is.null(fx) || is.null(meta)) {
   fail <- c(fail, "(c) the programarea_gaa fixture or its provenance record is missing")
 } else if (!identical(this_tbl, meta$source_zone_tbl)) {
+  skipped <- c(skipped, "(c) the traced GAA outline")
   say(sprintf(paste0(
     "(c) SKIPPED: the outline was traced from %s (%s); this release's Program-Area\n",
     "    table is %s, a different vintage -- %s has %s cells for GAA here."),
@@ -171,6 +174,7 @@ if (is.null(fx) || is.null(meta)) {
     fail <- c(fail, sprintf(
       "(c) the traced GAA outline gives %d cells, the published zone_cell %s",
       traced, format(want)))
+  if (isTRUE(traced == want)) held <- c(held, "(c)")
   say(sprintf("(c) GAA traced from its outline (%s): %d cells, published zone_cell %s  %s",
               meta$source_zone_tbl, traced, format(want),
               if (isTRUE(traced == want)) "OK" else "FAIL"))
@@ -204,6 +208,8 @@ if (!is.na(floor_here)) {
     max(tab$d_old), tab$pra[which.max(tab$d_old)], TOL_CLIP, n_bad, nrow(tab),
     if (max(tab$d_old) > TOL_CLIP && n_bad >= n_min) "OK" else "FAIL", ver))
 }
+if (isTRUE(n_bad >= n_min) && (is.na(floor_here) || isTRUE(geo >= floor_here)))
+  held <- c(held, "(d)")
 if (n_bad < n_min)
   fail <- c(fail, sprintf(
     "(d) the OLD formula exceeds %.1f on only %d of %d areas, expected >= %d for %s",
@@ -214,5 +220,11 @@ say("    (on GAA alone the old formula misses by only ",
 
 if (length(fail)) { cat("\n"); for (f in fail) say("FAILED:  ", f)
   quit(save = "no", status = 1) }
-say("\nPASS: all four assertions held on ", nrow(tab), " Program Areas of ", ver, ".")
+# say what actually ran. "all four assertions held" while (c) was skipped is the
+# kind of sentence someone quotes in a release note.
+say(sprintf("\nPASS: %d of %d assertions held on %d Program Areas of %s%s.",
+            length(held), length(held) + length(skipped), nrow(tab), ver,
+            if (length(skipped))
+              sprintf("; %d skipped: %s", length(skipped),
+                      paste(skipped, collapse = ", ")) else ""))
 quit(save = "no", status = 0)

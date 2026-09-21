@@ -165,6 +165,22 @@ numbers for the same ground.
   otherwise. (d)'s floor is now recorded **per release** (v9: 49.1447 over 12 of 20;
   v7: 58.9533 over 4 of 20) rather than v9's number applied to everything.
 
+## Fixed in the confirmation pass
+
+* **`.app_id_cast()` ROUNDED a fractional id**: `CAST(12.7 AS HUGEINT)` is 13, so a
+  non-integral `taxon_id` would have been published as a different and possibly
+  EXISTING id — a WoRMS link that resolves, to the wrong animal. The integer cast now
+  applies only where `x = floor(x)`; anything else keeps its own text, and
+  `app_taxon_table()` **counts non-integral ids and stops the build**, naming the row.
+  A fractional id is a data error the release has to hear about. Whole doubles,
+  negatives and NULL are unchanged.
+* **The methods block was read from the wrong table.** v7b's `sdm.duckdb` holds
+  **`release_method`** (`methods` is the *manifest's* key for it), so looking only
+  for `methods` found nothing on the real release and emitted no block at all,
+  silently — and v7b is the only release that has one. Both names are now accepted
+  and the synthetic fixture uses the real one. On real v7b: 4 rows,
+  `method_key / val / description`.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
