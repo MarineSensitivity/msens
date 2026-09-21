@@ -1,0 +1,81 @@
+{
+  "id": "multipolygon",
+  "source": "msens (hand-derived)",
+  "note": "a multipolygon is one place: each part contributes its own cells",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -90,
+            27
+          ],
+          [
+            -89.95,
+            27
+          ],
+          [
+            -89.95,
+            27.05
+          ],
+          [
+            -90,
+            27.05
+          ],
+          [
+            -90,
+            27
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            -89.8,
+            27.2
+          ],
+          [
+            -89.775,
+            27.2
+          ],
+          [
+            -89.775,
+            27.25
+          ],
+          [
+            -89.8,
+            27.25
+          ],
+          [
+            -89.8,
+            27.2
+          ]
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      9037805,
+      50
+    ],
+    [
+      9066601,
+      100
+    ]
+  ]
+}

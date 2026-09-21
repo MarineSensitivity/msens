@@ -1,0 +1,34 @@
+{
+  "id": "partial-edge-global05",
+  "source": "atlas (hand-derived)",
+  "note": "one full cell plus 0.015 deg of the cell west of it: 0.015/0.05 = 30 % -> pct 30. proves pct is a real fraction, not a hit flag.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90.015, 27.5],
+        [-89.95, 27.5],
+        [-89.95, 27.55],
+        [-90.015, 27.55],
+        [-90.015, 27.5]
+      ]
+    ]
+  },
+  "expected": [
+    [8994600, 30],
+    [8994601, 100]
+  ]
+}

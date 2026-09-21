@@ -1,0 +1,47 @@
+{
+  "id": "hole-global05",
+  "source": "atlas (hand-derived)",
+  "note": "a 3x3-cell square (cols 1801-1803, rows 1249-1251) with the centre cell cut out as a hole: 8 cells at 100 and cell 8994602 absent, not present at 100.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90, 27.45],
+        [-89.85, 27.45],
+        [-89.85, 27.6],
+        [-90, 27.6],
+        [-90, 27.45]
+      ],
+      [
+        [-89.95, 27.5],
+        [-89.95, 27.55],
+        [-89.9, 27.55],
+        [-89.9, 27.5],
+        [-89.95, 27.5]
+      ]
+    ]
+  },
+  "expected": [
+    [8987401, 100],
+    [8987402, 100],
+    [8987403, 100],
+    [8994601, 100],
+    [8994603, 100],
+    [9001801, 100],
+    [9001802, 100],
+    [9001803, 100]
+  ]
+}

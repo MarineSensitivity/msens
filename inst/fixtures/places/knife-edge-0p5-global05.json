@@ -1,0 +1,40 @@
+{
+  "id": "knife-edge-0p5-global05",
+  "source": "atlas (found by the sweep in tests/geo/knifeEdge.test.ts)",
+  "note": "0.0025 x 0.005 deg in the corner of a cell = exactly 0.5 %. Half-even sends it to 0 and the cell is DROPPED; unsnapped, the raw value sits just above the half and the cell is kept at 1.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-89.9525, 27.05],
+        [-89.95, 27.05],
+        [-89.95, 27.055],
+        [-89.9525, 27.055],
+        [-89.9525, 27.05]
+      ]
+    ]
+  },
+  "expected": [],
+  "knife_edge": {
+    "cell_id": 9059401,
+    "exact_pct": 0.5,
+    "raw_pct_unsnapped": "0.50000000000022737",
+    "pct_without_snap": 1,
+    "pct_with_snap": 0,
+    "rule": "pct = round_half_even(round(frac * 100, 9)); R: round(round(x, 9))",
+    "note": "raw_pct_unsnapped is this clipper's value, for documentation — another implementation will land a few 1e-13 elsewhere. What both must agree on is pct_with_snap."
+  }
+}

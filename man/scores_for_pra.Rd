@@ -23,4 +23,13 @@ table instead of aggregating across cells. Returns the same shape
 as \code{\link[=scores_for_cells]{scores_for_cells()}} so it's a drop-in replacement for the
 score / flower-plot pipeline when the area is a Program Area.
 }
+\details{
+A component with \strong{no \code{zone_metric} row is absent, not zero}: v7.1 deletes the
+row of a (zone, component) pair that fails the coverage floor, and a Program
+Area whose component has no scored cell never had one. The inner joins here
+preserve that — the row simply does not come back, and \code{\link[=mean_score]{mean_score()}} averages
+over what is present, which is how the published composite was computed.
+\strong{Reportability is the ABSENCE of the \verb{_ecoregion_rescaled} row}, never the
+\verb{_prepctareaweighting} row, which stays behind even for a dropped pair.
+}
 \concept{calc}

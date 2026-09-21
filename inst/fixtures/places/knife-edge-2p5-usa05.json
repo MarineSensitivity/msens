@@ -1,0 +1,40 @@
+{
+  "id": "knife-edge-2p5-usa05",
+  "source": "atlas (found by the sweep in tests/geo/knifeEdge.test.ts)",
+  "note": "the same 2.5 % case in the usa05 frame (lon -93.90 = 266.10 and lat 25.10 are both cell boundaries there), where the polygon is ALSO shifted +360 into 141.10-based longitudes before the clip — more inexact arithmetic, same conclusion.",
+  "grid_id": "usa05",
+  "grid": {
+    "nc": 3103,
+    "nr": 2006,
+    "xmin": 141.1,
+    "ymax": 82.6,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": true,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-93.9125, 25.1],
+        [-93.9, 25.1],
+        [-93.9, 25.105],
+        [-93.9125, 25.105],
+        [-93.9125, 25.1]
+      ]
+    ]
+  },
+  "expected": [[3567847, 2]],
+  "knife_edge": {
+    "cell_id": 3567847,
+    "exact_pct": 2.5,
+    "raw_pct_unsnapped": "2.5000000000079572",
+    "pct_without_snap": 3,
+    "pct_with_snap": 2,
+    "rule": "pct = round_half_even(round(frac * 100, 9)); R: round(round(x, 9))",
+    "note": "raw_pct_unsnapped is this clipper's value, for documentation — another implementation will land a few 1e-13 elsewhere. What both must agree on is pct_with_snap."
+  }
+}

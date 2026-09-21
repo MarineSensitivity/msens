@@ -20,6 +20,8 @@ silently, since a wrong tile id is still a valid tile id.
 }
 \details{
 Resolution order: the \code{cell_grid} table written alongside \code{cell_model}, then
-the default. Every v8 database predates that table and correctly falls back.
+the grid the connection itself implies (\code{\link[=grid_for_con]{grid_for_con()}}), then the compiled
+default. v8/v9 resolve to 7200 either way; v1-v7 resolve to 3103 instead of
+silently taking the global width.
 }
 \concept{calc}

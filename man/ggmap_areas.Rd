@@ -19,7 +19,7 @@ a ggplot
 \description{
 Returns a \code{\link[ggplot2:ggplot]{ggplot2::ggplot}} map of labeled sf polygons overlaid
 on an \code{\link[rnaturalearth:ne_countries]{rnaturalearth::ne_countries}} basemap, for embedding in
-pdf/docx Quarto output where interactive \code{\link[mapgl:mapgl-package]{mapgl::mapgl}} maps do not
+pdf/docx Quarto output where interactive \code{\link[mapgl:mapgl]{mapgl}} maps do not
 render.
 }
 \concept{viz}

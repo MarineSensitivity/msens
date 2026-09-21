@@ -1,0 +1,31 @@
+{
+  "id": "gulf-rect-usa05",
+  "source": "atlas (hand-derived)",
+  "note": "a Gulf cell on usa05: the polygon's -90.05..-90.00 must be shifted +360 into the 141.10 frame (269.95..270.00) before the column arithmetic, or it falls outside the grid entirely. col 2578, row 1102.",
+  "grid_id": "usa05",
+  "grid": {
+    "nc": 3103,
+    "nr": 2006,
+    "xmin": 141.1,
+    "ymax": 82.6,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": true,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90.05, 27.5],
+        [-90, 27.5],
+        [-90, 27.55],
+        [-90.05, 27.55],
+        [-90.05, 27.5]
+      ]
+    ]
+  },
+  "expected": [[3418981, 100]]
+}

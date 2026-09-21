@@ -1,0 +1,63 @@
+{
+  "id": "antimeridian_usa05",
+  "source": "msens (hand-derived)",
+  "note": "the same polygon on the 0-360 usa05 window is contiguous, no fold",
+  "grid_id": "usa05",
+  "grid": {
+    "nc": 3103,
+    "nr": 2006,
+    "xmin": 141.1,
+    "ymax": 82.6,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": true,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          179.9,
+          50
+        ],
+        [
+          -179.9,
+          50
+        ],
+        [
+          -179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      2020830,
+      100
+    ],
+    [
+      2020831,
+      100
+    ],
+    [
+      2020832,
+      100
+    ],
+    [
+      2020833,
+      100
+    ]
+  ]
+}

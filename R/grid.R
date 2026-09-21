@@ -150,7 +150,7 @@ cell_lonlat <- function(cell_id, grid, wrap = TRUE) {
 #' @export
 #' @concept grid
 #' @examples
-#' lon_span(c(-179, -160, 170, 178))   # 170 205  (Bering Sea, not the globe)
+#' lon_span(c(-179, -160, 170, 178))   # 170 200  (Bering Sea, not the globe)
 #' lon_span(c(-30, 0, 20))             # -30 20   (Atlantic; frame unchanged)
 lon_span <- function(lon) {
   lon <- lon[is.finite(lon)]

@@ -4,23 +4,75 @@
 \alias{scores_for_cells}
 \title{Aggregate component scores across a set of cells}
 \usage{
-scores_for_cells(con, cells, metric_pattern = "_ecoregion_rescaled$")
+scores_for_cells(
+  con,
+  cells,
+  metric_pattern = "_ecoregion_rescaled$",
+  blend = TRUE,
+  denominator = c("study_area", "all")
+)
 }
 \arguments{
 \item{con}{a DBI connection (e.g. from \code{\link[=sdm_db_con]{sdm_db_con()}})}
 
-\item{cells}{a tibble from \code{\link[=cells_in_polygon]{cells_in_polygon()}}, with columns
+\item{cells}{a tibble from \code{\link[=cells_in_polygon]{cells_in_polygon()}} or \code{\link[=cells_in_pra]{cells_in_pra()}}, with columns
 \code{cell_id} and \code{pct_covered}}
 
 \item{metric_pattern}{regex to filter \code{metric.metric_key}
-(default: \code{"_ecoregion_rescaled$"})}
+(default: \code{"_ecoregion_rescaled$"}; the \code{$} is what excludes the
+\verb{_prepctareaweighting} rows)}
+
+\item{blend}{use the published coverage blend (\code{TRUE}, default) or the old
+present-cells-only mean (\code{FALSE})}
+
+\item{denominator}{\code{"study_area"} (default, D7b) or \code{"all"} (exact zone parity)}
 }
 \value{
-tibble(metric_key, score, component, even)
+tibble(metric_key, score, component, even, coverage, mean_where_present)
 }
 \description{
-Weighted-mean aggregation of \code{cell_metric} across a set of cells;
-returns a flower-plot-ready tibble with columns
-\code{metric_key}, \code{score}, \code{component}, \code{even}.
+The one scoring method (master-plan decisions D7 and D7b). Returns a
+flower-plot-ready tibble: \code{metric_key}, \code{score}, \code{component}, \code{even}, plus
+\code{coverage} and \code{mean_where_present}, which are what make a sliver readable as a
+sliver instead of as a high score.
 }
+\section{The coverage blend (\code{blend = TRUE}, the default)}{
+
+A published \code{zone_metric} is, exactly,
+\deqn{\sum(\mathrm{coalesce}(val, 0) \cdot pct) / \sum(pct)}
+over \strong{every} cell of the zone — verified to reproduce all 795 v9 rows. The old
+\code{scores_for_cells()} computed \eqn{\sum(val \cdot pct) / \sum(pct)} over only the
+cells that HAVE the metric, which is the \verb{_prepctareaweighting} intermediate, not
+the published number. A drawn polygon exactly tracing a Program Area therefore
+reported a different, systematically HIGHER score than the same area picked from
+the list: up to 49.1 points on turtle (St George Basin, 1.4 \% coverage), 20.3 on
+primary producer, 9.6 on coral, and up to 6.28 on the composite.
+
+\code{blend = TRUE} computes the published method. \code{blend = FALSE} reproduces the old
+reports and is kept only for that.
+}
+
+\section{The denominator (\code{denominator})}{
+
+\code{"study_area"} (default) first clips the supplied cells to the release's study
+area with \code{\link[=cells_in_study_area]{cells_in_study_area()}} — the cells present in \code{cell} with
+\code{coalesce(in_usa, TRUE)}. "Absent means zero" is only sound where a value could
+have existed, so land and foreign waters must not enter as zeros; a place half
+over land would otherwise score half of what it is.
+
+\code{"all"} skips the clip and is exact zone parity (what \code{zone_cell} does, including
+its non-\code{in_usa} rows). Measured on the 20 Program Areas the two differ by at most
+0.08 composite points, median 0.03.
+}
+
+\section{Reading the result}{
+
+\code{coverage} is the share of the denominator weight held by cells that carry the
+component, and \code{mean_where_present} is the mean over just those cells. The
+identity \code{score = coverage * mean_where_present} holds when \code{blend = TRUE}, so a
+panel can say "17.7, over 1.4 \% of the place" rather than implying 17.7 everywhere.
+A component with no covered cell at all yields \strong{no row} — never a zero — so it
+is excluded from \code{\link[=mean_score]{mean_score()}} exactly as an unreportable component is.
+}
+
 \concept{calc}

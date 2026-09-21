@@ -1,3 +1,53 @@
+# msens 0.43.0
+
+**One scoring method, and one rule for places.** A drawn polygon and a picked Program
+Area now report the same numbers for the same ground, and "which cells does this
+polygon cover" has a single definition that a browser can reproduce.
+
+## One scoring method (D7 / D7b)
+
+* **`scores_for_cells()` gains `blend` and `denominator`** and now returns `coverage`
+  and `mean_where_present` beside `score`. `blend = TRUE` (default) computes the
+  published zone method, `Σ(coalesce(val,0)·pct)/Σ(pct)` over the supplied cells; the
+  old present-cells-only mean was the `_prepctareaweighting` intermediate and read
+  **high wherever a component covered only part of an area** — up to 49.1 points on
+  turtle, 20.3 on primary producer, 9.6 on coral, 6.28 on the composite.
+  `blend = FALSE` reproduces the old reports and is kept only for that.
+  **Drawn-polygon scores change**, deliberately.
+* `denominator = "study_area"` (default) clips a custom place to the cells present in
+  `cell` with `coalesce(in_usa, TRUE)`, so land and foreign waters never enter as
+  zeros; `denominator = "all"` is exact zone parity. A component with no covered cell
+  yields **no row**, never a zero.
+* **`cells_in_study_area()`** (new) is that clip, exported so ONE cell set drives
+  scores, species, area and N cells.
+* **`cells_in_pra()` returns the real `pct_covered`** instead of overwriting every row
+  with `100L` (74,938 of 2,241,876 `zone_cell` rows are partial), and it and
+  `scores_for_pra()` resolve the zone key column with `sdm_val_col()` rather than
+  hardcoding `value` — which made both work on every served release and fail on a
+  v8/v9 source database.
+
+## Places: one rule, shared with the browser
+
+* **`cells_in_polygon_grid(poly, grid)`** (new, `R/place.R`, `@concept place`) answers
+  "which cells does this polygon cover" from the grid definition alone — no `cell`
+  table, no raster, no GDAL extension — planar in degrees, antimeridian-safe on both
+  grids, percent snapped to 9 decimals then rounded **half-to-even**, cells rounding
+  to 0 dropped, overlapping parts of one place counted once.
+* **`cells_in_polygon()` delegates to it for every connection.** The v1–v7 branch no
+  longer opens `cell_id_raster()`, so the two generations stop disagreeing by ~0.66 pp
+  on edge cells, and the result is still restricted to the ids the release holds.
+* **`grid_for_con()`**, **`place_fixture()`**, **`place_fixture_ids()`** and
+  **`geojson_sfc()`** are new and exported.
+* **`cell_grid_ncol()` now falls back to the connection's own grid** before the
+  compiled 7200. No release ever wrote `cell_grid`, so the blind fallback was always
+  taken: right for `global05` by coincidence, wrong for every `usa05` release, and
+  silently so — a v7 cell with 477 models returned 0 species.
+* `inst/fixtures/places/*.json` carries 23 fixtures — polygon, grid spec and expected
+  `(cell_id, pct)` — **byte-identical with the atlas app's TypeScript twin**, which
+  reproduces all 23 exactly.
+* Fixed the `lon_span()` roxygen example, which claimed `170 205` where the code
+  returns `170 200`.
+
 # msens 0.42.0
 
 * **`.GRID_VER` gains `v7b = "usa05"`** — the v7.1 patch release id (`grid.R`), a surgical patch of

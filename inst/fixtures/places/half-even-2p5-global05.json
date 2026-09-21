@@ -1,0 +1,31 @@
+{
+  "id": "half-even-2p5-global05",
+  "source": "atlas (hand-derived)",
+  "note": "0.0125 x 0.005 deg of cell 8994600: frac 0.025 -> pct exactly 2.5, which half-even rounds DOWN to 2 (Math.round gives 3).",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90.0125, 27.5],
+        [-90, 27.5],
+        [-90, 27.505],
+        [-90.0125, 27.505],
+        [-90.0125, 27.5]
+      ]
+    ]
+  },
+  "expected": [[8994600, 2]]
+}

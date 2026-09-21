@@ -45,7 +45,7 @@ just to be reduced. Keeping both forms on one implementation is what stops
 the SQL path and the vector path from drifting apart.
 }
 \examples{
-lon_span(c(-179, -160, 170, 178))   # 170 205  (Bering Sea, not the globe)
+lon_span(c(-179, -160, 170, 178))   # 170 200  (Bering Sea, not the globe)
 lon_span(c(-30, 0, 20))             # -30 20   (Atlantic; frame unchanged)
 }
 \concept{grid}

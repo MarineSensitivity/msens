@@ -1,0 +1,45 @@
+{
+  "id": "multipolygon-global05",
+  "source": "atlas (hand-derived)",
+  "note": "two disjoint single-cell parts (cols 1801 and 1803 on row 1250).",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [-90, 27.5],
+          [-89.95, 27.5],
+          [-89.95, 27.55],
+          [-90, 27.55],
+          [-90, 27.5]
+        ]
+      ],
+      [
+        [
+          [-89.9, 27.5],
+          [-89.85, 27.5],
+          [-89.85, 27.55],
+          [-89.9, 27.55],
+          [-89.9, 27.5]
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [8994601, 100],
+    [8994603, 100]
+  ]
+}

@@ -42,7 +42,9 @@ export(cells_from_aligned_raster)
 export(cells_from_ranges)
 export(cells_from_raster)
 export(cells_in_polygon)
+export(cells_in_polygon_grid)
 export(cells_in_pra)
+export(cells_in_study_area)
 export(cells_pct_marine)
 export(clean_sci_name)
 export(cog_from_tif)
@@ -64,10 +66,12 @@ export(drawn_features_sf)
 export(force_target)
 export(ga_head)
 export(ga_js)
+export(geojson_sfc)
 export(get_species_by_feature)
 export(ggmap_areas)
 export(ggplot_flower)
 export(grid_cellid_url)
+export(grid_for_con)
 export(grid_for_ver)
 export(grid_registry)
 export(grid_spec)
@@ -110,6 +114,8 @@ export(parquet_manifest)
 export(parquet_sync_plan)
 export(parse_noaa_status)
 export(parse_qmd_frontmatter)
+export(place_fixture)
+export(place_fixture_ids)
 export(plot_flower)
 export(pra_score_delta)
 export(preview_app_url)
@@ -165,14 +171,14 @@ export(wm_rest)
 export(write_atlas_parquet)
 export(write_manifest)
 export(zone_cells)
+export(zone_crosswalk)
 export(zone_geom_hash)
 export(zone_key_col)
 export(zone_label_args)
 export(zone_line_args)
 export(zone_score_delta)
-export(zone_scores)
 export(zone_scored_flds)
-export(zone_crosswalk)
+export(zone_scores)
 export(zone_set_group)
 export(zone_set_key)
 export(zone_set_resolve)
@@ -180,156 +186,193 @@ export(zone_style)
 import(httr2)
 import(leaflet)
 import(readr)
-importFrom(DBI,dbConnect)
-importFrom(DBI,dbDisconnect)
-importFrom(DBI,dbExecute)
-importFrom(DBI,dbGetQuery)
-importFrom(DBI,dbListFields)
-importFrom(DBI,dbListTables)
-importFrom(DBI,dbQuoteString)
-importFrom(DT,datatable)
-importFrom(DT,formatPercentage)
-importFrom(DT,formatSignif)
+importFrom(DBI,
+  dbConnect,
+  dbDisconnect,
+  dbExecute,
+  dbGetQuery,
+  dbListFields,
+  dbListTables,
+  dbQuoteString
+)
+importFrom(DT,
+  datatable,
+  formatPercentage,
+  formatSignif
+)
 importFrom(RColorBrewer,brewer.pal)
 importFrom(base64enc,base64encode)
-importFrom(dbplyr,copy_inline)
 importFrom(digest,digest)
-importFrom(dplyr,across)
-importFrom(dplyr,all_of)
-importFrom(dplyr,anti_join)
-importFrom(dplyr,arrange)
-importFrom(dplyr,bind_rows)
-importFrom(dplyr,case_match)
-importFrom(dplyr,case_when)
-importFrom(dplyr,coalesce)
-importFrom(dplyr,collect)
-importFrom(dplyr,desc)
-importFrom(dplyr,filter)
-importFrom(dplyr,group_by)
-importFrom(dplyr,if_else)
-importFrom(dplyr,inner_join)
-importFrom(dplyr,join_by)
-importFrom(dplyr,lag)
-importFrom(dplyr,lead)
-importFrom(dplyr,left_join)
-importFrom(dplyr,mutate)
-importFrom(dplyr,pull)
-importFrom(dplyr,relocate)
-importFrom(dplyr,rename)
-importFrom(dplyr,select)
-importFrom(dplyr,summarize)
-importFrom(dplyr,tbl)
-importFrom(dplyr,where)
+importFrom(dplyr,
+  across,
+  all_of,
+  anti_join,
+  arrange,
+  bind_rows,
+  case_match,
+  case_when,
+  coalesce,
+  desc,
+  filter,
+  if_else,
+  inner_join,
+  lag,
+  lead,
+  left_join,
+  mutate,
+  pull,
+  relocate,
+  rename,
+  select,
+  summarize,
+  tbl,
+  where
+)
 importFrom(duckdb,duckdb)
-importFrom(fs,dir_create)
-importFrom(fs,file_exists)
-importFrom(fs,file_size)
-importFrom(fs,path)
-importFrom(ggiraph,geom_rect_interactive)
-importFrom(ggiraph,girafe)
-importFrom(ggiraph,opts_sizing)
-importFrom(ggiraph,opts_tooltip)
-importFrom(ggplot2,aes)
-importFrom(ggplot2,annotate)
-importFrom(ggplot2,coord_polar)
-importFrom(ggplot2,coord_sf)
-importFrom(ggplot2,element_blank)
-importFrom(ggplot2,geom_sf)
-importFrom(ggplot2,ggplot)
-importFrom(ggplot2,ggtitle)
-importFrom(ggplot2,labs)
-importFrom(ggplot2,scale_fill_manual)
-importFrom(ggplot2,theme)
-importFrom(ggplot2,theme_minimal)
-importFrom(ggplot2,unit)
-importFrom(ggplot2,xlim)
+importFrom(fs,
+  dir_create,
+  file_exists,
+  file_size,
+  path
+)
+importFrom(ggiraph,
+  geom_rect_interactive,
+  girafe,
+  opts_sizing,
+  opts_tooltip
+)
+importFrom(ggplot2,
+  aes,
+  annotate,
+  coord_polar,
+  coord_sf,
+  element_blank,
+  geom_sf,
+  ggplot,
+  ggtitle,
+  labs,
+  scale_fill_manual,
+  theme,
+  theme_minimal,
+  unit,
+  xlim
+)
 importFrom(glue,glue)
 importFrom(grDevices,colorRampPalette)
-importFrom(gt,cols_label)
-importFrom(gt,fmt_number)
-importFrom(gt,fmt_percent)
-importFrom(gt,gt)
-importFrom(htmltools,HTML)
-importFrom(htmltools,tagList)
-importFrom(htmltools,tags)
-importFrom(httr2,req_perform)
-importFrom(httr2,req_perform_parallel)
-importFrom(httr2,req_url_path_append)
-importFrom(httr2,req_url_query)
-importFrom(httr2,request)
-importFrom(httr2,resp_body_json)
+importFrom(gt,
+  cols_label,
+  fmt_number,
+  fmt_percent,
+  gt
+)
+importFrom(htmltools,
+  HTML,
+  tagList,
+  tags
+)
+importFrom(httr2,
+  req_perform,
+  req_perform_parallel,
+  req_url_path_append,
+  req_url_query,
+  request,
+  resp_body_json
+)
 importFrom(janitor,clean_names)
-importFrom(jsonlite,fromJSON)
-importFrom(jsonlite,toJSON)
-importFrom(mapgl,add_categorical_legend)
-importFrom(mapgl,add_fill_layer)
-importFrom(mapgl,add_image_source)
-importFrom(mapgl,add_legend)
-importFrom(mapgl,add_line_layer)
-importFrom(mapgl,add_pmtiles_source)
-importFrom(mapgl,add_raster_layer)
-importFrom(mapgl,add_raster_source)
-importFrom(mapgl,add_scale_control)
-importFrom(mapgl,add_symbol_layer)
-importFrom(mapgl,fit_bounds)
-importFrom(mapgl,get_column)
-importFrom(mapgl,mapbox_style)
-importFrom(mapgl,mapboxgl)
-importFrom(mapgl,match_expr)
+importFrom(jsonlite,
+  fromJSON,
+  toJSON
+)
+importFrom(mapgl,
+  add_categorical_legend,
+  add_fill_layer,
+  add_image_source,
+  add_legend,
+  add_line_layer,
+  add_pmtiles_source,
+  add_raster_layer,
+  add_raster_source,
+  add_scale_control,
+  add_symbol_layer,
+  fit_bounds,
+  get_column,
+  mapbox_style,
+  mapboxgl,
+  match_expr
+)
 importFrom(methods,is)
-importFrom(purrr,imap)
-importFrom(purrr,map2)
-importFrom(rlang,"%||%")
-importFrom(rlang,`:=`)
-importFrom(rlang,ensym)
+importFrom(purrr,
+  imap,
+  map2
+)
+importFrom(rlang,
+  "%||%",
+  `:=`,
+  ensym
+)
 importFrom(rnaturalearth,ne_countries)
 importFrom(scales,hue_pal)
-importFrom(sf,gdal_utils)
-importFrom(sf,read_sf)
-importFrom(sf,st_area)
-importFrom(sf,st_as_binary)
-importFrom(sf,st_as_sfc)
-importFrom(sf,st_bbox)
-importFrom(sf,st_crs)
-importFrom(sf,st_drop_geometry)
-importFrom(sf,st_geometry)
-importFrom(sf,st_intersection)
-importFrom(sf,st_intersects)
-importFrom(sf,st_is_empty)
-importFrom(sf,st_layers)
-importFrom(sf,st_make_valid)
-importFrom(sf,st_polygon)
-importFrom(sf,st_read)
-importFrom(sf,st_set_crs)
-importFrom(sf,st_sfc)
-importFrom(sf,st_shift_longitude)
-importFrom(sf,st_transform)
-importFrom(sf,st_union)
-importFrom(sf,st_write)
-importFrom(sf,st_zm)
+importFrom(sf,
+  gdal_utils,
+  read_sf,
+  st_area,
+  st_as_binary,
+  st_as_sfc,
+  st_bbox,
+  st_cast,
+  st_covered_by,
+  st_crs,
+  st_drop_geometry,
+  st_geometry,
+  st_intersection,
+  st_intersects,
+  st_is_empty,
+  st_layers,
+  st_make_valid,
+  st_multipolygon,
+  st_polygon,
+  st_read,
+  st_set_crs,
+  st_sfc,
+  st_shift_longitude,
+  st_transform,
+  st_union,
+  st_write,
+  st_zm
+)
 importFrom(stats,aggregate)
-importFrom(stringr,str_detect)
-importFrom(stringr,str_replace)
-importFrom(stringr,str_replace_all)
-importFrom(stringr,str_split_fixed)
-importFrom(stringr,str_split_i)
-importFrom(stringr,str_squish)
-importFrom(terra,crs)
-importFrom(terra,ext)
-importFrom(terra,extract)
-importFrom(terra,ncol)
-importFrom(terra,nrow)
-importFrom(terra,rast)
-importFrom(terra,rasterize)
-importFrom(terra,res)
-importFrom(terra,trim)
-importFrom(terra,values)
-importFrom(terra,vect)
-importFrom(terra,writeRaster)
-importFrom(tibble,as_tibble)
-importFrom(tibble,tibble)
-importFrom(tidyr,replace_na)
-importFrom(tidyr,unnest)
-importFrom(utils,URLencode)
-importFrom(utils,modifyList)
-importFrom(utils,packageVersion)
+importFrom(stringr,
+  str_detect,
+  str_replace,
+  str_replace_all,
+  str_split_fixed,
+  str_split_i,
+  str_squish
+)
+importFrom(terra,
+  crs,
+  ext,
+  extract,
+  ncol,
+  nrow,
+  rast,
+  rasterize,
+  res,
+  trim,
+  values,
+  vect,
+  writeRaster
+)
+importFrom(tibble,
+  as_tibble,
+  tibble
+)
+importFrom(tidyr,
+  replace_na,
+  unnest
+)
+importFrom(utils,
+  URLencode,
+  modifyList,
+  packageVersion
+)

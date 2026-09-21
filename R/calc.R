@@ -33,24 +33,25 @@ cell_id_raster <- function() {
 #' partially covered edge cells count proportionally.
 #'
 #' **Pass a DB connection.** Then the grid is read from the database being
-#' queried and cannot disagree with it. Two paths, chosen automatically:
+#' queried ([grid_for_con()]) and cannot disagree with it. Both generations take
+#' the SAME path: [cells_in_polygon_grid()] computes the cells from the grid
+#' definition alone, and the result is restricted to the `cell_id`s the release
+#' actually holds. No raster is opened on any version — the v7 branch used to read
+#' the 0-360 cell-id raster and returned `terra`'s coverage fractions, which
+#' differed from the v8 path by a mean 0.66 pp on edge cells for no reason anyone
+#' could act on.
 #'
-#' * **v8** (`cell` carries `lon`/`lat`) — a SQL bbox select on `cell` picks the
-#'   candidates and `sf` computes exact coverage on just those. No raster is
-#'   touched. For a 2x1.5-degree area this is **~0.02 s** against ~35 s to read
-#'   the whole cell-id raster, and it joins `cell_model`, which is already
-#'   cell-oriented.
-#' * **v7** (no `lon`/`lat`) — falls back to [cell_id_raster()], the 0-360
-#'   regional raster that IS v7's grid.
-#'
-#' Passing a [`terra::SpatRaster`] directly still works, but nothing can then
-#' verify it matches the database — see [cell_id_raster()] for how that failed
-#' silently on v8.
+#' Passing a [`terra::SpatRaster`] directly still works and still uses
+#' `terra::extract()`: a cell-id COG is a lookup IMAGE whose pixel values are ids
+#' from a frame that may not be the grid's, so arithmetic cannot be applied to it.
+#' Nothing can verify such a raster matches the database — see [cell_id_raster()]
+#' for how that failed silently on v8.
 #'
 #' @param poly an sf polygon (assumed or transformable to EPSG:4326)
 #' @param src a DBI connection (**preferred**), or a single-layer
 #'   [`terra::SpatRaster`] of integer cell ids
-#' @param res grid resolution in degrees, SQL path only (default `0.05`)
+#' @param res ignored, kept for back-compatibility; the resolution now comes from
+#'   the grid registry, which is the only place it was ever right
 #' @return a tibble with columns `cell_id` (integer) and `pct_covered` (0-100)
 #' @importFrom sf st_transform st_shift_longitude st_geometry st_union st_bbox
 #'   st_set_crs st_sfc st_polygon st_intersects st_intersection st_area
@@ -64,11 +65,8 @@ cell_id_raster <- function() {
 cells_in_polygon <- function(poly, src, res = 0.05) {
   # methods::is(), not inherits(): a duckdb_connection is an S4 object, and S4
   # superclasses are not reliably visible to inherits()
-  if (methods::is(src, "DBIConnection")) {
-    if (.cell_has_lonlat(src))
-      return(.cells_in_polygon_db(poly, src, res))
-    src <- cell_id_raster()          # v7: `cell` has no lon/lat
-  }
+  if (methods::is(src, "DBIConnection"))
+    return(.cells_in_polygon_db(poly, src))
   .cells_in_polygon_raster(poly, src)
 }
 
@@ -110,70 +108,62 @@ cells_in_polygon <- function(poly, src, res = 0.05) {
   all(c("lon", "lat") %in% cols)
 }
 
-# split a longitude range into 1-2 ranges inside [-180,180] (antimeridian-safe)
-.lon_ranges <- function(x0, x1) {
-  if (x1 - x0 >= 360) return(list(c(-180, 180)))
-  wrap <- function(x) ((x + 180) %% 360) - 180
-  a <- wrap(x0); b <- wrap(x1)
-  if (a <= b) list(c(a, b)) else list(c(a, 180), c(-180, b))
-}
-
-# v8 path: bbox-select candidates in SQL, then exact coverage on just those.
-# Coverage is computed PLANAR in degrees, which is what terra's `cover = TRUE`
-# does in the raster's CRS — so the two paths report pct_covered the same way.
-.cells_in_polygon_db <- function(poly, con, res = 0.05) {
+# Both database generations now run ONE rule: [cells_in_polygon_grid()] on the grid
+# the connection reports, then restricted to the cell ids the release actually has.
+#
+# The restriction is not cosmetic. Grid arithmetic answers "which squares does this
+# polygon overlap", which includes land, foreign waters and (on v7) the cells the
+# regional grid defines but the release never scored. Intersecting with `cell` keeps
+# exactly the rows the previous bbox-select returned, while removing the two things
+# that made the old pair of implementations disagree: the v7 raster read (grid ids
+# from a file whose frame nothing verified) and `exactextractr`-style coverage
+# fractions on one side only.
+.cells_in_polygon_db <- function(poly, con) {
   empty <- tibble::tibble(cell_id = integer(), pct_covered = numeric())
-  g <- sf::st_union(sf::st_geometry(sf::st_transform(poly, 4326)))
-  g <- tryCatch(sf::st_wrap_dateline(g), error = function(e) g)
-  bb <- sf::st_bbox(g)
-  h  <- res / 2
-  lon_sql <- paste(vapply(
-    .lon_ranges(bb[["xmin"]] - h, bb[["xmax"]] + h),
-    function(r) sprintf("(lon BETWEEN %.10f AND %.10f)", r[1], r[2]), ""),
-    collapse = " OR ")
-  cand <- DBI::dbGetQuery(con, sprintf(
-    "SELECT cell_id, lon, lat FROM cell WHERE (%s) AND lat BETWEEN %.10f AND %.10f",
-    lon_sql, bb[["ymin"]] - h, bb[["ymax"]] + h))
-  if (!nrow(cand)) return(empty)
-  gp <- sf::st_set_crs(g, NA_character_)
-  bx <- sf::st_sfc(lapply(seq_len(nrow(cand)), function(i) sf::st_polygon(list(cbind(
-    cand$lon[i] + c(-h, h, h, -h, -h),
-    cand$lat[i] + c(-h, -h, h, h, -h))))))
-  hit <- sf::st_intersects(bx, gp, sparse = FALSE)[, 1]
-  if (!any(hit)) return(empty)
-  inter <- suppressWarnings(sf::st_intersection(bx[hit], gp))
-  pct   <- round(as.numeric(sf::st_area(inter)) / (res * res) * 100)
-  keep  <- pct > 0
-  tibble::tibble(
-    cell_id     = as.integer(cand$cell_id[hit][keep]),
-    pct_covered = pct[keep])
+  d <- cells_in_polygon_grid(poly, grid_for_con(con))
+  if (!nrow(d)) return(empty)
+  have <- DBI::dbGetQuery(con, sprintf(
+    "SELECT cell_id FROM cell WHERE cell_id IN (%s)",
+    paste(as.integer(d$cell_id), collapse = ", ")))$cell_id
+  d <- d[d$cell_id %in% as.integer(have), , drop = FALSE]
+  if (!nrow(d)) return(empty)
+  tibble::tibble(cell_id = as.integer(d$cell_id), pct_covered = as.numeric(d$pct_covered))
 }
 
 #' Cells belonging to a Program Area zone
 #'
-#' Fast lookup of the cells making up a Program Area by reading
-#' directly from the `zone` / `zone_cell` tables, avoiding the
-#' `terra::rasterize()` cost paid by [cells_in_polygon()]. Returns
-#' the same shape (`cell_id`, `pct_covered`) so downstream helpers
-#' can consume it interchangeably; `pct_covered` is always 100
-#' because `zone_cell` membership is binary.
+#' Fast lookup of the cells making up a Program Area by reading directly from the
+#' `zone` / `zone_cell` tables. Returns the same shape (`cell_id`, `pct_covered`)
+#' as [cells_in_polygon()] so downstream helpers consume the two interchangeably.
+#'
+#' **`pct_covered` is the stored coverage, not 100.** `zone_cell` membership is
+#' *not* binary: it holds the `exactextractr` coverage fraction x 100, and 74,938
+#' of 2,241,876 rows are partial. This function used to overwrite all of them with
+#' `100L`, so a single report weighted its Program-Area *scores* by coverage (via
+#' the precomputed `zone_metric`) while weighting the *species table* of the same
+#' area uniformly — the edge cells of every coastal area counted for more species
+#' than they contributed area. `test-calc.R` keeps that as a named regression.
+#'
+#' The zone key column is resolved with [sdm_val_col()]: v1-v7 spell it `value`,
+#' v8+ `val`, and a served v8 view carries both. Hardcoding `value` made this
+#' function work on every *served* release and fail on a v8/v9 *source* database.
 #'
 #' @param con a DBI connection (e.g. from [sdm_db_con()])
 #' @param pra_key Program Area key (e.g. "CGM")
-#' @return tibble(cell_id integer, pct_covered integer = 100L)
-#' @importFrom dplyr tbl filter select inner_join collect mutate join_by
+#' @return tibble(cell_id integer, pct_covered numeric 1-100)
+#' @importFrom DBI dbGetQuery dbQuoteString
+#' @importFrom tibble as_tibble
+#' @importFrom glue glue
 #' @export
 #' @concept calc
 cells_in_pra <- function(con, pra_key) {
-  dplyr::tbl(con, "zone") |>
-    dplyr::filter(fld == "programarea_key", value == !!pra_key) |>
-    dplyr::select(zone_seq) |>
-    dplyr::inner_join(
-      dplyr::tbl(con, "zone_cell") |> dplyr::select(zone_seq, cell_id),
-      by = dplyr::join_by(zone_seq)) |>
-    dplyr::select(cell_id) |>
-    dplyr::collect() |>
-    dplyr::mutate(pct_covered = 100L)
+  vc <- sdm_val_col(con, "zone")
+  d  <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT zc.cell_id, zc.pct_covered
+       FROM zone z JOIN zone_cell zc USING (zone_seq)
+      WHERE z.fld = 'programarea_key' AND z.{vc} = {DBI::dbQuoteString(con, pra_key)}
+      ORDER BY zc.cell_id"))
+  tibble::tibble(cell_id = as.integer(d$cell_id), pct_covered = as.numeric(d$pct_covered))
 }
 
 #' Precomputed component scores for a Program Area
@@ -187,72 +177,153 @@ cells_in_pra <- function(con, pra_key) {
 #' @param pra_key Program Area key (e.g. "CGM")
 #' @param metric_pattern regex to filter `metric.metric_key`
 #'   (default: `"_ecoregion_rescaled$"`)
+#' @details
+#' A component with **no `zone_metric` row is absent, not zero**: v7.1 deletes the
+#' row of a (zone, component) pair that fails the coverage floor, and a Program
+#' Area whose component has no scored cell never had one. The inner joins here
+#' preserve that — the row simply does not come back, and [mean_score()] averages
+#' over what is present, which is how the published composite was computed.
+#' **Reportability is the ABSENCE of the `_ecoregion_rescaled` row**, never the
+#' `_prepctareaweighting` row, which stays behind even for a dropped pair.
+#'
 #' @return tibble(metric_key, score, component, even)
-#' @importFrom dplyr tbl filter select inner_join collect mutate join_by
-#' @importFrom stringr str_detect str_replace
+#' @importFrom DBI dbGetQuery dbQuoteString
+#' @importFrom tibble as_tibble
+#' @importFrom dplyr mutate filter
+#' @importFrom glue glue
+#' @importFrom stringr str_replace
 #' @export
 #' @concept calc
 scores_for_pra <- function(con, pra_key,
                            metric_pattern = "_ecoregion_rescaled$") {
-  dplyr::tbl(con, "zone") |>
-    dplyr::filter(fld == "programarea_key", value == !!pra_key) |>
-    dplyr::select(zone_seq) |>
-    dplyr::inner_join(
-      dplyr::tbl(con, "zone_metric") |>
-        dplyr::select(zone_seq, metric_seq, score = value),
-      by = dplyr::join_by(zone_seq)) |>
-    dplyr::inner_join(
-      dplyr::tbl(con, "metric") |>
-        dplyr::filter(stringr::str_detect(metric_key, metric_pattern)),
-      by = dplyr::join_by(metric_seq)) |>
-    dplyr::select(metric_key, score) |>
-    dplyr::collect() |>
-    dplyr::mutate(
-      component = metric_key |>
-        stringr::str_replace("extrisk_", "") |>
-        stringr::str_replace("_ecoregion_rescaled", "") |>
-        stringr::str_replace("_", " "),
-      even = 1) |>
-    dplyr::filter(component != "all")
+  vz <- sdm_val_col(con, "zone")
+  vm <- sdm_val_col(con, "zone_metric")
+  DBI::dbGetQuery(con, glue::glue(
+    "SELECT m.metric_key, zm.{vm} AS score
+       FROM zone z
+       JOIN zone_metric zm USING (zone_seq)
+       JOIN metric m       USING (metric_seq)
+      WHERE z.fld = 'programarea_key'
+        AND z.{vz} = {DBI::dbQuoteString(con, pra_key)}
+        AND regexp_matches(m.metric_key, {DBI::dbQuoteString(con, metric_pattern)})
+      ORDER BY m.metric_key")) |>
+    tibble::as_tibble() |>
+    dplyr::mutate(component = .component_of(.data$metric_key), even = 1) |>
+    dplyr::filter(.data$component != "all")
 }
+
+# metric_key -> flower-petal component label. One implementation, because the three
+# copies in the apps each spelled the regex differently.
+.component_of <- function(metric_key)
+  metric_key |>
+    stringr::str_replace("extrisk_", "") |>
+    stringr::str_replace("_ecoregion_rescaled", "") |>
+    stringr::str_replace("_", " ")
 
 #' Aggregate component scores across a set of cells
 #'
-#' Weighted-mean aggregation of `cell_metric` across a set of cells;
-#' returns a flower-plot-ready tibble with columns
-#' `metric_key`, `score`, `component`, `even`.
+#' The one scoring method (master-plan decisions D7 and D7b). Returns a
+#' flower-plot-ready tibble: `metric_key`, `score`, `component`, `even`, plus
+#' `coverage` and `mean_where_present`, which are what make a sliver readable as a
+#' sliver instead of as a high score.
+#'
+#' @section The coverage blend (`blend = TRUE`, the default):
+#' A published `zone_metric` is, exactly,
+#' \deqn{\sum(\mathrm{coalesce}(val, 0) \cdot pct) / \sum(pct)}
+#' over **every** cell of the zone — verified to reproduce all 795 v9 rows. The old
+#' `scores_for_cells()` computed \eqn{\sum(val \cdot pct) / \sum(pct)} over only the
+#' cells that HAVE the metric, which is the `_prepctareaweighting` intermediate, not
+#' the published number. A drawn polygon exactly tracing a Program Area therefore
+#' reported a different, systematically HIGHER score than the same area picked from
+#' the list: up to 49.1 points on turtle (St George Basin, 1.4 % coverage), 20.3 on
+#' primary producer, 9.6 on coral, and up to 6.28 on the composite.
+#'
+#' `blend = TRUE` computes the published method. `blend = FALSE` reproduces the old
+#' reports and is kept only for that.
+#'
+#' @section The denominator (`denominator`):
+#' `"study_area"` (default) first clips the supplied cells to the release's study
+#' area with [cells_in_study_area()] — the cells present in `cell` with
+#' `coalesce(in_usa, TRUE)`. "Absent means zero" is only sound where a value could
+#' have existed, so land and foreign waters must not enter as zeros; a place half
+#' over land would otherwise score half of what it is.
+#'
+#' `"all"` skips the clip and is exact zone parity (what `zone_cell` does, including
+#' its non-`in_usa` rows). Measured on the 20 Program Areas the two differ by at most
+#' 0.08 composite points, median 0.03.
+#'
+#' @section Reading the result:
+#' `coverage` is the share of the denominator weight held by cells that carry the
+#' component, and `mean_where_present` is the mean over just those cells. The
+#' identity `score = coverage * mean_where_present` holds when `blend = TRUE`, so a
+#' panel can say "17.7, over 1.4 % of the place" rather than implying 17.7 everywhere.
+#' A component with no covered cell at all yields **no row** — never a zero — so it
+#' is excluded from [mean_score()] exactly as an unreportable component is.
 #'
 #' @param con a DBI connection (e.g. from [sdm_db_con()])
-#' @param cells a tibble from [cells_in_polygon()], with columns
+#' @param cells a tibble from [cells_in_polygon()] or [cells_in_pra()], with columns
 #'   `cell_id` and `pct_covered`
 #' @param metric_pattern regex to filter `metric.metric_key`
-#'   (default: `"_ecoregion_rescaled$"`)
-#' @return tibble(metric_key, score, component, even)
-#' @importFrom dplyr tbl filter inner_join group_by summarize collect mutate
-#' @importFrom dbplyr copy_inline
-#' @importFrom stringr str_detect str_replace
+#'   (default: `"_ecoregion_rescaled$"`; the `$` is what excludes the
+#'   `_prepctareaweighting` rows)
+#' @param blend use the published coverage blend (`TRUE`, default) or the old
+#'   present-cells-only mean (`FALSE`)
+#' @param denominator `"study_area"` (default, D7b) or `"all"` (exact zone parity)
+#' @return tibble(metric_key, score, component, even, coverage, mean_where_present)
+#' @importFrom DBI dbGetQuery dbQuoteString
+#' @importFrom tibble as_tibble tibble
+#' @importFrom dplyr mutate filter
+#' @importFrom glue glue
 #' @export
 #' @concept calc
 scores_for_cells <- function(con, cells,
-                             metric_pattern = "_ecoregion_rescaled$") {
-  cells_t <- dbplyr::copy_inline(con, cells)
-  dplyr::tbl(con, "metric") |>
-    dplyr::filter(stringr::str_detect(metric_key, metric_pattern)) |>
-    dplyr::inner_join(dplyr::tbl(con, "cell_metric"), by = "metric_seq") |>
-    dplyr::inner_join(cells_t, by = "cell_id") |>
-    dplyr::group_by(metric_key) |>
-    dplyr::summarize(
-      score = sum(value * pct_covered, na.rm = TRUE) /
-              sum(pct_covered, na.rm = TRUE),
-      .groups = "drop") |>
-    dplyr::collect() |>
-    dplyr::mutate(
-      component = metric_key |>
-        stringr::str_replace("extrisk_", "") |>
-        stringr::str_replace("_ecoregion_rescaled", "") |>
-        stringr::str_replace("_", " "),
-      even = 1) |>
-    dplyr::filter(component != "all")
+                             metric_pattern = "_ecoregion_rescaled$",
+                             blend = TRUE,
+                             denominator = c("study_area", "all")) {
+  stopifnot(all(c("cell_id", "pct_covered") %in% names(cells)))
+  denominator <- match.arg(denominator)
+  if (identical(denominator, "study_area")) cells <- cells_in_study_area(con, cells)
+
+  empty <- tibble::tibble(metric_key = character(), score = numeric(),
+                          component = character(), even = numeric(),
+                          coverage = numeric(), mean_where_present = numeric())
+  if (!nrow(cells)) return(empty)
+
+  vc   <- sdm_val_col(con, "cell_metric")
+  vals <- paste(sprintf("(%d, %.10f)", as.integer(cells$cell_id),
+                        as.numeric(cells$pct_covered)), collapse = ", ")
+  # CROSS JOIN then LEFT JOIN, deliberately: an INNER JOIN on cell_metric is the
+  # very bug being fixed — it makes a cell without the metric vanish from the
+  # DENOMINATOR as well as the numerator.
+  d <- DBI::dbGetQuery(con, glue::glue("
+    WITH z AS (SELECT * FROM (VALUES {vals}) AS v(cell_id, pct_covered)),
+    m AS (
+      SELECT metric_seq, metric_key FROM metric
+       WHERE regexp_matches(metric_key, {DBI::dbQuoteString(con, metric_pattern)})
+    )
+    SELECT m.metric_key,
+           sum(COALESCE(cm.{vc}, 0) * z.pct_covered)                            AS num_blend,
+           sum(CASE WHEN cm.{vc} IS NOT NULL THEN cm.{vc} * z.pct_covered END)  AS num_present,
+           sum(CASE WHEN cm.{vc} IS NOT NULL THEN z.pct_covered ELSE 0 END)     AS w_present,
+           sum(z.pct_covered)                                                   AS w_all
+      FROM m CROSS JOIN z
+      LEFT JOIN cell_metric cm
+        ON cm.cell_id = z.cell_id AND cm.metric_seq = m.metric_seq
+     GROUP BY m.metric_key
+     ORDER BY m.metric_key"))
+  if (!nrow(d)) return(empty)
+
+  d <- d[d$w_present > 0, , drop = FALSE]     # no covered cell -> no row, not a zero
+  if (!nrow(d)) return(empty)
+
+  tibble::tibble(
+    metric_key         = d$metric_key,
+    score              = if (blend) d$num_blend / d$w_all else d$num_present / d$w_present,
+    component          = .component_of(d$metric_key),
+    even               = 1,
+    coverage           = d$w_present / d$w_all,
+    mean_where_present = d$num_present / d$w_present) |>
+    dplyr::filter(.data$component != "all")
 }
 
 #' Resolve a release's column names for the cross-version queries
