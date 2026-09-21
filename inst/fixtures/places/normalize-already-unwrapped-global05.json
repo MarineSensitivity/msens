@@ -1,7 +1,7 @@
 {
-  "id": "antimeridian_global05",
+  "id": "normalize-already-unwrapped-global05",
   "source": "msens (hand-derived)",
-  "note": "a polygon across 180, written UNWRAPPED, folds onto both column ends of a wrapping grid",
+  "note": "a ring already unwrapped (179.9 ... 180.1) must pass through UNCHANGED",
   "grid_id": "global05",
   "grid": {
     "nc": 7200,
@@ -16,6 +16,33 @@
     }
   },
   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          179.9,
+          50
+        ],
+        [
+          180.1,
+          50
+        ],
+        [
+          180.1,
+          50.05
+        ],
+        [
+          179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50
+        ]
+      ]
+    ]
+  },
+  "unwrapped": {
     "type": "Polygon",
     "coordinates": [
       [
@@ -59,5 +86,6 @@
       5760000,
       100
     ]
-  ]
+  ],
+  "cells_if_read_literally": 4
 }

@@ -41,6 +41,10 @@ cell_id_raster <- function() {
 #' differed from the v8 path by a mean 0.66 pp on edge cells for no reason anyone
 #' could act on.
 #'
+#' Longitudes are **unwrapped on the way in** with [unwrap_polygon()], because an
+#' `sf` polygon is the one place a wrapped antimeridian ring can still arrive. The
+#' grid function it delegates to reads coordinates literally and guesses nothing.
+#'
 #' Passing a [`terra::SpatRaster`] directly still works and still uses
 #' `terra::extract()`: a cell-id COG is a lookup IMAGE whose pixel values are ids
 #' from a frame that may not be the grid's, so arithmetic cannot be applied to it.
@@ -120,7 +124,10 @@ cells_in_polygon <- function(poly, src, res = 0.05) {
 # fractions on one side only.
 .cells_in_polygon_db <- function(poly, con) {
   empty <- tibble::tibble(cell_id = integer(), pct_covered = numeric())
-  d <- cells_in_polygon_grid(poly, grid_for_con(con))
+  # unwrap HERE, at the sf boundary, and never inside coverage: an sf polygon is the
+  # one place a wrapped antimeridian ring can still arrive (a drawn place, an upload,
+  # a GeoPackage), and cells_in_polygon_grid() reads coordinates literally by design
+  d <- cells_in_polygon_grid(unwrap_polygon(poly), grid_for_con(con))
   if (!nrow(d)) return(empty)
   have <- DBI::dbGetQuery(con, sprintf(
     "SELECT cell_id FROM cell WHERE cell_id IN (%s)",

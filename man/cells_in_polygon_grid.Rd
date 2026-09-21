@@ -26,12 +26,20 @@ answer depends on nothing but the polygon and the six numbers in the grid
 registry -- which is what lets a browser reproduce it.
 }
 \details{
-\strong{Antimeridian.} Each ring is brought into the grid's own longitude frame and
-then unwrapped so no edge spans more than 180 degrees, which is the only way a
-polygon straddling 180 stays itself rather than becoming its complement. A grid
-that closes in longitude (\code{global05}: 7200 x 0.05 = 360) folds out-of-range
-columns back with a modulo; a windowed grid (\code{usa05}, 141.10 E to 296.25 E) drops
-them, because there is no cell there to fold onto.
+\strong{Coordinates are read LITERALLY} (master-plan D8 addendum, 2026-09-21). This
+function guesses nothing about the antimeridian: longitudes must arrive
+\strong{unwrapped}, so a Bering box is \verb{179.9 ... 180.1}, and a ring written wrapped
+(\code{179.9} then \code{-179.9}) means, read literally, the 359.8-degree complement --
+which is what it will return. Unwrapping is \code{\link[=unwrap_ring]{unwrap_ring()}}, one explicit rule
+with a TypeScript twin and its own \verb{normalize-*} fixtures, applied at the input
+boundary before coverage is ever computed.
+
+What the grid does do is arithmetic its own definition requires: on \code{global05}
+(7200 x 0.05 = 360, a grid that closes in longitude) an out-of-range column folds
+back modulo \code{nc}, so \code{180.1} lands in column 1; on \code{usa05} (a 155.15-degree window
+from 141.10 E) each vertex is shifted into that frame, because -90 simply IS 270
+there, and a column still outside \verb{1..nc} is DROPPED, since there is no cell to
+fold onto.
 
 \strong{This is the definition, not an approximation of one.} \code{\link[=cells_in_polygon]{cells_in_polygon()}}
 delegates to it for every database connection, so the drawn-polygon cell set, the

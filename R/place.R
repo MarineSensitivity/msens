@@ -37,24 +37,98 @@
 # must DROP it, or a polygon just west of 141.10 E would fold onto the US east coast.
 .grid_wraps <- function(grid) isTRUE(abs(grid$nc * grid$resx - 360) < 1e-9)
 
-# Put one ring's longitudes into the grid's own frame and keep every EDGE short.
-#
-# A polygon crossing the antimeridian arrives with vertices at 179 and -179. Read
-# planar, that edge runs 358 degrees the wrong way around the world and the polygon
-# becomes its own complement -- the classic silent antimeridian bug. The fix is
-# local, not global: normalise the FIRST vertex into [xmin, xmin+360), then walk the
-# ring adding or subtracting 360 whenever a step would exceed 180 degrees. The ring
-# may end up outside [xmin, xmin+360); that is intended, and the column arithmetic
-# below folds it back.
-.ring_unwrap <- function(m, xmin) {
-  lon <- xmin + ((m[, 1] - xmin) %% 360)
-  n   <- length(lon)
-  if (n > 1L) for (i in 2:n) {
-    d <- lon[i] - lon[i - 1L]
-    if (d >  180) lon[i] <- lon[i] - 360
-    if (d < -180) lon[i] <- lon[i] + 360
+#' Unwrap a ring's longitudes, so no edge spans more than 180 degrees
+#'
+#' A polygon crossing the antimeridian is usually *written* wrapped: `179.9` then
+#' `-179.9`. Read literally — which is what both coverage twins now do — that edge
+#' runs 359.8 degrees the WRONG way round the world, and the polygon is its own
+#' complement. Measured on `global05`: 7,196 cells instead of 4.
+#'
+#' The fix is one explicit rule, applied at the INPUT boundary and nowhere else.
+#' Walking the ring, whenever consecutive vertices differ by more than 180 degrees
+#' of longitude, carry -/+360 onward (the shortest-path convention). The first
+#' vertex is never moved, so the ring keeps whichever frame it arrived in; only the
+#' edges are made short. The result may leave `[-180, 180]` — that is the point, and
+#' it is what the `g1` codec stores and what [cells_in_polygon_grid()] expects.
+#'
+#' @section Where this runs:
+#' At every input boundary — an upload, a drawn place, [place_encode()], the
+#' `sf`-facing wrappers such as [cells_in_polygon()] — and **never inside coverage**.
+#' `cells_in_polygon_grid()` reads coordinates literally and guesses nothing; that is
+#' the whole reason this is a separate, exported, separately-fixtured function with a
+#' TypeScript twin (`unwrapRing()`), rather than a heuristic buried in the geometry.
+#'
+#' @section The limit:
+#' A ring that genuinely spans **more than 180 degrees** of longitude cannot be
+#' expressed wrapped: every one of its long edges is indistinguishable from a
+#' crossing, and the shortest-path convention will turn it inside out. Such a ring
+#' must arrive already unwrapped. This is a property of the wrapped representation,
+#' not of this implementation.
+#'
+#' @param ring a two-column matrix (or anything `as.matrix()` gives one from) with
+#'   longitude in column 1
+#' @return the same matrix with column 1 unwrapped
+#' @examples
+#' r <- cbind(c(179.9, -179.9, -179.9, 179.9, 179.9), c(50, 50, 50.05, 50.05, 50))
+#' unwrap_ring(r)[, 1]   # 179.9 180.1 180.1 179.9 179.9
+#' @export
+#' @concept app
+unwrap_ring <- function(ring) {
+  m <- as.matrix(ring)
+  lon <- as.numeric(m[, 1])
+  n <- length(lon)
+  if (n > 1L) {
+    carry <- 0
+    for (i in 2:n) {
+      d <- (lon[i] + carry) - lon[i - 1L]
+      if (d >  180) carry <- carry - 360
+      if (d < -180) carry <- carry + 360
+      lon[i] <- lon[i] + carry
+    }
   }
   m[, 1] <- lon
+  m
+}
+
+#' @rdname unwrap_ring
+#'
+#' @details
+#' `unwrap_polygon()` applies the rule to every ring of a POLYGON or MULTIPOLYGON,
+#' each ring independently: a hole is a closed ring of its own and carries its own
+#' crossings, and a multipolygon part on each side of the line must stay on its own
+#' side rather than being dragged across by its neighbour.
+#'
+#' @param x an `sf`, `sfc` or `sfg` POLYGON / MULTIPOLYGON
+#' @return for `unwrap_polygon()`, the same object with every ring unwrapped
+#' @export
+#' @concept app
+unwrap_polygon <- function(x) {
+  f <- function(g) .map_rings(g, unwrap_ring)
+  if (inherits(x, "sf"))  { sf::st_geometry(x) <- unwrap_polygon(sf::st_geometry(x)); return(x) }
+  if (inherits(x, "sfc")) {
+    out <- sf::st_sfc(lapply(x, f))
+    return(sf::st_set_crs(out, sf::st_crs(x)))
+  }
+  f(x)
+}
+
+# Put each vertex into the GRID'S OWN longitude frame -- per vertex, never looking
+# at its neighbours, so this is not an unwrap and cannot act as one by accident.
+#
+# `usa05` is defined from 141.10 E eastward, so a Gulf longitude of -90 IS 270 on
+# that grid; nothing can be computed until each coordinate is expressed in the frame
+# the cell ids are numbered in. `global05` is already [-180, 180) and is left ALONE:
+# there an unwrapped 180.1 must stay 180.1, and the COLUMN is wrapped modulo nc
+# instead (see below).
+#
+# One consequence worth stating: because usa05's frame is cut at 141.10 E rather
+# than at 180, a ring written WRAPPED across the antimeridian comes out contiguous
+# on usa05 anyway, while on global05 it comes out as the 359.8-degree complement.
+# That is not a hidden antimeridian rule -- it is where the two frames happen to be
+# cut -- and it is exactly why wrapped input is out of contract for coverage and
+# must go through unwrap_ring() first.
+.frame_ring <- function(m, grid) {
+  if (isTRUE(grid$lon360)) m[, 1] <- grid$xmin + ((m[, 1] - grid$xmin) %% 360)
   m
 }
 
@@ -98,12 +172,20 @@
 #' answer depends on nothing but the polygon and the six numbers in the grid
 #' registry -- which is what lets a browser reproduce it.
 #'
-#' **Antimeridian.** Each ring is brought into the grid's own longitude frame and
-#' then unwrapped so no edge spans more than 180 degrees, which is the only way a
-#' polygon straddling 180 stays itself rather than becoming its complement. A grid
-#' that closes in longitude (`global05`: 7200 x 0.05 = 360) folds out-of-range
-#' columns back with a modulo; a windowed grid (`usa05`, 141.10 E to 296.25 E) drops
-#' them, because there is no cell there to fold onto.
+#' **Coordinates are read LITERALLY** (master-plan D8 addendum, 2026-09-21). This
+#' function guesses nothing about the antimeridian: longitudes must arrive
+#' **unwrapped**, so a Bering box is `179.9 ... 180.1`, and a ring written wrapped
+#' (`179.9` then `-179.9`) means, read literally, the 359.8-degree complement --
+#' which is what it will return. Unwrapping is [unwrap_ring()], one explicit rule
+#' with a TypeScript twin and its own `normalize-*` fixtures, applied at the input
+#' boundary before coverage is ever computed.
+#'
+#' What the grid does do is arithmetic its own definition requires: on `global05`
+#' (7200 x 0.05 = 360, a grid that closes in longitude) an out-of-range column folds
+#' back modulo `nc`, so `180.1` lands in column 1; on `usa05` (a 155.15-degree window
+#' from 141.10 E) each vertex is shifted into that frame, because -90 simply IS 270
+#' there, and a column still outside `1..nc` is DROPPED, since there is no cell to
+#' fold onto.
 #'
 #' **This is the definition, not an approximation of one.** [cells_in_polygon()]
 #' delegates to it for every database connection, so the drawn-polygon cell set, the
@@ -152,7 +234,7 @@ cells_in_polygon_grid <- function(poly, grid) {
   g <- g[!sf::st_is_empty(g)]
   if (!length(g)) return(empty)
 
-  gu <- sf::st_sfc(.map_rings(g[[1]], function(m) .ring_unwrap(m, grid$xmin)))
+  gu <- sf::st_sfc(.map_rings(g[[1]], function(m) .frame_ring(m, grid)))
   bb <- sf::st_bbox(gu)
 
   nc <- grid$nc; nr <- grid$nr
@@ -295,6 +377,11 @@ place_fixture <- function(id) {
        rule     = x$rule %||% x$note,
        grid     = g,
        geometry = geojson_sfc(x$geometry %||% x$polygon),
+       # `normalize-*` fixtures carry the ring AS WRITTEN in `geometry` and what
+       # unwrap_ring() must make of it in `unwrapped`; `expected` is the coverage of
+       # the UNWRAPPED ring, so a loader must unwrap before it compares
+       unwrapped = if (!is.null(x$unwrapped)) geojson_sfc(x$unwrapped) else NULL,
+       cells_if_read_literally = x$cells_if_read_literally,
        expected = tibble::tibble(cell_id = as.integer(m[, 1]),
                                  pct     = as.numeric(m[, 2])))
 }

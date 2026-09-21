@@ -34,6 +34,10 @@ the 0-360 cell-id raster and returned \code{terra}'s coverage fractions, which
 differed from the v8 path by a mean 0.66 pp on edge cells for no reason anyone
 could act on.
 
+Longitudes are \strong{unwrapped on the way in} with \code{\link[=unwrap_polygon]{unwrap_polygon()}}, because an
+\code{sf} polygon is the one place a wrapped antimeridian ring can still arrive. The
+grid function it delegates to reads coordinates literally and guesses nothing.
+
 Passing a \code{\link[terra:SpatRaster]{terra::SpatRaster}} directly still works and still uses
 \code{terra::extract()}: a cell-id COG is a lookup IMAGE whose pixel values are ids
 from a frame that may not be the grid's, so arithmetic cannot be applied to it.

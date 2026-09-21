@@ -83,9 +83,22 @@ numbers for the same ground.
 
 * **`cells_in_polygon_grid(poly, grid)`** (new, `R/place.R`, `@concept place`) answers
   "which cells does this polygon cover" from the grid definition alone — no `cell`
-  table, no raster, no GDAL extension — planar in degrees, antimeridian-safe on both
-  grids, percent snapped to 9 decimals then rounded **half-to-even**, cells rounding
-  to 0 dropped, overlapping parts of one place counted once.
+  table, no raster, no GDAL extension — planar in degrees, percent snapped to 9
+  decimals then rounded **half-to-even**, cells rounding to 0 dropped, overlapping
+  parts of one place counted once.
+* **Coordinates are read LITERALLY** (master-plan D8 addendum, 2026-09-21, from a
+  measured R-vs-TypeScript disagreement). Coverage guesses nothing about the
+  antimeridian: a ring written wrapped (`179.9` then `-179.9`) means the 359.8-degree
+  complement and now returns it — 7,196 cells on `global05`, exactly what the
+  TypeScript twin returns, where the old buried heuristic quietly answered 4 and the
+  two languages disagreed by three orders of magnitude on the same file.
+* **`unwrap_ring()` / `unwrap_polygon()`** (new, exported, `@concept app`) are that
+  heuristic pulled out into ONE explicit rule with a TypeScript twin (`unwrapRing()`):
+  walking a ring, a step of more than 180 degrees of longitude carries -/+360 onward.
+  It runs at the input boundary — [cells_in_polygon()], `place_encode()`, uploads and
+  drawn places — and **never inside coverage**. The first vertex is never moved, each
+  ring is unwrapped independently, and the limit is documented: a ring that genuinely
+  spans more than 180 degrees cannot be expressed wrapped.
 * **`cells_in_polygon()` delegates to it for every connection.** The v1–v7 branch no
   longer opens `cell_id_raster()`, so the two generations stop disagreeing by ~0.66 pp
   on edge cells, and the result is still restricted to the ids the release holds.
@@ -95,9 +108,13 @@ numbers for the same ground.
   compiled 7200. No release ever wrote `cell_grid`, so the blind fallback was always
   taken: right for `global05` by coincidence, wrong for every `usa05` release, and
   silently so — a v7 cell with 477 models returned 0 species.
-* `inst/fixtures/places/*.json` carries 23 fixtures — polygon, grid spec and expected
-  `(cell_id, pct)` — **byte-identical with the atlas app's TypeScript twin**, which
-  reproduces all 23 exactly.
+* `inst/fixtures/places/*.json` carries 30 fixtures — polygon, grid spec and expected
+  `(cell_id, pct)` — shared byte-identically with the atlas app's TypeScript twin.
+  The coverage fixtures are written **unwrapped**; the seven new `normalize-*` files
+  are the shared vectors for the unwrap rule, each carrying the ring as written, the
+  ring `unwrap_ring()` must produce, the resulting cells, and
+  `cells_if_read_literally` — so what the rule is FOR is in the file rather than in a
+  commit message.
 * Fixed the `lon_span()` roxygen example, which claimed `170 205` where the code
   returns `170 200`.
 

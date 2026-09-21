@@ -11,7 +11,10 @@ test_that("every place fixture reproduces exactly, cell for cell", {
   expect_gt(length(fx_all), 0)
   for (id in fx_all) {
     fx <- place_fixture(id)
-    d  <- cells_in_polygon_grid(fx$geometry, fx$grid)
+    # a `normalize-*` fixture carries a WRAPPED ring on purpose: its `expected` is
+    # the coverage AFTER the unwrap rule, which runs at the input boundary
+    g  <- if (is.null(fx$unwrapped)) fx$geometry else unwrap_polygon(fx$geometry)
+    d  <- cells_in_polygon_grid(g, fx$grid)
     expect_identical(d$cell_id, fx$expected$cell_id,
                      info = paste(id, "-", fx$rule))
     expect_identical(as.numeric(d$pct_covered), fx$expected$pct,
@@ -173,4 +176,91 @@ test_that("a release with no in_usa column is its own study area", {
   DBI::dbWriteTable(con, "cell", data.frame(cell_id = 1:3, area_km2 = 1))
   d <- cells_in_study_area(con, tibble::tibble(cell_id = 1:3, pct_covered = 100))
   expect_equal(nrow(d), 3)
+})
+
+
+# The D8 addendum: coverage is literal, unwrapping is one explicit rule ---------
+
+test_that("REGRESSION: a WRAPPED ring read literally is the complement, not the box", {
+  # The ruling (master plan D8 addendum, 2026-09-21, from a measured R-vs-TypeScript
+  # disagreement): both coverage twins read coordinates literally and NEITHER guesses
+  # at the antimeridian. `179.9 -> -179.9` is a 359.8-degree edge the long way round,
+  # so it means the complement — 7,196 cells, which is exactly what the TypeScript
+  # twin returns. The old R heuristic quietly answered 4 and the two languages
+  # disagreed by three orders of magnitude on the same file.
+  r <- cbind(c(179.9, -179.9, -179.9, 179.9, 179.9), c(50, 50, 50.05, 50.05, 50))
+  p <- sf::st_sfc(sf::st_polygon(list(r)), crs = 4326)
+
+  expect_equal(nrow(cells_in_polygon_grid(p, "global05")), 7196)
+
+  # ...and through the rule it is the 4-cell box again
+  u <- cells_in_polygon_grid(unwrap_polygon(p), "global05")
+  expect_equal(nrow(u), 4)
+  expect_setequal(((u$cell_id - 1L) %% 7200L) + 1L, c(1L, 2L, 7199L, 7200L))
+  expect_true(all(u$pct_covered == 100))
+})
+
+test_that("unwrap_ring carries -/+360 onward and never moves the first vertex", {
+  ring <- function(lon) unname(cbind(lon, seq_along(lon)))
+  expect_equal(unwrap_ring(ring(c(179.9, -179.9, -179.9, 179.9)))[, 1],
+               c(179.9, 180.1, 180.1, 179.9))
+  # crossing twice: the carry must come BACK to zero, not accumulate
+  expect_equal(unwrap_ring(ring(c(178, -178, 178, -178)))[, 1],
+               c(178, 182, 178, 182))
+  # already unwrapped, and near zero: unchanged. The rule fires on a 180-degree
+  # step, not on a sign change.
+  expect_equal(unwrap_ring(ring(c(179.9, 180.1, 180.1)))[, 1], c(179.9, 180.1, 180.1))
+  expect_equal(unwrap_ring(ring(c(-0.1, 0.1, 0.1)))[, 1], c(-0.1, 0.1, 0.1))
+  # the first vertex keeps whatever frame it arrived in
+  expect_equal(unwrap_ring(ring(c(350, 10)))[, 1], c(350, 370))
+  expect_equal(unwrap_ring(ring(c(-10, 350)))[, 1], c(-10, -10))
+  # a single vertex, and an empty ring, are not special cases to crash on
+  expect_equal(unwrap_ring(ring(179.9))[, 1], 179.9)
+})
+
+test_that("every normalize-* fixture unwraps to its stored ring, vertex for vertex", {
+  norm <- grep("^normalize-", fx_all, value = TRUE)
+  expect_gte(length(norm), 6)
+  for (id in norm) {
+    fx <- place_fixture(id)
+    expect_false(is.null(fx$unwrapped), info = id)
+    got  <- sf::st_coordinates(unwrap_polygon(fx$geometry))[, c("X", "Y")]
+    want <- sf::st_coordinates(fx$unwrapped)[, c("X", "Y")]
+    expect_equal(unname(got), unname(want), info = paste(id, "-", fx$rule))
+    # and the fixture records what reading it literally would have given, so the
+    # difference the rule makes is in the file rather than in a commit message
+    lit <- nrow(cells_in_polygon_grid(fx$geometry, fx$grid))
+    expect_equal(lit, fx$cells_if_read_literally, info = id)
+  }
+})
+
+test_that("unwrap_polygon treats every ring independently", {
+  # a hole is a closed ring of its own; a multipolygon part on each side of the line
+  # must stay on its own side rather than being dragged across by its neighbour
+  fx <- place_fixture("normalize-hole-outer-crosses-global05")
+  u  <- sf::st_coordinates(unwrap_polygon(fx$geometry))
+  expect_true(all(u[u[, "L2"] == 1, "X"] >= 179.8))    # outer ring unwrapped
+  expect_true(all(u[u[, "L2"] == 2, "X"] >= 179.8))    # hole untouched, still 179.9x
+
+  mp <- place_fixture("normalize-multipolygon-split-global05")
+  v  <- sf::st_coordinates(unwrap_polygon(mp$geometry))
+  expect_true(any(v[, "X"] > 179) && any(v[, "X"] < -179))
+  expect_equal(nrow(cells_in_polygon_grid(unwrap_polygon(mp$geometry), mp$grid)), 2)
+})
+
+test_that("cells_in_polygon unwraps at the sf boundary, so a drawn place still works", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  want <- cells_in_polygon_grid(
+    sf::st_sfc(sf::st_polygon(list(cbind(
+      c(179.9, 180.1, 180.1, 179.9, 179.9), c(50, 50, 50.05, 50.05, 50)))), crs = 4326),
+    "global05")
+  DBI::dbWriteTable(con, "cell", data.frame(
+    cell_id = want$cell_id, lon = 0, lat = 0))
+
+  # the SAME place, drawn and therefore delivered WRAPPED
+  wrapped <- sf::st_sfc(sf::st_polygon(list(cbind(
+    c(179.9, -179.9, -179.9, 179.9, 179.9), c(50, 50, 50.05, 50.05, 50)))), crs = 4326)
+  d <- cells_in_polygon(wrapped, con)
+  expect_setequal(d$cell_id, want$cell_id)
+  expect_true(all(d$pct_covered == 100))
 })
