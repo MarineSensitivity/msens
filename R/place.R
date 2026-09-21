@@ -423,3 +423,373 @@ place_fixture_ids <- function() {
   if (!nzchar(d)) return(character())
   sort(sub("\\.json$", "", basename(list.files(d, pattern = "\\.json$"))))
 }
+
+# ---- the `g1` place codec ----------------------------------------------------
+#
+# A place lives in the URL hash, so a link reproduces its numbers. The spec and its
+# shared vectors belong to the TypeScript side (atlas `src/lib/geo/placeCodec.ts`);
+# `inst/fixtures/place_codec.json` is THE SAME FILE as the atlas repo's
+# `tests/fixtures/place_codec.json`, byte for byte, and R must decode every token to
+# the same integers, encode every vector to the same token, and reject the same 20.
+#
+# Everything below is base R. The varint work is done in DOUBLES, deliberately: a
+# delta at precision 4 near 180 degrees is 1.8e6, and zigzag doubles it, so an
+# implementation reaching for bitwAnd()/bitwShiftR() (integer, 32-bit, signed) would
+# be fine on every test vector and wrong on a real Pacific place.
+
+.G1_MAGIC     <- 0x10
+.G1_B64URL    <- c(LETTERS, letters, as.character(0:9), "-", "_")   # RFC 4648 sec. 5
+.G1_ZONE_SETS <- c("pa", "pl", "er", "sr")
+
+# one place to raise a rejection, so every caller reports the same `code`
+.g1_reject <- function(code, msg)
+  stop(errorCondition(sprintf("place token rejected [%s]: %s", code, msg),
+                      class = c("msens_place_reject", "error"), code = code))
+
+#' Base64url, RFC 4648 section 5, no padding
+#'
+#' Not `base64enc`: that emits the standard `+/` alphabet with `=` padding, and the
+#' three-character fixup afterwards is exactly the kind of step that silently
+#' survives a round trip in one language and not the other. The alphabet is checked
+#' on the way in, so `+`, `/` and `=` are a named rejection rather than a stray byte.
+#'
+#' @param raw a raw vector
+#' @param s a base64url string
+#' @return the encoded string / the decoded raw vector
+#' @examples
+#' b64url_encode(as.raw(c(0x10, 0x03)))
+#' b64url_decode("EAM")
+#' @export
+#' @concept app
+b64url_encode <- function(raw) {
+  n <- length(raw)
+  if (!n) return("")
+  pad <- (3L - n %% 3L) %% 3L
+  v <- c(as.integer(raw), rep(0L, pad))
+  i <- seq.int(1L, length(v), by = 3L)
+  b <- v[i] * 65536L + v[i + 1L] * 256L + v[i + 2L]
+  idx <- rbind(b %/% 262144L, (b %/% 4096L) %% 64L, (b %/% 64L) %% 64L, b %% 64L)
+  out <- .G1_B64URL[as.vector(idx) + 1L]
+  paste(out[seq_len(length(out) - pad)], collapse = "")
+}
+
+#' @rdname b64url_encode
+#' @export
+#' @concept app
+b64url_decode <- function(s) {
+  if (!nzchar(s)) return(raw())
+  ch <- strsplit(s, "", fixed = TRUE)[[1]]
+  k  <- match(ch, .G1_B64URL)
+  if (anyNA(k))
+    .g1_reject("b64", sprintf("base64url has no %s (alphabet is A-Za-z0-9-_, no padding)",
+                              paste(unique(ch[is.na(k)]), collapse = " ")))
+  k <- k - 1L
+  n <- length(k)
+  # 4k+1 characters cannot be any whole number of bytes
+  if (n %% 4L == 1L) .g1_reject("b64", "payload length is not a base64url length")
+  pad <- (4L - n %% 4L) %% 4L
+  k <- c(k, rep(0L, pad))
+  i <- seq.int(1L, length(k), by = 4L)
+  b <- k[i] * 262144L + k[i + 1L] * 4096L + k[i + 2L] * 64L + k[i + 3L]
+  by <- as.vector(rbind(b %/% 65536L, (b %/% 256L) %% 256L, b %% 256L))
+  as.raw(by[seq_len(length(k) %/% 4L * 3L - pad)])
+}
+
+# LEB128, 7 bits per byte, low group first, high bit = continue. Doubles throughout.
+.g1_varint <- function(n) {
+  out <- integer(0)
+  repeat {
+    b <- n %% 128
+    n <- (n - b) / 128
+    out <- c(out, if (n > 0) b + 128 else b)
+    if (n <= 0) break
+  }
+  out
+}
+
+# zigzag: n >= 0 ? 2n : -2n - 1   (so -1 -> 1, 1 -> 2, -2 -> 3)
+.g1_zigzag   <- function(n) if (n >= 0) 2 * n else -2 * n - 1
+.g1_unzigzag <- function(u) if (u %% 2 == 0) u / 2 else -(u + 1) / 2
+
+# a cursor over the byte vector, so "ran off the end" is one check in one place
+.g1_reader <- function(v) {
+  pos <- 1L
+  list(
+    left  = function() length(v) - pos + 1L,
+    byte  = function() {
+      if (pos > length(v)) .g1_reject("truncated", "the byte stream ends mid-value")
+      b <- v[pos]; pos <<- pos + 1L; b
+    },
+    varint = function() {
+      n <- 0; shift <- 1
+      repeat {
+        if (pos > length(v))
+          .g1_reject("truncated", "a varint runs past the end of the payload")
+        b <- v[pos]; pos <<- pos + 1L
+        n <- n + (b %% 128) * shift
+        if (b < 128) break
+        shift <- shift * 128
+        if (shift > 2^56) .g1_reject("truncated", "a varint that never terminates")
+      }
+      n
+    })
+}
+
+# percent-encode a name or zone key over the unreserved set A-Za-z0-9_- .
+# NOT utils::URLencode: it leaves `.` and `~` alone (they are RFC 3986 unreserved),
+# and both are structural in this grammar -- a name containing a dot would split the
+# token into four parts and a name containing a tilde would start a second place.
+.g1_pct_encode <- function(s) {
+  if (is.null(s) || !length(s) || !nzchar(s)) return("")
+  b  <- as.integer(charToRaw(enc2utf8(s)))
+  ok <- (b >= 48L & b <= 57L) | (b >= 65L & b <= 90L) |
+        (b >= 97L & b <= 122L) | b == 95L | b == 45L
+  paste0(ifelse(ok, vapply(b, function(x) rawToChar(as.raw(x)), ""),
+                sprintf("%%%02X", b)), collapse = "")
+}
+
+.g1_pct_decode <- function(s) {
+  if (!nzchar(s)) return("")
+  ch <- strsplit(s, "", fixed = TRUE)[[1]]
+  out <- raw(0); i <- 1L
+  while (i <= length(ch)) {
+    if (ch[i] == "%") {
+      if (i + 2L > length(ch)) .g1_reject("name", "a %-escape is cut short")
+      hx <- paste0(ch[i + 1L], ch[i + 2L])
+      if (!grepl("^[0-9A-Fa-f]{2}$", hx))
+        .g1_reject("name", sprintf("'%%%s' is not a %%XX escape", hx))
+      out <- c(out, as.raw(strtoi(hx, 16L))); i <- i + 3L
+    } else {
+      out <- c(out, charToRaw(ch[i])); i <- i + 1L
+    }
+  }
+  x <- rawToChar(out); Encoding(x) <- "UTF-8"; x
+}
+
+# the precision rule: 3 by default, 4 when the place is small enough that 0.001 deg
+# (about 110 m) would visibly move its edges
+.g1_precision <- function(bb)
+  if (max(bb[["xmax"]] - bb[["xmin"]], bb[["ymax"]] - bb[["ymin"]]) < 0.5) 4L else 3L
+
+#' Encode places into a URL hash, and decode them back (`g1`)
+#'
+#' A link is an analysis input: master-plan D8 puts places in the hash with a
+#' versioned binary codec, and **every analysis runs on the decoded geometry**, so a
+#' link reproduces its numbers rather than approximating them. R needs to read those
+#' links, which is why this is the twin of the app's `placeCodec.ts` rather than a
+#' second design.
+#'
+#' @section The format:
+#' `#pl = place ("~" place)*`, each place one of
+#' \describe{
+#'   \item{`g1.name.b64url(bytes)`}{a drawn or uploaded geometry}
+#'   \item{`z.set.key,key`}{zone keys, `set` in `pa|pl|er|sr` — the vintage comes
+#'     from the RELEASE, never from the token}
+#'   \item{`u.name.sha256_8`}{an upload too large to carry, naming what to re-upload}
+#' }
+#' `name` is percent-encoded UTF-8 over `A-Za-z0-9_-` (so `.`, `~`, `,` and `%`, all
+#' structural here, cannot survive raw), at most 60 encoded characters.
+#'
+#' The bytes are `0x10`, `precision:u8`, `npoly:varint`, then per polygon
+#' `nring:varint` and per ring `npt:varint` followed by its vertices as
+#' zigzag-varint `dlon`, `dlat` in units of `10^-precision`. The closing vertex is
+#' omitted. **The delta cursor starts at (0,0) and runs ACROSS rings and polygons** —
+#' resetting it per ring is a bug that still decodes, into a different place.
+#' Longitudes are stored **unwrapped** (a Bering polygon runs 170..190), so a decoder
+#' needs no antimeridian guess; [unwrap_ring()] is what puts them that way, and
+#' `place_encode()` applies it.
+#'
+#' @section Precision:
+#' 3 by default, 4 when the bounding box is under 0.5 degrees, so the deviation is at
+#' most `0.5 * 10^-precision` — about 55 m at precision 3 and 5.5 m at precision 4.
+#'
+#' @param x a place, or a list of places. A place is a list with `kind`:
+#'   `"geom"` (`name`, `geometry`, optional `precision`), `"zone"` (`set`, `keys`) or
+#'   `"upload"` (`name`, `digest`).
+#' @param hash the hash value, with or without a leading `#`
+#' @return `place_encode()` a hash string; `place_decode()` a list of places, each
+#'   with `kind` and, for `"geom"`, `geometry` as an `sfc` plus `precision`
+#' @examples
+#' p <- list(kind = "geom", name = "Gulf box", geometry = sf::st_sfc(sf::st_polygon(
+#'   list(cbind(c(-90, -89, -89, -90, -90), c(27.5, 27.5, 28.5, 28.5, 27.5)))),
+#'   crs = 4326))
+#' (h <- place_encode(p))
+#' place_decode(h)[[1]]$name
+#' @export
+#' @concept app
+place_encode <- function(x) {
+  places <- if (!is.null(x$kind)) list(x) else x
+  paste(vapply(places, .g1_encode_one, ""), collapse = "~")
+}
+
+.g1_encode_one <- function(p) {
+  kind <- p$kind %||% "geom"
+  if (identical(kind, "zone")) {
+    if (!p$set %in% .G1_ZONE_SETS)
+      .g1_reject("set", sprintf("zone set '%s' is not one of %s", p$set,
+                                paste(.G1_ZONE_SETS, collapse = "|")))
+    if (!length(p$keys)) .g1_reject("empty", "a zone place with no keys")
+    return(paste0("z.", p$set, ".",
+                  paste(vapply(p$keys, .g1_pct_encode, ""), collapse = ",")))
+  }
+  if (identical(kind, "upload")) {
+    if (!grepl("^[0-9a-f]{8}$", p$digest))
+      .g1_reject("digest", "sha256_8 is exactly 8 lowercase hex characters")
+    return(paste0("u.", .g1_pct_encode(p$name), ".", p$digest))
+  }
+
+  g <- sf::st_geometry(p$geometry)
+  if (!is.na(sf::st_crs(g)) && sf::st_crs(g) != sf::st_crs(4326))
+    g <- sf::st_transform(g, 4326)
+  g <- unwrap_polygon(g)                       # the codec only ever sees unwrapped rings
+  sfg <- g[[1]]
+  polys <- if (inherits(sfg, "MULTIPOLYGON")) unclass(sfg) else list(unclass(sfg))
+
+  bb   <- sf::st_bbox(g)
+  prec <- as.integer(p$precision %||% .g1_precision(bb))
+  if (prec < 1L || prec > 9L)
+    .g1_reject("precision", sprintf("precision %d is out of range 1-9", prec))
+  mul <- 10^prec
+
+  out <- c(.G1_MAGIC, prec, .g1_varint(length(polys)))
+  cx <- 0; cy <- 0                             # the cursor RUNS ON across everything
+  for (poly in polys) {
+    out <- c(out, .g1_varint(length(poly)))
+    for (ring in poly) {
+      m <- as.matrix(ring)
+      # the closing vertex is omitted; it is restored on decode
+      n <- nrow(m)
+      if (n > 1L && isTRUE(all.equal(unname(m[1, ]), unname(m[n, ])))) m <- m[-n, , drop = FALSE]
+      if (nrow(m) < 3L) .g1_reject("degenerate", "a ring with fewer than 3 vertices")
+      out <- c(out, .g1_varint(nrow(m)))
+      qx <- round(m[, 1] * mul); qy <- round(m[, 2] * mul)
+      for (i in seq_len(nrow(m))) {
+        out <- c(out, .g1_varint(.g1_zigzag(qx[i] - cx)),
+                      .g1_varint(.g1_zigzag(qy[i] - cy)))
+        cx <- qx[i]; cy <- qy[i]
+      }
+    }
+  }
+  nm <- .g1_pct_encode(p$name)
+  if (nchar(nm) > 60L) .g1_reject("name", "name over 60 characters once encoded")
+  paste0("g1.", nm, ".", b64url_encode(as.raw(out)))
+}
+
+#' @rdname place_encode
+#' @export
+#' @concept app
+place_decode <- function(hash) {
+  if (is.null(hash) || !length(hash)) .g1_reject("empty", "empty token")
+  h <- sub("^#", "", hash)
+  if (!nzchar(h)) .g1_reject("empty", "empty token")
+  lapply(strsplit(h, "~", fixed = TRUE)[[1]], .g1_decode_one)
+}
+
+.g1_decode_one <- function(tok) {
+  if (!nzchar(tok)) .g1_reject("empty", "empty token")
+  parts <- strsplit(tok, ".", fixed = TRUE)[[1]]
+  # strsplit drops a trailing empty field, so "g1.name." comes back as 2 parts
+  if (grepl("\\.$", tok)) parts <- c(parts, "")
+  scheme <- parts[1]
+
+  if (identical(scheme, "z")) {
+    if (length(parts) != 3L) .g1_reject("shape", "a zone token is z.set.keys")
+    if (!parts[2] %in% .G1_ZONE_SETS)
+      .g1_reject("set", sprintf("unknown zone set '%s' (expected %s)", parts[2],
+                                paste(.G1_ZONE_SETS, collapse = "|")))
+    if (!nzchar(parts[3])) .g1_reject("empty", "no zone keys")
+    return(list(kind = "zone", set = parts[2],
+                keys = vapply(strsplit(parts[3], ",", fixed = TRUE)[[1]],
+                              .g1_pct_decode, "", USE.NAMES = FALSE)))
+  }
+  if (identical(scheme, "u")) {
+    if (length(parts) != 3L) .g1_reject("shape", "an upload token is u.name.digest")
+    if (!grepl("^[0-9a-f]{8}$", parts[3]))
+      .g1_reject("digest", "sha256_8 is exactly 8 lowercase hex characters")
+    return(list(kind = "upload", name = .g1_pct_decode(parts[2]), digest = parts[3]))
+  }
+  if (!identical(scheme, "g1"))
+    .g1_reject("scheme", sprintf("unknown codec prefix '%s' (this build speaks g1)", scheme))
+  if (length(parts) < 3L)
+    .g1_reject("shape", "a geometry token is g1.name.payload")
+  if (length(parts) > 3L)
+    .g1_reject("shape", "too many parts: a literal dot inside a name must be %2E")
+  if (!nzchar(parts[3])) .g1_reject("empty", "empty payload")
+  if (nchar(parts[2]) > 60L) .g1_reject("name", "name over 60 characters")
+
+  v <- as.integer(b64url_decode(parts[3]))
+  r <- .g1_reader(v)
+  if (r$byte() != .G1_MAGIC)
+    .g1_reject("magic", sprintf("wrong magic byte (expected 0x%02X)", .G1_MAGIC))
+  prec <- r$byte()
+  if (prec < 1L || prec > 9L)
+    .g1_reject("precision", sprintf("precision %d is out of range 1-9", prec))
+  mul <- 10^prec
+
+  npoly <- r$varint()
+  if (npoly < 1) .g1_reject("empty", "npoly = 0")
+  cx <- 0; cy <- 0
+  polys <- vector("list", npoly)
+  for (ip in seq_len(npoly)) {
+    nring <- r$varint()
+    if (nring < 1) .g1_reject("empty", "a polygon with no rings")
+    rings <- vector("list", nring)
+    for (ir in seq_len(nring)) {
+      npt <- r$varint()
+      if (npt < 3) .g1_reject("degenerate", "a ring with fewer than 3 vertices")
+      xy <- matrix(NA_real_, npt, 2L)
+      for (i in seq_len(npt)) {
+        cx <- cx + .g1_unzigzag(r$varint())
+        cy <- cy + .g1_unzigzag(r$varint())
+        xy[i, ] <- c(cx / mul, cy / mul)
+      }
+      rings[[ir]] <- rbind(xy, xy[1, , drop = FALSE])   # restore the closing vertex
+    }
+    polys[[ip]] <- rings
+  }
+  if (r$left() > 0L)
+    .g1_reject("trailing", sprintf("%d byte(s) after the last vertex", r$left()))
+
+  g <- if (npoly == 1L) sf::st_polygon(polys[[1]]) else sf::st_multipolygon(polys)
+  list(kind = "geom", name = .g1_pct_decode(parts[2]), precision = as.integer(prec),
+       geometry = sf::st_sfc(g, crs = 4326))
+}
+
+#' An `sfc` as parsed GeoJSON coordinate arrays
+#'
+#' The twin of [geojson_sfc()], so a place can be compared with the shared fixtures
+#' in the shape they store rather than through a library that might normalise ring
+#' order or precision on the way.
+#'
+#' @param s an `sfc` holding one POLYGON or MULTIPOLYGON
+#' @param digits decimal places to round coordinates to, or `NA` for none
+#' @return a list with `type` and `coordinates`
+#' @export
+#' @concept app
+sfc_geojson <- function(s, digits = NA) {
+  rnd <- function(m) lapply(seq_len(nrow(m)), function(i) {
+    v <- unname(m[i, 1:2])
+    as.list(if (is.na(digits)) v else round(v, digits))
+  })
+  g <- if (inherits(s, "sfc")) s[[1]] else s
+  if (inherits(g, "MULTIPOLYGON"))
+    list(type = "MultiPolygon",
+         coordinates = lapply(unclass(g), function(p) lapply(p, rnd)))
+  else
+    list(type = "Polygon", coordinates = lapply(unclass(g), rnd))
+}
+
+#' The shared `g1` codec vectors
+#'
+#' `inst/fixtures/place_codec.json` is THE SAME FILE as the atlas repo's
+#' `tests/fixtures/place_codec.json`, byte for byte: the TypeScript side owns the
+#' spec and R must reproduce it, never negotiate with it.
+#'
+#' @return the parsed fixture
+#' @export
+#' @concept app
+place_codec_fixture <- function() {
+  p <- system.file("fixtures", "place_codec.json", package = "msens")
+  if (!nzchar(p)) stop("place_codec.json is not installed", call. = FALSE)
+  jsonlite::fromJSON(p, simplifyVector = FALSE)
+}

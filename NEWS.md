@@ -66,6 +66,34 @@ numbers for the same ground.
   hardcoding `value` — which made both work on every served release and fail on a
   v8/v9 source database.
 
+## The `g1` place codec (D8)
+
+* **`place_encode()` / `place_decode()`** (new, `R/place.R`, `@concept app`) — the R
+  twin of the app's URL place codec. A link is an analysis input, so R must be able
+  to read one: `#pl = place ("~" place)*`, each place `g1.name.b64url(bytes)`,
+  `z.set.key,key` or `u.name.sha256_8`. The TypeScript side owns the spec;
+  `inst/fixtures/place_codec.json` is **the same file** as the atlas repo's
+  `tests/fixtures/place_codec.json`, byte for byte, and R reproduces all 8 geometry
+  vectors, both zone forms, the upload form and the `~`-joined hash exactly, and
+  rejects the same **20** malformed tokens, each with the shared `code`
+  (`b64 degenerate digest empty magic name precision scheme set shape trailing
+  truncated`) on a `msens_place_reject` condition.
+* **`b64url_encode()` / `b64url_decode()`** (new, exported) — RFC 4648 section 5, no
+  padding, alphabet checked on the way in, so `+`, `/` and `=` are a named rejection
+  rather than a stray byte. Base R, not `base64enc`: the three-character fixup after
+  standard base64 is exactly the step that survives a round trip in one language and
+  not the other.
+* The varint and zigzag work is done in **doubles**. A delta at precision 4 near 180
+  degrees is 1.8e6 and zigzag doubles it, so `bitwAnd()` / `bitwShiftR()` (32-bit,
+  signed) would be right on every test vector and wrong on a real Pacific place.
+* **`sfc_geojson()`** (new, exported) is the twin of `geojson_sfc()`, so a place can
+  be compared with the shared fixtures in the shape they store.
+* Precision is chosen, not passed: 3, or 4 when the bounding box is under 0.5
+  degrees, so the deviation is at most `0.5 * 10^-precision`. The delta cursor starts
+  at (0,0) and **runs across rings and polygons** — resetting it per ring still
+  decodes, into a different place. Longitudes are stored **unwrapped**, and
+  `place_encode()` applies [unwrap_ring()] so the codec only ever sees them that way.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
