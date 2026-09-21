@@ -16,6 +16,20 @@
   multiplied value, so a CH cell whose suitability was thresholded away — or that never had one —
   survives at its designation's value under `fill = NA`. New fixtures in `test-merge.R` assert this
   (and half-even's 26.5 → 26) as permanent regressions.
+* **`coverage_sql(zone_tbl, metric_keys, weight, val_col)`** — SQL for `(zone_seq, metric_key,
+  coverage)`: the share of a zone covered by cells that actually carry a component metric
+  (`coverage.R`, v1–v7 scoring schema). `weight = "pct_covered"` reproduces v7's `pct_area`
+  exactly — verified against all 151 published Program Area × component pairs of
+  `tbl_component_pct_programarea_v7.csv`, max difference 0; `weight = "area"` weights each cell by
+  its **in-zone** area (`cell.area_km2 × pct_covered / 100`), which is what v10 wants. A zone with
+  no scored cell yields **no row**, never a zero, so the composite excludes it rather than being
+  dragged down by it. `val_col` names the measurement column of `cell_metric` (default `"value"`;
+  pass `sdm_val_col(con, "cell_metric")`).
+* **`coverage_floor(d, kappa = 0.05)`** — adds `reportable = coverage >= kappa` to that result: the
+  v7.1 reporting floor, below which a component is not published for a Program Area. The boundary
+  is inclusive and compared with a tolerance, so 5 of 100 equally weighted cells is reportable.
+  On v7 the floor removes exactly one of 151 pairs (GEO turtles, 1.5 %; next is High Arctic corals
+  at 7.3 %).
 
 # msens 0.41.0
 
