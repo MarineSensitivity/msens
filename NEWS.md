@@ -127,6 +127,44 @@ numbers for the same ground.
   locally and also asserts, cheaply and everywhere, that no backquote survives into
   NAMESPACE.
 
+## Fixed: what the first queries against REAL v7 and v9 found
+
+* **`app_cell_tiles()` wrote one part PER THREAD.** `cell/tile=1014/` held
+  `data_0..data_5.parquet` — 422 tile directories but 1,687 files on v9, 290 of them
+  multi-part. Anonymous LIST is denied on the bucket, so a static client can only
+  construct `data_0.parquet` and would have read about a sixth of a busy tile,
+  silently. Both gates globbed `**/*.parquet` and saw nothing wrong. Now exactly one
+  `data_0.parquet` per tile (written per tile from one materialised pivot, so the
+  surface is still read once), **`app_one_file_per_partition()`** asserts it on every
+  build, `tiles` counts tiles rather than files, and the tile-width and digest gates
+  **read the way the browser does** — `tile={t}/data_0.parquet`, never a glob — so a
+  split tile fails the digest gate too.
+* **A NA key injected all-NA edge rows.** v7 has taxa with no merged model, so
+  `CAST(mdl_seq AS VARCHAR)` is NA and `d[d$mdl_key != d$key, ]` *injects* a row
+  instead of dropping it: 2,354 of 14,501 edges, which `card()` then matched into
+  **every** taxon (38 M phantom inputs; the shard step died there). Every logical
+  subset in `app_bundle.R` now guards with `!is.na()` and `which()`.
+* **`taxon_id` was published as `"22725044.0"`** on all 16,153 v7 rows: the column is
+  a DOUBLE there and `CAST(… AS VARCHAR)` keeps the decimal point, so every WoRMS
+  link 404s and a join against any integer-typed id matches nothing. Ids now cast
+  through `HUGEINT` when the source is DOUBLE/DECIMAL.
+* The synthetic legacy fixtures now type `taxon.taxon_id` as **DOUBLE** and include a
+  taxon with **`mdl_seq IS NULL` that still has `taxon_model` rows** — v7's real
+  shape, and the reason 2,392 green tests missed both defects.
+* **`inst/gates/app_bundle_smoke.R`** (new) builds the whole bundle from a local
+  release and runs every gate: exit 0 / 1 / 77.
+* `boot.json` gains **`id_field`** — the one generation fact the browser is allowed
+  to need (the `cell_model` join) — and its `methods` rows now say **`val`**, not
+  `value`, which no published object may contain.
+* `app_bundle_build()` gains **per-stage isolation**: a failing stage names itself
+  and the completed stages' outputs survive, so nobody needs a parallel composition
+  to get at the parts. `strict = FALSE` runs them all and reports `$failed`.
+* The Program-Area tracing gate's assertion (c) is **release-aware**: the GAA outline
+  is a v9 artifact (v7's vintage has 14,256 zone cells for GAA, v9's 14,238), so it
+  runs only when the release's `zone.tbl` matches and skips with the reason
+  otherwise. (d)'s floor is now recorded **per release** (v9: 49.1447 over 12 of 20;
+  v7: 58.9533 over 4 of 20) rather than v9's number applied to everything.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,

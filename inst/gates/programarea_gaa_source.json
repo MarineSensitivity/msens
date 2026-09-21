@@ -1,0 +1,12 @@
+{
+  "note": "Provenance for inst/fixtures/places/programarea_gaa.json. That file is SHARED with the atlas repo and sha256-pinned there, so its bytes must not change; this sidecar lives in inst/gates/ instead and records which release's Program-Area vintage the outline was traced from.",
+  "fixture": "programarea_gaa.json",
+  "zone_key": "GAA",
+  "zone_fld": "programarea_key",
+  "source_ver": "v9",
+  "source_zone_tbl": "ply_programareas_2026_v9",
+  "source_zone_set_key": "programarea_2026-01",
+  "source_geometry": "~/_big/msens/derived/v8/ply_programareas_2026_v8.gpkg (the 2026-01 vintage, which v9 also uses)",
+  "expected_cells": 14238,
+  "why": "The vintage is not incidental. v7's Program-Area layer (ply_programareas_2026_v7) has 14,256 zone_cell rows for GAA and v9's has 14,238, so asserting this fixture's cell count against v7 is wrong BY CONSTRUCTION, not by a bug in either. The tracing gate compares the loaded release's zone.tbl with source_zone_tbl and SKIPS assertion (c) with a reason when they differ."
+}

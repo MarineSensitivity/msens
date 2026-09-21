@@ -360,6 +360,51 @@ test_that("the wide cell tiles carry one column per scored metric, named by key"
   })
 })
 
+test_that("GATE: exactly ONE data_0.parquet per tile, and `tiles` counts tiles", {
+  # Anonymous LIST is denied on the bucket, so a static client cannot discover
+  # parts: it constructs `tile={t}/data_0.parquet` and reads whatever is there.
+  # DuckDB's PARTITION_BY wrote one part PER THREAD -- measured on v9: 422 tile
+  # directories, 1,687 files, 290 of them multi-part -- so the browser would have
+  # read about a sixth of a busy tile and been told nothing.
+  for (gen in gens) with_synth(gen, function(con) {
+    d <- withr::local_tempdir()
+    t <- app_cell_tiles(con, file.path(d, "cell"))
+    dirs <- list.dirs(file.path(d, "cell"), recursive = FALSE)
+    expect_equal(t$tiles, length(dirs), info = gen)      # tiles, not files
+    expect_equal(t$files, length(dirs), info = gen)
+    for (p in dirs)
+      expect_identical(list.files(p, "[.]parquet$"), "data_0.parquet", info = p)
+    expect_equal(app_one_file_per_partition(file.path(d, "cell")), length(dirs))
+  })
+})
+
+test_that("SEEDED: a tile split into two parts turns BOTH gates red", {
+  with_synth("v9", function(con) {
+    d  <- withr::local_tempdir()
+    cd <- file.path(d, "cell")
+    t  <- app_cell_tiles(con, cd)
+    expect_true(all(app_cell_tile_digests(con, cd)$ok))       # green first
+
+    # split one tile exactly as PARTITION_BY did: data_0 keeps half the rows
+    td  <- file.path(cd, list.files(cd)[1])
+    src <- file.path(td, "data_0.parquet")
+    cp <- function(sel, out) DBI::dbExecute(con, sprintf(
+      "COPY (SELECT * FROM read_parquet('%s') WHERE %s) TO '%s' (FORMAT parquet)",
+      src, sel, out))
+    cp("cell_id % 2 = 0", file.path(td, "part.parquet"))
+    cp("cell_id % 2 = 1", file.path(td, "data_1.parquet"))
+    file.remove(src); file.rename(file.path(td, "part.parquet"), src)
+
+    expect_error(app_one_file_per_partition(cd), "do not hold exactly one")
+    # the DIGEST gate must fail too: it now reads the way the client does, so the
+    # rows in data_1 are simply missing. Globbing `**/*.parquet` saw all of them.
+    expect_false(all(app_cell_tile_digests(con, cd)$ok))
+    # ...and the tile-WIDTH check still passes, because the ids are all valid --
+    # which is why the two gates are separate rather than one
+    expect_true(app_cell_tile_check(cd, t$ncol))
+  })
+})
+
 test_that("GATE: per metric, the tiles' multiset digest equals cell_metric's", {
   for (gen in gens) with_synth(gen, function(con) {
     d <- withr::local_tempdir()
@@ -576,4 +621,70 @@ test_that("an old manifest with neither key still validates", {
                   built_at = "2026-09-21T00:00:00Z",
                   capabilities = list(cell = TRUE))          # four keys missing
   expect_error(validate_manifest(bad, ver = "v3"))
+})
+
+# ---- what the real releases found, that the synthetic ones had not ------------
+
+test_that("REGRESSION: taxon_id never carries a trailing .0, on any generation", {
+  # v7 stores taxon.taxon_id as a DOUBLE, and DuckDB's CAST(22725044.0 AS VARCHAR)
+  # is the string "22725044.0" -- so the published contract carried it on all
+  # 16,153 v7 rows, every WoRMS link built from it 404s, and a join against another
+  # release's integer-typed id matches nothing. The synthetic fixtures typed the
+  # column as VARCHAR and could not see it.
+  for (gen in gens) with_synth(gen, function(con) {
+    d <- app_taxon_table(con)
+    expect_true(all(is.na(d$taxon_id) | grepl("^[0-9]+$", d$taxon_id)),
+                info = paste(gen, paste(d$taxon_id, collapse = ",")))
+    expect_false(any(grepl("[.]", d$taxon_id, fixed = FALSE) & !is.na(d$taxon_id)),
+                 info = gen)
+  })
+  # ...and the legacy fixtures really do store it as a DOUBLE, or this proves nothing
+  with_synth("v7", function(con) {
+    ty <- DBI::dbGetQuery(con,
+      "SELECT column_type FROM (DESCRIBE SELECT * FROM taxon) WHERE column_name = 'taxon_id'")[[1]]
+    expect_identical(ty, "DOUBLE")
+  })
+})
+
+test_that("REGRESSION: a NA key never injects an all-NA edge row", {
+  # v7's real shape: a taxon with NO merged model (mdl_seq IS NULL) that still has
+  # taxon_model rows. `CAST(NULL AS VARCHAR)` is NA, so `d$mdl_key != d$key` is NA,
+  # and `d[NA, ]` INJECTS an all-NA row rather than dropping it: 2,354 of 14,501
+  # edges on the real release. card()'s own `e[e$key == key, ]` then matched every
+  # one of them into EVERY taxon -- 38 M phantom inputs, and the shard step died.
+  for (gen in c("v9", "v7", "v7b")) with_synth(gen, function(con) {
+    e <- .app_edges(con)
+    expect_equal(sum(!stats::complete.cases(e)), 0L, info = gen)
+    expect_false(any(is.na(e$key)), info = gen)
+
+    # the bare logical subset on the SAME data would have injected one
+    k <- .app_taxon_cols(con)
+    raw <- if ("ms_merge_key" %in% DBI::dbListFields(con, "taxon_model"))
+      DBI::dbGetQuery(con, "SELECT CAST(ms_merge_key AS VARCHAR) AS key,
+             CAST(mdl_key AS VARCHAR) AS mdl_key, ds_key FROM taxon_model")
+    else
+      DBI::dbGetQuery(con, sprintf(
+        "SELECT CAST(t.%s AS VARCHAR) AS key, CAST(tm.mdl_seq AS VARCHAR) AS mdl_key,
+                tm.ds_key FROM taxon_model tm JOIN taxon t
+           ON CAST(t.taxon_id AS HUGEINT) = CAST(tm.taxon_id AS HUGEINT)", k$key))
+    naive <- raw[raw$ds_key != "ms_merge" & raw$mdl_key != raw$key, , drop = FALSE]
+    expect_equal(nrow(naive) - nrow(e), 1L, info = gen)
+    expect_equal(sum(!stats::complete.cases(naive)), 1L, info = gen)
+  })
+})
+
+test_that("REGRESSION: a taxon with no merged model gets no phantom inputs", {
+  for (gen in c("v9", "v7")) with_synth(gen, function(con) {
+    sh <- app_taxon_shards(con, gen)
+    cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
+    for (cd in cards) {
+      # every input belongs to THIS taxon, and none is an all-NA row
+      expect_false(any(vapply(cd$inputs, function(i) is.null(i$mdl_key) ||
+                                is.na(i$mdl_key), TRUE)), info = cd$key)
+      expect_lte(length(cd$inputs), 2L, label = cd$key)
+    }
+    # the 4th taxon is not in the picker set at all (no merged key), so it cannot
+    # drag its edges in
+    expect_false("Orcinus orca" %in% vapply(cards, function(cd) cd$sci, ""))
+  })
 })

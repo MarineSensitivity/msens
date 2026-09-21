@@ -12,6 +12,7 @@ app_bundle_build(
   base = atlas_base_url(),
   geom_keys = list(),
   cell_tiles = TRUE,
+  strict = TRUE,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -29,6 +30,13 @@ app_bundle_build(
 \item{geom_keys}{optional geometry keys per zone type, see \code{\link[=app_units]{app_units()}}}
 
 \item{cell_tiles}{write the wide cell tiles (default \code{TRUE})}
+
+\item{strict}{stop at the first failing stage (\code{TRUE}, the default), so a
+half-written bundle is never published by accident. \code{FALSE} runs every stage,
+records what failed in \verb{$failed}, and leaves the stages that worked on disk —
+the notebook's diagnostic pass. Either way a failure NAMES its stage and the
+outputs already written, so nobody needs to build a parallel composition to
+get at the parts.}
 
 \item{built_at}{ISO timestamp}
 }

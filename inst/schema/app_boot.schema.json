@@ -3,7 +3,7 @@
   "$id": "https://marinesensitivity.org/schema/app_boot.schema.json",
   "title": "app/boot.json — everything the atlas app needs for first paint, no WASM",
   "type": "object",
-  "required": ["schema", "ver", "built_at", "msens", "release", "grid",
+  "required": ["schema", "ver", "built_at", "msens", "id_field", "release", "grid",
                "study_areas", "units", "layers", "zones", "flower_default",
                "datasets", "palettes", "tables"],
   "additionalProperties": false,
@@ -12,6 +12,10 @@
     "ver":      { "type": "string", "pattern": "^v[0-9]+[a-z]?$" },
     "built_at": { "type": "string" },
     "msens":    { "type": "string" },
+    "id_field": {
+      "type": "string", "enum": ["mdl_seq", "mdl_key"],
+      "description": "The ONE generation fact the browser is allowed to need: which column the cell_model join keys on. v8+ store a compact integer mdl_id and join `model` back to the stable mdl_key; v1-v7 store mdl_seq, which `taxon` already carries."
+    },
     "release": {
       "type": "object",
       "required": ["title", "status", "access"],
@@ -27,7 +31,10 @@
       "required": ["grid_id", "nc", "nr", "xmin", "ymax", "resx", "resy", "lon360", "tile"],
       "additionalProperties": false,
       "properties": {
-        "grid_id": { "type": "string" },
+        "grid_id": {
+          "type": "string",
+          "description": "Kept although the contract's table does not list it: it names WHICH grid these numbers describe, so a client that caches by grid (the cell-id COG, a tile store shared between releases on the same grid) keys on the grid rather than on the version. It is a label for nc/nr/xmin/ymax, never a substitute for them, and nothing branches on it."
+        },
         "nc":      { "type": "integer", "minimum": 1 },
         "nr":      { "type": "integer", "minimum": 1 },
         "xmin":    { "type": "number" },
@@ -182,10 +189,10 @@
       "type": ["array", "null"],
       "items": {
         "type": "object",
-        "required": ["method_key", "value"],
+        "required": ["method_key", "val"],
         "properties": {
           "method_key":  { "type": "string" },
-          "value":       { "type": ["string", "number", "null"] },
+          "val":         { "type": ["string", "number", "null"] },
           "description": { "type": ["string", "null"] }
         }
       }

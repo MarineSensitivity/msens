@@ -241,7 +241,7 @@ app_units <- function(con, manifest, geom_keys = list()) {
   out <- lapply(seq_len(nrow(z)), function(i) {
     fld  <- z$fld[i]
     type <- sub("_key$", "", fld)
-    ks   <- sort(unique(scored$zkey[scored$fld == fld]))
+    ks   <- sort(unique(scored$zkey[which(!is.na(scored$fld) & scored$fld == fld)]))
     if (length(ks) < 2 || is.na(z$pmtiles[i])) return(NULL)
     if (!is.null(gk <- geom_keys[[type]])) {
       ks <- intersect(ks, as.character(gk))
@@ -295,10 +295,11 @@ app_zones <- function(con, flds = NULL) {
   is_cov <- grepl("_coverage$", m$metric_key)
 
   stats::setNames(lapply(flds, function(fld) {
-    rows <- d[d$fld == fld, , drop = FALSE]
+    rows <- d[which(!is.na(d$fld) & d$fld == fld), , drop = FALSE]
     lapply(seq_len(nrow(rows)), function(i) {
       k  <- rows$zkey[i]
-      mi <- m[m$fld == fld & m$zkey == k, , drop = FALSE]
+      mi <- m[which(!is.na(m$fld) & !is.na(m$zkey) & m$fld == fld & m$zkey == k),
+              , drop = FALSE]
       sc <- mi[!grepl("_coverage$", mi$metric_key), , drop = FALSE]
       cv <- mi[ grepl("_coverage$", mi$metric_key), , drop = FALSE]
       list(key      = k,
@@ -350,7 +351,8 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   met  <- manifest$metrics
   layers <- lapply(seq_along(keys), function(i) {
     k <- keys[i]
-    r <- if (!is.null(met) && nrow(met)) met[met$metric_key == k, , drop = FALSE] else NULL
+    r <- if (!is.null(met) && nrow(met))
+      met[which(!is.na(met$metric_key) & met$metric_key == k), , drop = FALSE] else NULL
     by <- list()
     if (!is.null(r) && nrow(r) && "cog" %in% names(r)) {
       ok <- !is.na(r$cog)
@@ -375,6 +377,11 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     schema   = .APP_SCHEMA,
     ver      = ver,
     built_at = built_at,
+    # THE one generation fact the contract allows the browser to need: which column
+    # the cell_model join keys on. v8+ store a compact integer `mdl_id` and join
+    # `model` back to the stable `mdl_key`; v1-v7 store `mdl_seq`, which `taxon`
+    # already carries. Everything else about a release is normalised away.
+    id_field = manifest$id_field %||% "mdl_key",
     msens    = as.character(utils::packageVersion("msens")),
     release  = list(title    = manifest$title %||% NULL,
                     status   = manifest$status %||% "released",
@@ -399,7 +406,10 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   if ("methods" %in% DBI::dbListTables(con)) {
     md <- DBI::dbGetQuery(con, "SELECT * FROM methods ORDER BY method_key")
     out$methods <- lapply(seq_len(nrow(md)), function(i)
-      list(method_key = md$method_key[i], value = as.character(md$value[i]),
+      # `val`, not `value`: the BUNDLE never publishes the word `value` (the manifest
+      # keeps its own spelling). A published object that says `value` is the one
+      # thing the review checklist forbids by name.
+      list(method_key = md$method_key[i], val = as.character(md$value[i]),
            description = md$description[i] %||% NULL))
   }
   app_validate(out, "boot", "boot.json")
@@ -479,6 +489,26 @@ app_datasets <- function(con) {
     glob   = if ("is_valid_global" %in% f) "is_valid_global" else NA_character_)
 }
 
+# Cast an id column to VARCHAR without inventing a decimal point.
+#
+# v7 stores `taxon.taxon_id` as a DOUBLE, and `CAST(22725044.0 AS VARCHAR)` in DuckDB
+# is the string "22725044.0" -- so the published contract carried a trailing ".0" on
+# all 16,153 v7 rows, every WoRMS link built from it 404s, and a join against any
+# other release's integer-typed id matches nothing. Route a DOUBLE or DECIMAL through
+# a lossless integer type first. HUGEINT, not BIGINT: an id is not guaranteed to fit
+# 63 bits forever and silently wrapping is the same class of bug.
+.app_id_cast <- function(con, tbl, col, expr) {
+  # describe the TABLE and look the column up by name: describing `SELECT t.taxon_id`
+  # would need the caller's alias to be in scope, which it is not here
+  ty <- tryCatch({
+    d <- DBI::dbGetQuery(con, sprintf("DESCRIBE SELECT * FROM %s LIMIT 0", tbl))
+    d$column_type[match(col, d$column_name)]
+  }, error = function(e) NA_character_)
+  if (!is.na(ty) && grepl("^(DOUBLE|FLOAT|REAL|DECIMAL)", toupper(ty)))
+    sprintf("CAST(CAST(%s AS HUGEINT) AS VARCHAR)", expr)
+  else sprintf("CAST(%s AS VARCHAR)", expr)
+}
+
 # the normalised taxon SELECT every app_* builder reads. One SQL, four schemas:
 # v1/v2 have no ER columns at all, v3-v7 keep er_score on the raw 1-100 scale.
 .app_taxon_sql <- function(con) {
@@ -497,7 +527,7 @@ app_datasets <- function(con) {
            t.scientific_name                 AS sci,
            {nn('common_name', 't.common_name', 'VARCHAR')}      AS common,
            t.sp_cat                          AS sp_cat,
-           CAST(t.taxon_id AS VARCHAR)       AS taxon_id,
+           {.app_id_cast(con, 'taxon', 'taxon_id', 't.taxon_id')} AS taxon_id,
            t.taxon_authority                 AS taxon_authority,
            {nn('redlist_code', 't.redlist_code', 'VARCHAR')}    AS rl,
            {nn('iucn_code', 't.iucn_code', 'VARCHAR')}          AS rl2,
@@ -585,9 +615,19 @@ isTRUE_v <- function(x) !is.na(x) & x
     DBI::dbGetQuery(con, glue::glue(
       "SELECT CAST(t.{k$key} AS VARCHAR) AS key,
               CAST(tm.mdl_seq AS VARCHAR) AS mdl_key, tm.ds_key
-         FROM taxon_model tm JOIN taxon t ON CAST(t.taxon_id AS VARCHAR) = CAST(tm.taxon_id AS VARCHAR)"))
+         FROM taxon_model tm JOIN taxon t
+           ON {.app_id_cast(con, 'taxon', 'taxon_id', 't.taxon_id')}
+            = {.app_id_cast(con, 'taxon_model', 'taxon_id', 'tm.taxon_id')}"))
   }
-  d <- d[d$ds_key != "ms_merge" & d$mdl_key != d$key, , drop = FALSE]
+  # `which()` and explicit !is.na(), NOT a bare logical subset. On v7
+  # `CAST(t.mdl_seq AS VARCHAR)` is NA for every taxon with no merged model, so
+  # `d$mdl_key != d$key` is NA there -- and `d[NA, ]` INJECTS an all-NA row rather
+  # than dropping it. Measured on the real release: 2,354 of 14,501 edges came back
+  # all-NA, and card()'s own `e[e$key == key, ]` then matched every one of them into
+  # EVERY taxon (38 M phantom inputs; the shard step died there).
+  keep <- which(!is.na(d$key) & !is.na(d$mdl_key) & !is.na(d$ds_key) &
+                d$ds_key != "ms_merge" & d$mdl_key != d$key)
+  d <- d[keep, , drop = FALSE]
   d[order(d$key, d$ds_key, d$mdl_key), , drop = FALSE]
 }
 
@@ -626,8 +666,10 @@ isTRUE_v <- function(x) !is.na(x) & x
 # when the distribution spans the globe, which retires mdl_bbox() -- the species
 # app's most expensive query.
 .app_merged <- function(a) {
-  m <- a[a$key == a$mdl_key | a$ds_key == "ms_merge", , drop = FALSE]
-  m <- m[m$asset_type == "cog", , drop = FALSE]
+  m <- a[which(!is.na(a$key) &
+               ((!is.na(a$mdl_key) & a$key == a$mdl_key) |
+                (!is.na(a$ds_key) & a$ds_key == "ms_merge"))), , drop = FALSE]
+  m <- m[which(!is.na(m$asset_type) & m$asset_type == "cog"), , drop = FALSE]
   m[!duplicated(m$key), , drop = FALSE]
 }
 
@@ -671,10 +713,15 @@ app_taxon_shards <- function(con, ver) {
 
   card <- function(i) {
     key <- d$key[i]
-    m   <- mg[mg$key == key, , drop = FALSE]
-    ei  <- e[e$key == key, , drop = FALSE]
+    # which(), never a bare `==`: a NA on either side of the comparison selects an
+    # all-NA row instead of nothing, and one such row in `e` reappears under every
+    # taxon in the bundle
+    m   <- mg[which(!is.na(mg$key) & mg$key == key), , drop = FALSE]
+    ei  <- e[which(!is.na(e$key) & e$key == key), , drop = FALSE]
     inputs <- lapply(seq_len(nrow(ei)), function(j) {
-      ai <- a[a$mdl_key == ei$mdl_key[j] & a$ds_key == ei$ds_key[j], , drop = FALSE]
+      ai <- a[which(!is.na(a$mdl_key) & !is.na(a$ds_key) &
+                    a$mdl_key == ei$mdl_key[j] & a$ds_key == ei$ds_key[j]),
+              , drop = FALSE]
       list(ds_key  = ei$ds_key[j],
            mdl_key = ei$mdl_key[j],
            is_mask = {v <- ds$is_mask[match(ei$ds_key[j], ds$ds_key)]
@@ -724,7 +771,7 @@ app_taxon_shards <- function(con, ver) {
 app_alias_shards <- function(con, ver) {
   keys <- app_taxon_table(con)$key
   e <- .app_edges(con)
-  e <- e[e$key %in% keys, , drop = FALSE]
+  e <- e[e$key %in% keys, , drop = FALSE]   # %in% is NA-safe: NA %in% x is FALSE
   # the merged key is its own alias, so a ?mdl_key=ms_merge|… link resolves too
   al <- rbind(e[, c("mdl_key", "key", "ds_key")],
               data.frame(mdl_key = keys, key = keys, ds_key = "ms_merge",
@@ -823,13 +870,81 @@ app_cell_tiles <- function(con, dir_out, ncol = cell_grid_ncol(con)) {
      GROUP BY u.cell_id, u.area_km2, u.in_usa, u.in_pra, u.tile")
 
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
-  copy_atlas_parquet(con, sql, dir_out, partition_by = "tile")
-  files <- list.files(dir_out, pattern = "\\.parquet$", recursive = TRUE, full.names = TRUE)
+  # ONE file per tile. DuckDB's PARTITION_BY writes one part PER THREAD, so a busy
+  # tile came out as data_0..data_5.parquet -- and since anonymous LIST is denied on
+  # the bucket, the browser can only ever construct `data_0.parquet` and would have
+  # read a sixth of that tile, silently. Measured on v9: 422 tile directories,
+  # 1,687 files, 290 of the directories multi-part.
+  #
+  # Written per tile instead of coalesced afterwards: a coalesce would mean writing
+  # the whole surface twice, and `preserve_insertion_order = false` (which
+  # copy_atlas_parquet sets for byte-sized row groups) makes the parts arbitrary, so
+  # merging them is a second full scan with no ordering to preserve. One COPY per
+  # tile is a single pass and the file it names is the file that exists.
+  # Materialise the pivot ONCE. Re-running the query per tile would rescan `cell`
+  # and `cell_metric` 422 times (17 M and 10 M rows on v9); with a temp table each
+  # tile is a cheap filtered write and the whole surface is read once.
+  tmp <- "app_cell_wide_tmp"
+  DBI::dbExecute(con, glue::glue("CREATE OR REPLACE TEMP TABLE {tmp} AS {sql}"))
+  on.exit(try(DBI::dbExecute(con, glue::glue("DROP TABLE IF EXISTS {tmp}")),
+              silent = TRUE), add = TRUE)
+  tiles <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT DISTINCT tile FROM {tmp} ORDER BY tile"))$tile
+  stopifnot("no tiles to write" = length(tiles) > 0)
+  for (t in tiles) {
+    td <- file.path(dir_out, sprintf("tile=%s", format(t, scientific = FALSE)))
+    dir.create(td, recursive = TRUE, showWarnings = FALSE)
+    copy_atlas_parquet(
+      con, glue::glue("SELECT * EXCLUDE (tile) FROM {tmp} WHERE tile = {t}"),
+      file.path(td, "data_0.parquet"))
+  }
+  app_one_file_per_partition(dir_out)          # and prove it, every time
+
   n <- DBI::dbGetQuery(con, glue::glue(
-    "SELECT count(*) n FROM read_parquet('{dir_out}/**/*.parquet', hive_partitioning = true)"))$n
-  list(dir = dir_out, tiles = length(files), rows = as.integer(n),
+    "SELECT count(*) n FROM read_parquet('{dir_out}/*/data_0.parquet',
+       hive_partitioning = true)"))$n
+  list(dir = dir_out, tiles = length(tiles), rows = as.integer(n),
+       files = length(list.files(dir_out, "[.]parquet$", recursive = TRUE)),
        metric_keys = keys, ncol = as.integer(ncol))
 }
+
+#' Assert a partitioned bundle directory holds exactly one file per partition
+#'
+#' **Anonymous LIST is denied on the bucket**, so a static client cannot discover
+#' parts: it constructs `tile={t}/data_0.parquet` and reads whatever is there. A
+#' second part is therefore not a performance detail, it is missing data that nobody
+#' is told about — and a gate that globs `**/*.parquet` reads all six parts and sees
+#' nothing wrong. Every partitioned thing the bundle writes goes through this.
+#'
+#' @param dir a partitioned directory (`tile={t}/` beneath it)
+#' @param name what to call it in the error
+#' @return the number of partitions, invisibly; errors on any partition with a file
+#'   count other than one
+#' @export
+#' @concept app
+app_one_file_per_partition <- function(dir, name = basename(dir)) {
+  parts <- list.dirs(dir, recursive = FALSE)
+  if (!length(parts))
+    stop(sprintf("`%s` has no partitions at all", name), call. = FALSE)
+  n <- vapply(parts, function(p) length(list.files(p, "[.]parquet$")), 0L)
+  if (any(n != 1L)) {
+    bad <- parts[n != 1L]
+    stop(sprintf(paste0(
+      "`%s`: %d of %d partitions do not hold exactly one parquet file.\n",
+      "  e.g. %s holds %d (%s)\n",
+      "  Anonymous LIST is denied, so a static client reads only data_0.parquet ",
+      "and would silently miss the rest."),
+      name, length(bad), length(parts), basename(bad[1]), n[n != 1L][1],
+      paste(list.files(bad[1], "[.]parquet$"), collapse = ", ")), call. = FALSE)
+  }
+  invisible(length(parts))
+}
+
+# read a partitioned bundle directory THE WAY THE BROWSER DOES: by constructing
+# `tile={t}/data_0.parquet`, never by globbing. A gate that globs `**/*.parquet`
+# happily reads parts the client can never ask for.
+.app_tiles_as_client <- function(dir)
+  sprintf("read_parquet('%s/*/data_0.parquet', hive_partitioning = true)", dir)
 
 #' Assert every tile's cell ids satisfy the tile key at a given grid width
 #'
@@ -855,7 +970,7 @@ app_cell_tile_check <- function(dir, ncol, con = NULL) {
   d <- DBI::dbGetQuery(con, glue::glue("
     SELECT count(*) n_bad,
            min(cell_id) AS cell_id, min(tile) AS tile, min({expr}) AS want
-      FROM read_parquet('{dir}/**/*.parquet', hive_partitioning = true)
+      FROM {.app_tiles_as_client(dir)}
      WHERE tile <> {expr}"))
   if (d$n_bad[1] > 0)
     stop(sprintf(paste0(
@@ -885,9 +1000,10 @@ app_cell_tile_digests <- function(con, dir) {
   vc   <- sdm_val_col(con, "cell_metric")
   d <- do.call(rbind, lapply(keys, function(k) {
     kq <- DBI::dbQuoteIdentifier(con, k)
+    # as the CLIENT reads it: a second part in any tile makes this digest differ
     a <- hash_query(con, glue::glue(
-      "SELECT cell_id, {kq} AS val FROM read_parquet('{dir}/**/*.parquet',
-         hive_partitioning = true) WHERE {kq} IS NOT NULL"),
+      "SELECT cell_id, {kq} AS val FROM {.app_tiles_as_client(dir)}
+         WHERE {kq} IS NOT NULL"),
       cols = c("cell_id", "val"))
     b <- hash_query(con, glue::glue(
       "SELECT cm.cell_id, cm.{vc} AS val FROM cell_metric cm JOIN metric m
@@ -991,7 +1107,8 @@ app_table_descriptor <- function(path, name, ver, base = atlas_base_url(),
     rows   = as.integer(rows),
     # parquet_digest() returns a ONE-ROW FRAME; `$digest` is the combined
     # schema+data fingerprint, which is the OPFS invalidation key the app caches on
-    digest = as.character(parquet_digest(path)$digest[1]),
+    digest = as.character(parquet_digest(
+      if (dir.exists(path)) file.path(path, "*", "data_0.parquet") else path)$digest[1]),
     partitioned_by = partitioned_by,
     files   = as.integer(length(files)),
     columns = columns)
@@ -1022,6 +1139,12 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @param base atlas base URL
 #' @param geom_keys optional geometry keys per zone type, see [app_units()]
 #' @param cell_tiles write the wide cell tiles (default `TRUE`)
+#' @param strict stop at the first failing stage (`TRUE`, the default), so a
+#'   half-written bundle is never published by accident. `FALSE` runs every stage,
+#'   records what failed in `$failed`, and leaves the stages that worked on disk —
+#'   the notebook's diagnostic pass. Either way a failure NAMES its stage and the
+#'   outputs already written, so nobody needs to build a parallel composition to
+#'   get at the parts.
 #' @param built_at ISO timestamp
 #' @return a list describing everything written, invisibly
 #' @importFrom jsonlite toJSON
@@ -1029,11 +1152,11 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @concept app
 app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                              base = atlas_base_url(), geom_keys = list(),
-                             cell_tiles = TRUE,
+                             cell_tiles = TRUE, strict = TRUE,
                              built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
-  wrote <- list()
+  wrote <- list(); failed <- list()
   put <- function(rel, obj) {
     p <- file.path(dir_out, rel)
     dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
@@ -1041,48 +1164,93 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
     wrote[[rel]] <<- file.size(p)
     p
   }
+  # PER-STAGE ISOLATION. This is the ONE composition a notebook calls, so a stage
+  # that fails must name itself and leave the other stages' outputs on disk --
+  # otherwise the next person writes a parallel composition to get at the parts,
+  # and then there are two contracts. With `strict = TRUE` (the default) the first
+  # failure still stops the build, because a half-written bundle must not be
+  # published by accident; `strict = FALSE` is for the notebook's diagnostic pass.
+  note <- function(rel, n) wrote[[rel]] <<- n
+  # `expr` is a PROMISE evaluated in this function's own frame, so a `<<-` inside it
+  # skips this frame and lands in the namespace. Stage bodies assign with `<-`
+  # (which lands here, because that is where the promise evaluates) and record bytes
+  # through note(), a real closure whose enclosure is this frame.
+  stage <- function(name, expr) {
+    out <- tryCatch(expr, error = function(e) {
+      failed[[name]] <<- conditionMessage(e)
+      if (isTRUE(strict))
+        stop(sprintf("app_bundle_build(): stage '%s' failed: %s\n  completed: %s",
+                     name, conditionMessage(e),
+                     if (length(wrote)) paste(names(wrote), collapse = ", ") else "(none)"),
+             call. = FALSE)
+      NULL
+    })
+    out
+  }
 
   # parquet tables ---------------------------------------------------------
   descr <- list()
-  tx <- app_taxon_table(con)
-  p  <- file.path(dir_out, "taxon.parquet")
-  write_atlas_parquet(tx, p)
-  descr$taxon <- app_table_descriptor(
-    p, "taxon", ver, base, rows = nrow(tx),
-    columns = lapply(names(tx), function(n) list(name = n, type = class(tx[[n]])[1])))
+  tx <- stage("taxon.parquet", {
+    d <- app_taxon_table(con)
+    p <- file.path(dir_out, "taxon.parquet")
+    write_atlas_parquet(d, p)
+    descr$taxon <- app_table_descriptor(
+      p, "taxon", ver, base, rows = nrow(d),
+      columns = lapply(names(d), function(n) list(name = n, type = class(d[[n]])[1])))
+    note("taxon.parquet", file.size(p))
+    d
+  })
 
-  zt <- app_zone_taxon(con)
-  if (nrow(zt)) {
-    p <- file.path(dir_out, "zone_taxon.parquet")
-    write_atlas_parquet(zt, p)
-    descr$zone_taxon <- app_table_descriptor(
-      p, "zone_taxon", ver, base, rows = nrow(zt),
-      columns = lapply(names(zt), function(n) list(name = n, type = class(zt[[n]])[1])))
-  }
+  zt <- stage("zone_taxon.parquet", {
+    d <- app_zone_taxon(con)
+    if (nrow(d)) {
+      p <- file.path(dir_out, "zone_taxon.parquet")
+      write_atlas_parquet(d, p)
+      descr$zone_taxon <- app_table_descriptor(
+        p, "zone_taxon", ver, base, rows = nrow(d),
+        columns = lapply(names(d), function(n) list(name = n, type = class(d[[n]])[1])))
+      note("zone_taxon.parquet", file.size(p))
+    }
+    d
+  })
 
   tiles <- NULL
-  if (isTRUE(cell_tiles)) {
-    tiles <- app_cell_tiles(con, file.path(dir_out, "cell"))
+  if (isTRUE(cell_tiles)) tiles <- stage("cell/", {
+    t <- app_cell_tiles(con, file.path(dir_out, "cell"))
     descr$cell <- app_table_descriptor(
-      file.path(dir_out, "cell"), "cell", ver, base, rows = tiles$rows,
+      file.path(dir_out, "cell"), "cell", ver, base, rows = t$rows,
       partitioned_by = "tile",
       columns = lapply(c("cell_id", "area_km2", "in_usa", "in_pra", "tile",
-                         tiles$metric_keys),
+                         t$metric_keys),
                        function(n) list(name = n, type = "double")))
-  }
+    note("cell/", t$files)
+    t
+  })
 
   # json objects -----------------------------------------------------------
-  boot <- app_boot(con, ver, manifest,
-                   tables = app_table_manifest(unname(descr), ver, base),
-                   geom_keys = geom_keys, built_at = built_at)
-  put("boot.json", boot)
-  put("taxa.json", app_taxa(con, ver))
-  for (s in names(sh <- app_taxon_shards(con, ver))) put(file.path("taxon", paste0(s, ".json")), sh[[s]])
-  for (s in names(al <- app_alias_shards(con, ver))) put(file.path("alias", paste0(s, ".json")), al[[s]])
+  boot <- stage("boot.json", {
+    b <- app_boot(con, ver, manifest,
+                  tables = app_table_manifest(unname(descr), ver, base),
+                  geom_keys = geom_keys, built_at = built_at)
+    put("boot.json", b)
+    b
+  })
+  stage("taxa.json", put("taxa.json", app_taxa(con, ver)))
+  sh <- stage("taxon/", {
+    x <- app_taxon_shards(con, ver)
+    for (k in names(x)) put(file.path("taxon", paste0(k, ".json")), x[[k]])
+    x
+  })
+  al <- stage("alias/", {
+    x <- app_alias_shards(con, ver)
+    for (k in names(x)) put(file.path("alias", paste0(k, ".json")), x[[k]])
+    x
+  })
 
   invisible(list(dir = dir_out, ver = ver, bytes = wrote, tables = descr,
-                 tiles = tiles, boot = boot,
-                 n_taxa = nrow(tx), n_shards = length(sh), n_alias = length(al)))
+                 tiles = tiles, boot = boot, failed = failed,
+                 n_taxa = if (is.null(tx)) NA_integer_ else nrow(tx),
+                 n_shards = length(sh), n_alias = length(al)))
 }
 
 utils::globalVariables(c("tile", "metric_key"))

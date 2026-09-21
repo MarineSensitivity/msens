@@ -125,33 +125,48 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
   DBI::dbWriteTable(con, "zone_metric", zm)
 
   # taxa / models ----------------------------------------------------------
-  sci  <- c("Sterna paradisaea", "Chelonia mydas", "Gadus morhua")
-  cmn  <- c("Arctic Tern", "Green Sea Turtle", "Atlantic Cod")
-  cat_ <- c("bird", "turtle", "fish")
-  tid  <- c("137162", "137206", "126436")
+  # FOUR taxa, not three. The fourth is v7's REAL shape and the reason the first
+  # query against the real release found two bugs that 2,392 green tests had not:
+  #   * `mdl_seq IS NULL` -- a taxon with no merged model that still has
+  #     `taxon_model` rows. `CAST(NULL AS VARCHAR)` is NA, and a bare logical subset
+  #     on NA INJECTS an all-NA row instead of dropping it (2,354 of 14,501 edges on
+  #     v7), which card() then matched into every taxon: 38 M phantom inputs.
+  #   * `taxon.taxon_id` typed DOUBLE on the legacy generations, so
+  #     `CAST(... AS VARCHAR)` yields "22725044.0" and every WoRMS link 404s.
+  sci  <- c("Sterna paradisaea", "Chelonia mydas", "Gadus morhua", "Orcinus orca")
+  cmn  <- c("Arctic Tern", "Green Sea Turtle", "Atlantic Cod", "Killer Whale")
+  cat_ <- c("bird", "turtle", "fish", "mammal")
+  tid  <- c("137162", "137206", "126436", "137102")
   mkey <- paste0("ms_merge|WORMS:", tid)
-  mseqs <- c(101L, 102L, 103L)
+  mseqs <- c(101L, 102L, 103L, NA_integer_)   # the 4th has NO merged model
 
   if (old) {
     taxon <- data.frame(
-      taxon_id = tid, taxon_authority = "worms", scientific_name = sci,
+      # DOUBLE, exactly as v1-v7 store it -- the "22725044.0" trap
+      taxon_id = as.numeric(tid), taxon_authority = "worms", scientific_name = sci,
       common_name = cmn, sp_cat = cat_, mdl_seq = mseqs, is_ok = TRUE,
-      redlist_code = c("LC", "EN", "VU"), stringsAsFactors = FALSE)
+      redlist_code = c("LC", "EN", "VU", "LC"), stringsAsFactors = FALSE)
     if (!identical(gen, "v2")) {                      # v1/v2 have NO ER columns
-      taxon$extrisk_code <- c("LC", "EN", "VU")
-      taxon$er_score     <- c(1, 25, 5)               # RAW 1-100 on v3-v7
-      taxon$is_mmpa      <- c(FALSE, FALSE, FALSE)
-      taxon$is_mbta      <- c(TRUE, FALSE, FALSE)
+      taxon$extrisk_code <- c("LC", "EN", "VU", "LC")
+      taxon$er_score     <- c(1, 25, 5, 20)           # RAW 1-100 on v3-v7
+      taxon$is_mmpa      <- c(FALSE, FALSE, FALSE, TRUE)
+      taxon$is_mbta      <- c(TRUE, FALSE, FALSE, FALSE)
     }
     DBI::dbWriteTable(con, "taxon", taxon)
+    stopifnot("legacy taxon_id must be DOUBLE" =
+                DBI::dbGetQuery(con, "SELECT column_type FROM (DESCRIBE SELECT taxon_id FROM taxon LIMIT 0)")[[1]][1] == "DOUBLE")
     DBI::dbWriteTable(con, "model", data.frame(
-      mdl_seq = c(mseqs, 201L, 202L), ds_key = c(rep("ms_merge", 3), "am", "am"),
-      taxa = c(sci, sci[1:2]), stringsAsFactors = FALSE))
+      mdl_seq = c(mseqs[1:3], 201L, 202L, 203L),
+      ds_key = c(rep("ms_merge", 3), "am", "am", "am"),
+      taxa = c(sci[1:3], sci[1:2], sci[4]), stringsAsFactors = FALSE))
     if (!identical(gen, "v2")) {
       # v1-v7 taxon_model INCLUDES the ms_merge self-edge; v8+ does not
+      # the 4th taxon HAS input edges but no merged model: that pairing is what
+      # turns `mdl_key != key` into NA and injects the all-NA row
       DBI::dbWriteTable(con, "taxon_model", data.frame(
-        taxon_id = c(tid, tid[1:2]), ds_key = c(rep("ms_merge", 3), "am", "am"),
-        mdl_seq  = c(mseqs, 201L, 202L), stringsAsFactors = FALSE))
+        taxon_id = as.numeric(c(tid[1:3], tid[1:2], tid[4])),
+        ds_key   = c(rep("ms_merge", 3), "am", "am", "am"),
+        mdl_seq  = c(mseqs[1:3], 201L, 202L, 203L), stringsAsFactors = FALSE))
       DBI::dbWriteTable(con, "model_asset", data.frame(
         mdl_key = paste0("am|", tid[1:2]), mdl_seq = c(101L, 102L), ds_key = "ms_merge",
         cog_url = paste0("https://example.invalid/cog/usa05/", tid[1:2], ".tif"),
@@ -159,8 +174,10 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
     }
     zt <- data.frame(
       zone_tbl = zone$tbl[1], zone_fld = "programarea_key", zone_value = "AAA",
-      mdl_seq = mseqs, sp_cat = cat_, sp_common = cmn, sp_scientific = sci,
-      taxon_id = tid, taxon_authority = "worms", rl_code = c("LC", "EN", "VU"),
+      mdl_seq = mseqs[1:3], sp_cat = cat_[1:3], sp_common = cmn[1:3],
+      sp_scientific = sci[1:3],
+      taxon_id = as.numeric(tid[1:3]), taxon_authority = "worms",
+      rl_code = c("LC", "EN", "VU"),
       area_km2 = c(75, 25, 50), avg_suit = c(0.5, 0.8, 0.3), stringsAsFactors = FALSE)
     # v1/v2 stored a 0-1 rl_score; v3-v7 a 1-100 er_score beside rl_code
     if (identical(gen, "v2")) zt$rl_score <- c(0.01, 0.25, 0.05)
@@ -168,38 +185,44 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
     DBI::dbWriteTable(con, "zone_taxon", zt)
   } else {
     DBI::dbWriteTable(con, "taxon", data.frame(
-      taxon_id = tid, taxon_authority = "worms", ms_merge_key = mkey,
+      taxon_id = tid, taxon_authority = "worms",
+      ms_merge_key = c(mkey[1:3], NA_character_),   # the 4th has no merged model
       scientific_name = sci, common_name = cmn, sp_cat = cat_,
-      iucn_code = c("LC", "EN", "VU"), extrisk_code = c("LC", "EN", "VU"),
-      er_score = c(1, 25, 5), is_mmpa = FALSE, is_mbta = c(TRUE, FALSE, FALSE),
-      is_marine = TRUE, is_valid_usa = c(TRUE, TRUE, FALSE),
-      is_valid_global = c(TRUE, FALSE, TRUE), rarity = "common",
+      iucn_code = c("LC", "EN", "VU", "LC"), extrisk_code = c("LC", "EN", "VU", "LC"),
+      er_score = c(1, 25, 5, 20), is_mmpa = c(FALSE, FALSE, FALSE, TRUE),
+      is_mbta = c(TRUE, FALSE, FALSE, FALSE),
+      is_marine = TRUE, is_valid_usa = c(TRUE, TRUE, FALSE, TRUE),
+      is_valid_global = c(TRUE, FALSE, TRUE, TRUE), rarity = "common",
       stringsAsFactors = FALSE))
     DBI::dbWriteTable(con, "model", data.frame(
-      mdl_key = c(mkey, paste0("am|", tid[1:2])), mdl_id = c(1L, 2L, 3L, 4L, 5L),
-      ds_key = c(rep("ms_merge", 3), "am", "am"), sp_id = c(tid, tid[1:2]),
-      sci_name = c(sci, sci[1:2]), common_name = c(cmn, cmn[1:2]),
-      er_score = c(1, 25, 5, 1, 25), sp_cat = c(cat_, cat_[1:2]),
+      mdl_key = c(mkey[1:3], paste0("am|", tid[c(1:2, 4)])),
+      mdl_id = 1:6, ds_key = c(rep("ms_merge", 3), "am", "am", "am"),
+      sp_id = c(tid[1:3], tid[c(1:2, 4)]), sci_name = c(sci[1:3], sci[c(1:2, 4)]),
+      common_name = c(cmn[1:3], cmn[c(1:2, 4)]),
+      er_score = c(1, 25, 5, 1, 25, 20), sp_cat = c(cat_[1:3], cat_[c(1:2, 4)]),
       stringsAsFactors = FALSE))
     DBI::dbWriteTable(con, "taxon_model", data.frame(   # no self-edge on v8+
-      mdl_key = paste0("am|", tid[1:2]), ds_key = "am",
-      taxon_authority = "worms", taxon_id = tid[1:2], ms_merge_key = mkey[1:2],
+      mdl_key = paste0("am|", tid[c(1:2, 4)]), ds_key = "am",
+      taxon_authority = "worms", taxon_id = tid[c(1:2, 4)],
+      # the 4th taxon's edge points at a NULL merged key: the NA trap on v8+ too
+      ms_merge_key = c(mkey[1:2], NA_character_),
       stringsAsFactors = FALSE))
     DBI::dbWriteTable(con, "native_asset", data.frame(
-      ms_merge_key = c(mkey, mkey[1:2]),
-      mdl_key      = c(mkey, paste0("am|", tid[1:2])),
+      ms_merge_key = c(mkey[1:3], mkey[1:2]),
+      mdl_key      = c(mkey[1:3], paste0("am|", tid[1:2])),
       ds_key       = c(rep("ms_merge", 3), "am", "am"),
       asset_type   = "cog", representation = c(rep("model", 3), "native", "native"),
-      asset_url    = c(paste0("https://example.invalid/merged/", tid, ".tif"),
+      asset_url    = c(paste0("https://example.invalid/merged/", tid[1:3], ".tif"),
                        paste0("https://example.invalid/native/", tid[1:2], ".tif")),
       rescale_min = 1, rescale_max = 100, colormap = "spectral_r",
       xmin = c(-90.2, -90.2, -180, -90.2, -90.2), xmax = c(-89.6, -89.6, 180, -89.6, -89.6),
       ymin = 26.9, ymax = 27.2, source_layer = NA_character_, stringsAsFactors = FALSE))
     DBI::dbWriteTable(con, "zone_taxon", data.frame(
-      zone_fld = "programarea_key", zone_value = "AAA", sp_cat = cat_,
-      sp_common = cmn, sp_scientific = sci, taxon_id = tid, taxon_authority = "worms",
+      zone_fld = "programarea_key", zone_value = "AAA", sp_cat = cat_[1:3],
+      sp_common = cmn[1:3], sp_scientific = sci[1:3], taxon_id = tid[1:3],
+      taxon_authority = "worms",
       er_code = c("LC", "EN", "VU"), er_score = c(0.01, 0.25, 0.05),
-      is_mmpa = FALSE, is_mbta = c(TRUE, FALSE, FALSE), mdl_key = mkey,
+      is_mmpa = FALSE, is_mbta = c(TRUE, FALSE, FALSE), mdl_key = mkey[1:3],
       area_km2 = c(75, 25, 50), avg_suit = c(0.5, 0.8, 0.3), stringsAsFactors = FALSE))
     DBI::dbWriteTable(con, "cell_model", data.frame(
       cell_id = rep(id[1:4], 2), mdl_id = rep(c(1L, 2L), each = 4),
