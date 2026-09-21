@@ -22,6 +22,15 @@ numbers for the same ground.
 * **Every builder validates its own output** against `inst/schema/app_*.schema.json`
   (`app_validate()`, `app_schema_path()`, `app_json()`), so a shape change fails in
   the notebook that made it rather than in a browser three steps later.
+* **`manifest_build()` gains `app = NULL`** and **`validate_manifest_app()`** is new.
+  Only v9's manifest comes from `build_version_manifest.qmd`; v1-v7b are written by
+  `backfill_versions.qmd` through `manifest_build(..., extra = ...)`, so the `app`
+  block has to be an argument of `manifest_build()` itself. `NULL` emits **no `app`
+  key at all** — a release whose bundle is not published must not carry an empty one
+  an app would read as "nothing is available". `validate_manifest()` tolerates its
+  absence and checks its shape when present, against
+  `inst/schema/app_manifest.schema.json`. **The capabilities are INPUTS**: the
+  notebook probes them and passes them in, and msens never derives them.
 * **`app_capabilities()` / `app_manifest_block()`** decide what the app may offer by
   **anonymous HTTPS HEAD of a sample object**, never by copying
   `manifest$capabilities`. v7 and v7b advertise `cell_species_list` because the

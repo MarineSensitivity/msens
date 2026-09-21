@@ -469,3 +469,111 @@ test_that("boot.json tables carry an href, byte size and content digest", {
     expect_identical(tb$taxon$digest, b2$out$boot$tables$taxon$digest)
   })
 })
+
+# ---- the manifest `app` block ------------------------------------------------
+#
+# Only v9's manifest comes from build_version_manifest.qmd; v1-v7b are written by
+# backfill_versions.qmd through manifest_build(..., extra = list(...)), which is
+# where `methods` went. So the `app` block has to be an argument of manifest_build()
+# itself, not something a second notebook bolts on afterwards.
+
+CAPS <- list(cell = TRUE, cell_model = FALSE, taxonomy = TRUE,
+             alias = TRUE, pmtiles_s3 = FALSE)
+
+test_that("a manifest with no `app` argument has NO `app` key at all", {
+  for (gen in gens) with_synth(gen, function(con) {
+    m <- manifest_build(con, gen, base = BASE)
+    expect_null(m$app, info = gen)
+    expect_false("app" %in% names(m), info = gen)
+    expect_silent(validate_manifest(m, ver = gen))
+  })
+})
+
+test_that("a present `app` block is filled in from ver and base, and validates", {
+  with_synth("v9", function(con) {
+    m <- manifest_build(con, "v9", base = BASE,
+                        app = list(capabilities = CAPS,
+                                   built_at = "2026-09-21T00:00:00Z"))
+    expect_identical(m$app$schema, 1L)
+    expect_identical(m$app$base, paste0(BASE, "/v9/app"))
+    expect_identical(m$app$boot, paste0(BASE, "/v9/app/boot.json"))
+    expect_identical(m$app$built_at, "2026-09-21T00:00:00Z")
+    expect_identical(m$app$capabilities, CAPS)
+    expect_silent(validate_manifest(m, ver = "v9"))
+    expect_silent(validate_manifest_app(m$app))
+
+    # the probe evidence rides along when the notebook supplies it
+    m2 <- manifest_build(con, "v9", base = BASE, app = list(
+      capabilities = CAPS,
+      probed = list(cell = list(url = paste0(BASE, "/v9/app/cell/tile=0/data_0.parquet"),
+                                status = 200L))))
+    expect_identical(m2$app$probed$cell$status, 200L)
+    expect_silent(validate_manifest(m2, ver = "v9"))
+  })
+})
+
+test_that("capabilities are INPUTS: msens never copies them from manifest$capabilities", {
+  with_synth("v7", function(con) {
+    # v7 advertises cell_species_list because the SERVER can read a cell_model that
+    # never left the server; S3 holds only tables/ for it
+    m <- manifest_build(con, "v7", base = BASE,
+                        capabilities = list(cell_species_list = TRUE),
+                        app = list(capabilities = CAPS))
+    expect_true(manifest_can(m, "cell_species_list"))
+    expect_false(m$app$capabilities$cell_model)     # what the BUCKET actually answers
+    expect_false(identical(names(m$capabilities), names(m$app$capabilities)))
+  })
+})
+
+test_that("a malformed `app` block is an error, per branch", {
+  with_synth("v9", function(con) {
+    bad <- function(app) manifest_build(con, "v9", base = BASE, app = app)
+    expect_error(bad(list(capabilities = c(CAPS, list(nope = TRUE)))), "unknown key")
+    expect_error(bad(list(capabilities = utils::modifyList(CAPS, list(cell = "yes")))),
+                 "single non-NA logicals")
+    expect_error(bad(list(capabilities = utils::modifyList(CAPS, list(cell = NA)))),
+                 "single non-NA logicals")
+    expect_error(bad(list(capabilities = utils::modifyList(CAPS, list(cell = c(TRUE, TRUE))))),
+                 "single non-NA logicals")
+    expect_error(bad(list(capabilities = CAPS["cell"])), "missing: cell_model")
+    expect_error(bad(list(capabilities = list())), "NON-EMPTY NAMED list")
+    expect_error(bad(list(capabilities = list(TRUE, FALSE, TRUE, TRUE, FALSE))),
+                 "NON-EMPTY NAMED list")
+    expect_error(bad(list()), "capabilities")
+    expect_error(bad("nope"), "must be a list")
+  })
+})
+
+test_that("`methods` and `app` ride together, each optional by presence", {
+  with_synth("v7b", function(con) {
+    md <- DBI::dbGetQuery(con, "SELECT * FROM methods ORDER BY method_key")
+    m <- manifest_build(con, "v7b", base = BASE,
+                        extra = list(methods = md),          # backfill_versions.qmd
+                        app   = list(capabilities = CAPS))   # the new argument
+    expect_equal(nrow(m$methods), 4)
+    expect_identical(m$app$capabilities$taxonomy, TRUE)
+    expect_silent(validate_manifest(m, ver = "v7b"))
+  })
+  with_synth("v9", function(con) {
+    m <- manifest_build(con, "v9", base = BASE, app = list(capabilities = CAPS))
+    expect_null(m$methods)                                    # neither is implied
+    expect_false(is.null(m$app))
+  })
+})
+
+test_that("an old manifest with neither key still validates", {
+  # every release published before the browser contract existed
+  old <- list(ver = "v3", status = "retired", access = "public",
+              grid_id = "usa05", id_field = "mdl_seq",
+              capabilities = list(cell_species_list = FALSE),
+              tables = list(cell = "https://example.invalid/v3/tables/cell.parquet"))
+  expect_silent(validate_manifest(old, ver = "v3"))
+  expect_null(old$app)
+
+  # ...and a manifest carrying a MALFORMED app block does not
+  bad <- old
+  bad$app <- list(schema = 1L, base = "https://x/v3/app", boot = "https://x/v3/app/boot.json",
+                  built_at = "2026-09-21T00:00:00Z",
+                  capabilities = list(cell = TRUE))          # four keys missing
+  expect_error(validate_manifest(bad, ver = "v3"))
+})

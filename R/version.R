@@ -309,6 +309,10 @@ atlas_manifest <- function(ver = NULL, base = atlas_base_url(), refresh = FALSE)
 #' Split from [atlas_manifest()] so the publishing notebook asserts the same
 #' contract it writes, and the unit tests can exercise it without network.
 #'
+#' An `app` block is **optional by presence** (like v7.1's `methods`): a manifest
+#' without one validates, and one with it is checked against
+#' `inst/schema/app_manifest.schema.json`.
+#'
 #' @param m parsed manifest (list)
 #' @param ver expected version, or `NULL` to skip the cross-check
 #' @return `m`, invisibly-but-returned (with `$ver` guaranteed)
@@ -329,6 +333,9 @@ validate_manifest <- function(m, ver = NULL) {
          call. = FALSE)
   if (!is.null(ver) && !identical(m$ver, ver))
     stop(sprintf("manifest declares ver '%s' but was fetched as '%s'", m$ver, ver), call. = FALSE)
+  # `app` is optional by presence, like v7.1's `methods`: every release published
+  # before the browser contract existed has no such key and must still validate.
+  if (!is.null(m$app)) validate_manifest_app(m$app)
   m
 }
 
@@ -369,6 +376,18 @@ validate_manifest <- function(m, ver = NULL) {
 #'   out with no `zone_set_key` and therefore no `pmtiles` — the app then cannot
 #'   draw a single zone outline on any version but the newest.
 #' @param extra named list merged into the manifest (e.g. `zone_sets`)
+#' @param app the `app` block, or `NULL` (default) for a manifest with **no `app`
+#'   key at all**. Give it `capabilities` (a named list of single logicals: `cell`,
+#'   `cell_model`, `taxonomy`, `alias`, `pmtiles_s3`) and optionally `built_at` and
+#'   `probed`; `schema`, `base` and `boot` are filled in from `ver` and `base`.
+#'
+#'   **The capabilities are INPUTS.** msens never derives them and never copies them
+#'   from `capabilities` above: what a static browser can fetch is a question about
+#'   the BUCKET, and only an anonymous HTTPS HEAD answers it. v7 and v7b both
+#'   advertise `cell_species_list` because the *server* can read a `cell_model` that
+#'   never left the server. The notebook probes with [app_capabilities()] and passes
+#'   the result here; see [app_manifest_block()], which builds the same block
+#'   standalone.
 #' @return a validated manifest list
 #' @importFrom DBI dbListTables dbListFields dbGetQuery
 #' @importFrom utils modifyList
@@ -379,7 +398,7 @@ manifest_build <- function(con, ver, status = "released",
                            grid_id = grid_for_ver(ver), base = atlas_base_url(),
                            metrics = NULL, capabilities = list(),
                            zone_tiles = list(), zone_sets = NULL,
-                           extra = list()) {
+                           extra = list(), app = NULL) {
   tbls <- DBI::dbListTables(con)
   has  <- function(x) x %in% tbls
   http <- sprintf("%s/%s", base, ver)
@@ -460,7 +479,63 @@ manifest_build <- function(con, ver, status = "released",
               grid_id = grid_id, id_field = id_field,
               capabilities = caps, tables = tables,
               metrics = met, zones = zones), extra)
+  # `app` is OPTIONAL: v9's manifest comes from build_version_manifest.qmd and
+  # v1-v7b's from backfill_versions.qmd through `extra =`, and a release whose
+  # bundle has not been published yet must carry no `app` key rather than an empty
+  # one that an app would read as "nothing is available".
+  if (!is.null(app)) m$app <- .manifest_app_block(app, ver, base)
   validate_manifest(m, ver = ver)
+}
+
+# Normalise and check the `app` block. Kept beside manifest_build() rather than in
+# app_bundle.R so a manifest can be built on a machine that never runs a bundle.
+.manifest_app_block <- function(app, ver, base) {
+  if (!is.list(app))
+    stop("`app` must be a list with a `capabilities` element", call. = FALSE)
+  caps <- app$capabilities
+  if (!is.list(caps) || !length(caps) || is.null(names(caps)) || !all(nzchar(names(caps))))
+    stop("`app$capabilities` must be a NON-EMPTY NAMED list of single logicals; ",
+         "they are PROBED by the notebook (anonymous HTTPS HEAD), never derived here",
+         call. = FALSE)
+  if (!all(vapply(caps, function(x) is.logical(x) && length(x) == 1L && !is.na(x),
+                  logical(1))))
+    stop("`app$capabilities` values must be single non-NA logicals; ",
+         "an unknown capability is FALSE, never absent and never NA", call. = FALSE)
+  want <- c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3")
+  if (length(miss <- setdiff(want, names(caps))))
+    stop(sprintf("`app$capabilities` is missing: %s", paste(miss, collapse = ", ")),
+         call. = FALSE)
+  if (length(extra <- setdiff(names(caps), want)))
+    stop(sprintf("`app$capabilities` has unknown key(s): %s (known: %s)",
+                 paste(extra, collapse = ", "), paste(want, collapse = ", ")),
+         call. = FALSE)
+  out <- list(
+    schema   = if (is.null(app$schema)) 1L else as.integer(app$schema),
+    base     = sprintf("%s/%s/app", base, ver),
+    boot     = sprintf("%s/%s/app/boot.json", base, ver),
+    built_at = app$built_at %||%
+      format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    capabilities = caps)
+  if (!is.null(app$probed)) out$probed <- app$probed
+  out
+}
+
+#' Validate a manifest's `app` block against `inst/schema/app_manifest.schema.json`
+#'
+#' Split out so [validate_manifest()] can call it only when the key is present: most
+#' releases have no `app` block, and their manifests must keep validating.
+#'
+#' @param app the `app` block
+#' @return `app`, invisibly; errors with the failing JSON pointers
+#' @export
+#' @concept version
+validate_manifest_app <- function(app) {
+  if (!requireNamespace("jsonvalidate", quietly = TRUE)) {
+    # a machine without the validator still gets the structural checks
+    .manifest_app_block(app, "v0", "https://example.invalid")
+    return(invisible(app))
+  }
+  app_validate(app, "manifest", "manifest$app")
 }
 
 #' Does this version support a named capability?
