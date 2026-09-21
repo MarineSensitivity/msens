@@ -9,7 +9,8 @@ stac_build(
   dir_out = NULL,
   cfg = NULL,
   nc_csv = NULL,
-  con = NULL
+  con = NULL,
+  model_asset = NULL
 )
 }
 \arguments{
@@ -22,6 +23,10 @@ stac_build(
 \item{nc_csv}{optional path to \code{nc_models.csv} for seasonal Items}
 
 \item{con}{optional open DBI connection (else opens read-only via \code{\link[=sdm_db_con]{sdm_db_con()}})}
+
+\item{model_asset}{for a LEGACY release (\code{model} keyed by \code{mdl_seq}, v1–v7b): data frame with
+\code{ds_key} and \code{cog_url} (the release's \code{tables/model_asset.parquet}), used for each dataset's
+example tile links. \code{NULL} builds the catalog without those links. Ignored from v8 on.}
 }
 \value{
 invisibly, the path to the root \code{catalog.json}

@@ -1,3 +1,18 @@
+# msens 0.42.1
+
+* **`stac_build()` works on a legacy release** (`model` keyed by `mdl_seq`: v1–v7b). It selected
+  `mdl_key` unconditionally, so a legacy build died with a binder error *after* writing the root and
+  version nodes — a half catalog — which is why v7b (v7.1) could not be registered. The id field
+  is now introspected. A legacy Item names only what such a release publishes: the
+  `tables/model_asset.parquet` registry (one content-addressed COG per `mdl_seq`) and `tables/`,
+  with example tile links through stock titiler `/cog` (new `model_asset` argument; omitted rather
+  than invented when absent) — not the `dist_merged/` Parquet and SQL tile factory of v8 onward.
+  v8+ output is unchanged (asserted).
+* **`stac_catalog_register(catalog_json, version)`** — adds a version to a DEPLOYED root catalog,
+  idempotently and in release order (`v7`, `v7b`, `v8`, …, `v10`), instead of overwriting it with
+  the single-version root `stac_build()` writes.
+* `test-stac.R`: the first tests of the STAC generators (both schemas, 27 assertions).
+
 # msens 0.42.0
 
 * **`.GRID_VER` gains `v7b = "usa05"`** — the v7.1 patch release id (`grid.R`), a surgical patch of

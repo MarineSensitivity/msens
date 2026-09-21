@@ -4,7 +4,14 @@
 \alias{stac_model_cell_item}
 \title{Model-surface Item for a (DuckDB-backed) dataset}
 \usage{
-stac_model_cell_item(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_)
+stac_model_cell_item(
+  ds,
+  cfg,
+  time_periods = NULL,
+  mdl_key_ex = NA_character_,
+  id_field = c("mdl_key", "mdl_seq"),
+  cog_ex = NA_character_
+)
 }
 \arguments{
 \item{ds}{one-row data.frame from \code{dataset}}
@@ -12,6 +19,17 @@ stac_model_cell_item(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_)
 \item{cfg}{config from \code{\link[=stac_cfg]{stac_cfg()}}}
 
 \item{time_periods}{character vector of distinct \code{model.time_period} for the dataset}
+
+\item{mdl_key_ex}{a representative \code{mdl_key} of the dataset, baked into the example tile links}
+
+\item{id_field}{\code{"mdl_key"} (v8 onward) or \code{"mdl_seq"} — a LEGACY release (v1–v7b, \code{usa05} grid).
+A legacy release publishes no \verb{dist_merged/} Parquet and is not served by the SQL tile
+factory: its surfaces are one content-addressed COG per model, registered in
+\code{tables/model_asset.parquet}, so that registry is the Item's data asset and the example tile
+links go through titiler's stock \verb{/cog}.}
+
+\item{cog_ex}{for a legacy release, the \code{cog_url} of a representative model (example links);
+\code{NA} omits the links rather than inventing one.}
 }
 \value{
 STAC Item as a list
