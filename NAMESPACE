@@ -345,7 +345,7 @@ importFrom(purrr,
 )
 importFrom(rlang,
   "%||%",
-  `:=`,
+  ":=",
   ensym
 )
 importFrom(rnaturalearth,ne_countries)

@@ -113,6 +113,20 @@ numbers for the same ground.
   decodes, into a different place. Longitudes are stored **unwrapped**, and
   `place_encode()` applies [unwrap_ring()] so the codec only ever sees them that way.
 
+## Fixed: a fresh install was broken on R 4.6.1
+
+* `@importFrom rlang ensym \`:=\`` grouped a STRING with a BACKQUOTED SYMBOL in one
+  directive, which makes `parseNamespaceFile()` deparse every element, so
+  `R CMD INSTALL` looked for an export literally named `` `:=` `` and refused:
+  *object '`:=`' is not exported by 'namespace:rlang'*. Quoted (`":="`) in the
+  roxygen source. **`devtools::load_all()` never builds a NAMESPACE**, which is why
+  2,392 passing tests never saw it.
+* **`inst/gates/fresh_install.R`** (new) is the check that would have: `R CMD INSTALL`
+  into a throwaway library under `tempdir()` — never the user's own — then
+  `library(msens)` from that library alone. Exit 0 / 1. `test-install.R` runs it
+  locally and also asserts, cheaply and everywhere, that no backquote survives into
+  NAMESPACE.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
