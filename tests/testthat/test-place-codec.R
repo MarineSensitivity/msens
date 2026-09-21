@@ -123,6 +123,47 @@ test_that("base64url is RFC 4648 section 5: no +, no /, no padding", {
   expect_identical(b64url_decode(""), raw())
 })
 
+test_that("the STRICT encoder refuses a still-wrapped ring; the high-level one normalizes", {
+  # D8 addendum, ruling 2: the byte-level encoder refuses a ring with a step of more
+  # than 180 degrees in BOTH languages (code `wrapped`), and the high-level entry
+  # normalizes first. Repairing silently inside the codec is what made the two
+  # languages produce different bytes for the same geometry.
+  wrapped <- sf::st_sfc(sf::st_polygon(list(cbind(
+    c(170, -170, -170, 170, 170), c(51, 51, 56, 56, 51)))), crs = 4326)
+  unwrapped <- sf::st_sfc(sf::st_polygon(list(cbind(
+    c(170, 190, 190, 170, 170), c(51, 51, 56, 56, 51)))), crs = 4326)
+  pl <- function(g) list(kind = "geom", name = "Bering box", geometry = g, precision = 3)
+  want <- Filter(function(x) x$id == "bering", fx$vectors)[[1]]$token
+
+  # strict: an informative rejection carrying the shared code and the actual step
+  e <- tryCatch(place_encode_strict(pl(wrapped)), error = function(e) e)
+  expect_s3_class(e, "msens_place_reject")
+  expect_identical(e$code, "wrapped")
+  expect_match(conditionMessage(e), "340.0000-degree step")
+  expect_match(conditionMessage(e), "unwrap_polygon")
+  # the same refusal through the hash-level entry with unwrap = FALSE
+  expect_error(place_encode(pl(wrapped), unwrap = FALSE), "wrapped")
+
+  # high-level: the same token as the already-unwrapped ring
+  expect_identical(place_encode(pl(wrapped)), want)
+  expect_identical(place_encode(pl(unwrapped)), want)
+  # ...and strict accepts the unwrapped one, byte for byte
+  expect_identical(place_encode_strict(pl(unwrapped)), want)
+})
+
+test_that("SEEDED FAULT: a strict encoder that silently unwraps goes red", {
+  wrapped <- sf::st_sfc(sf::st_polygon(list(cbind(
+    c(170, -170, -170, 170, 170), c(51, 51, 56, 56, 51)))), crs = 4326)
+  pl <- list(kind = "geom", name = "Bering box", geometry = wrapped, precision = 3)
+  # the fault: the strict path normalizes anyway, so it returns a token instead of
+  # refusing. Spelled out as what the test would then see.
+  silent <- place_encode(pl, unwrap = TRUE)
+  expect_type(silent, "character")
+  expect_error(place_encode_strict(pl), "wrapped")
+  expect_false(identical(tryCatch(place_encode_strict(pl), error = function(e) NA_character_),
+                         silent))
+})
+
 test_that("longitudes are stored UNWRAPPED: a Bering box runs 170..190", {
   v <- Filter(function(x) x$id == "bering", fx$vectors)[[1]]
   d <- place_decode(v$token)[[1]]

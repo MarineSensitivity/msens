@@ -86,6 +86,16 @@ numbers for the same ground.
 * The varint and zigzag work is done in **doubles**. A delta at precision 4 near 180
   degrees is 1.8e6 and zigzag doubles it, so `bitwAnd()` / `bitwShiftR()` (32-bit,
   signed) would be right on every test vector and wrong on a real Pacific place.
+* **`place_encode_strict()`** (new, exported) is the BYTE-LEVEL encoder, the twin of
+  the app's `encodeGeometry()`: it **refuses** a ring that still has a
+  consecutive-vertex step of more than 180 degrees, with code `wrapped`, because such
+  a ring is ambiguous and a codec that quietly repaired it would make the byte stream
+  depend on which language wrote it. `place_encode()` is the high-level entry and
+  runs [unwrap_polygon()] first, exactly as a TypeScript caller goes
+  `normalizeForAnalysis()` then `encodeGeometry()` — so the same high-level call
+  yields the same token on both sides and the same low-level call yields the same
+  error (master-plan D8 addendum, ruling 2). `place_encode(unwrap = FALSE)` is the
+  strict path for a whole hash.
 * **`sfc_geojson()`** (new, exported) is the twin of `geojson_sfc()`, so a place can
   be compared with the shared fixtures in the shape they store.
 * Precision is chosen, not passed: 3, or 4 when the bounding box is under 0.5

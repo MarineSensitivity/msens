@@ -603,6 +603,12 @@ b64url_decode <- function(s) {
 #' 3 by default, 4 when the bounding box is under 0.5 degrees, so the deviation is at
 #' most `0.5 * 10^-precision` — about 55 m at precision 3 and 5.5 m at precision 4.
 #'
+#' @section Two entries, one byte stream:
+#' `place_encode()` normalizes then encodes; [place_encode_strict()] only encodes,
+#' and **rejects** a ring that is still wrapped (code `wrapped`). See the details
+#' below — the split is master-plan D8 addendum ruling 2, after the two languages
+#' were found to disagree about the same geometry.
+#'
 #' @param x a place, or a list of places. A place is a list with `kind`:
 #'   `"geom"` (`name`, `geometry`, optional `precision`), `"zone"` (`set`, `keys`) or
 #'   `"upload"` (`name`, `digest`).
@@ -617,12 +623,47 @@ b64url_decode <- function(s) {
 #' place_decode(h)[[1]]$name
 #' @export
 #' @concept app
-place_encode <- function(x) {
+place_encode <- function(x, unwrap = TRUE) {
   places <- if (!is.null(x$kind)) list(x) else x
-  paste(vapply(places, .g1_encode_one, ""), collapse = "~")
+  paste(vapply(places, function(p) .g1_encode_one(p, unwrap = unwrap), ""),
+        collapse = "~")
 }
 
-.g1_encode_one <- function(p) {
+#' @rdname place_encode
+#'
+#' @details
+#' `place_encode_strict()` is the BYTE-LEVEL encoder, the twin of the app's
+#' `encodeGeometry()`. It **refuses** a ring that still has a consecutive-vertex step
+#' of more than 180 degrees, with code `wrapped` — because such a ring is ambiguous,
+#' and a codec that quietly repaired it would make the byte stream depend on which
+#' language wrote it. `place_encode()` is the high-level entry: it runs
+#' [unwrap_polygon()] first and then calls this, exactly as a TypeScript caller goes
+#' `normalizeForAnalysis()` then `encodeGeometry()`. So the same high-level call
+#' yields the same token on both sides, and the same low-level call yields the same
+#' error.
+#'
+#' `place_encode(unwrap = FALSE)` is the strict path for a whole hash.
+#'
+#' @param unwrap normalize each geometry with [unwrap_polygon()] before encoding
+#'   (`TRUE`, the default). `FALSE` is the strict byte-level behaviour.
+#' @export
+#' @concept app
+place_encode_strict <- function(x) place_encode(x, unwrap = FALSE)
+
+# a ring is encodable only once every edge is short; see ruling 2 of the D8 addendum
+.g1_assert_unwrapped <- function(m) {
+  lon <- as.numeric(m[, 1])
+  if (length(lon) < 2L) return(invisible(TRUE))
+  d <- abs(diff(lon))
+  if (any(d > 180))
+    .g1_reject("wrapped", sprintf(
+      paste("a ring still has a %.4f-degree step between consecutive vertices.",
+            "Encode the UNWRAPPED ring: run unwrap_polygon() first, or call",
+            "place_encode(), which does."), max(d)))
+  invisible(TRUE)
+}
+
+.g1_encode_one <- function(p, unwrap = TRUE) {
   kind <- p$kind %||% "geom"
   if (identical(kind, "zone")) {
     if (!p$set %in% .G1_ZONE_SETS)
@@ -641,7 +682,10 @@ place_encode <- function(x) {
   g <- sf::st_geometry(p$geometry)
   if (!is.na(sf::st_crs(g)) && sf::st_crs(g) != sf::st_crs(4326))
     g <- sf::st_transform(g, 4326)
-  g <- unwrap_polygon(g)                       # the codec only ever sees unwrapped rings
+  # the codec only ever sees unwrapped rings: the high-level entry normalizes, the
+  # strict one refuses. Repairing silently HERE is what made the two languages
+  # disagree about the same geometry.
+  if (isTRUE(unwrap)) g <- unwrap_polygon(g)
   sfg <- g[[1]]
   polys <- if (inherits(sfg, "MULTIPOLYGON")) unclass(sfg) else list(unclass(sfg))
 
@@ -661,6 +705,7 @@ place_encode <- function(x) {
       n <- nrow(m)
       if (n > 1L && isTRUE(all.equal(unname(m[1, ]), unname(m[n, ])))) m <- m[-n, , drop = FALSE]
       if (nrow(m) < 3L) .g1_reject("degenerate", "a ring with fewer than 3 vertices")
+      .g1_assert_unwrapped(m)
       out <- c(out, .g1_varint(nrow(m)))
       qx <- round(m[, 1] * mul); qy <- round(m[, 2] * mul)
       for (i in seq_len(nrow(m))) {

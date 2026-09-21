@@ -2,10 +2,13 @@
 % Please edit documentation in R/place.R
 \name{place_encode}
 \alias{place_encode}
+\alias{place_encode_strict}
 \alias{place_decode}
 \title{Encode places into a URL hash, and decode them back (\code{g1})}
 \usage{
-place_encode(x)
+place_encode(x, unwrap = TRUE)
+
+place_encode_strict(x)
 
 place_decode(hash)
 }
@@ -13,6 +16,9 @@ place_decode(hash)
 \item{x}{a place, or a list of places. A place is a list with \code{kind}:
 \code{"geom"} (\code{name}, \code{geometry}, optional \code{precision}), \code{"zone"} (\code{set}, \code{keys}) or
 \code{"upload"} (\code{name}, \code{digest}).}
+
+\item{unwrap}{normalize each geometry with \code{\link[=unwrap_polygon]{unwrap_polygon()}} before encoding
+(\code{TRUE}, the default). \code{FALSE} is the strict byte-level behaviour.}
 
 \item{hash}{the hash value, with or without a leading \verb{#}}
 }
@@ -26,6 +32,19 @@ versioned binary codec, and \strong{every analysis runs on the decoded geometry}
 link reproduces its numbers rather than approximating them. R needs to read those
 links, which is why this is the twin of the app's \code{placeCodec.ts} rather than a
 second design.
+}
+\details{
+\code{place_encode_strict()} is the BYTE-LEVEL encoder, the twin of the app's
+\code{encodeGeometry()}. It \strong{refuses} a ring that still has a consecutive-vertex step
+of more than 180 degrees, with code \code{wrapped} — because such a ring is ambiguous,
+and a codec that quietly repaired it would make the byte stream depend on which
+language wrote it. \code{place_encode()} is the high-level entry: it runs
+\code{\link[=unwrap_polygon]{unwrap_polygon()}} first and then calls this, exactly as a TypeScript caller goes
+\code{normalizeForAnalysis()} then \code{encodeGeometry()}. So the same high-level call
+yields the same token on both sides, and the same low-level call yields the same
+error.
+
+\code{place_encode(unwrap = FALSE)} is the strict path for a whole hash.
 }
 \section{The format}{
 
@@ -53,6 +72,14 @@ needs no antimeridian guess; \code{\link[=unwrap_ring]{unwrap_ring()}} is what p
 
 3 by default, 4 when the bounding box is under 0.5 degrees, so the deviation is at
 most \code{0.5 * 10^-precision} — about 55 m at precision 3 and 5.5 m at precision 4.
+}
+
+\section{Two entries, one byte stream}{
+
+\code{place_encode()} normalizes then encodes; \code{\link[=place_encode_strict]{place_encode_strict()}} only encodes,
+and \strong{rejects} a ring that is still wrapped (code \code{wrapped}). See the details
+below — the split is master-plan D8 addendum ruling 2, after the two languages
+were found to disagree about the same geometry.
 }
 
 \examples{
