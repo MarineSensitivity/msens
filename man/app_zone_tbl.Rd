@@ -4,17 +4,21 @@
 \alias{app_zone_tbl}
 \title{The ONE zone table each spatial unit publishes}
 \usage{
-app_zone_tbl(con, geom_keys = list(), zone_sets = NULL)
+app_zone_tbl(con, manifest = NULL, geom_keys = list(), zone_sets = NULL)
 }
 \arguments{
 \item{con}{a DBI connection to a release database}
 
-\item{geom_keys}{named list \verb{zone_type -> keys present in the published geometry}}
+\item{manifest}{the release manifest (from \code{\link[=manifest_build]{manifest_build()}} or
+\code{\link[=atlas_manifest]{atlas_manifest()}}); its \code{zones[]} rows name the table per field}
 
-\item{zone_sets}{the zone-set registry (\code{data/zone_sets.csv}), or \code{NULL}}
+\item{geom_keys}{named list \verb{zone_type -> keys present in the published geometry},
+checked against the manifest's choice}
+
+\item{zone_sets}{the zone-set registry (\code{data/zone_sets.csv}), cross-check only}
 }
 \value{
-a data frame \code{fld}, \code{tbl}, \code{why}, one row per field
+a data frame \code{fld}, \code{tbl}, \code{why}, \code{n_tables}, one row per field
 }
 \description{
 A release may carry more than one \code{zone.tbl} for a single \code{fld}. v2 has two for
@@ -22,29 +26,32 @@ A release may carry more than one \code{zone.tbl} for a single \code{fld}. v2 ha
 \code{ply_subregions_2026} (AK, GA, PA, USA), two keys in common — and because
 \code{app_zone_taxon()} dropped \code{zone_tbl}, \verb{(zone_fld, zone_value, key)} came out
 duplicated \strong{13,077 times}: the same taxon in the same subregion with two
-different \code{area_km2} (3,394,012 and 3,527,156 for \emph{Arenaria interpres} in AK).
-\code{boot$zones$subregion} had 6 rows, the two key sets merged, and which table won
-the two shared keys was unspecified. The app would have listed every taxon twice.
+different \code{area_km2}. The app would have listed every taxon twice.
 }
-\details{
-So a bundle publishes exactly one table per field, everywhere it is keyed by
-zone, and the other table's rows are \strong{dropped, never merged}. The choice is
-made from evidence, in this order:
-\enumerate{
-\item \strong{\code{geom_keys}} — the keys in the published geometry. The table whose key set
-matches exactly wins; failing that, the one with the largest overlap. This is
-the strongest evidence there is: it is the geometry the app will actually draw.
-\item \strong{\code{zone_sets}} — the zone-set registry's \code{source} basename. v2's
-\code{ply_subregions_2025} is the source of the published \code{subregion_2025-08}
-(\code{v1/ply_subregions_2025.gpkg}); \code{ply_subregions_2026} is the source of no
-published subregion set at all.
-\item \strong{\code{date_created}}, most recent first, ties broken by the greatest \code{tbl}. Only
-when msens has neither input — and it is recorded as such, because "newest"
-is a guess: on v2 it would pick \code{ply_subregions_2026}, whose keys match no
-published geometry.
+\section{The manifest decides}{
+
+\strong{The release's own \code{manifest.json} names the table.} Its \code{zones[]} rows carry
+\code{fld} \emph{and} \code{tbl}, and v2's says \code{subregion_key -> ply_subregions_2025}
+(\code{zone_set_key: subregion_2025-06}). That is the first and normally the only
+evidence, and it is already an input of \code{\link[=app_bundle_build]{app_bundle_build()}}.
+
+Everything else is a \strong{check}, not a second opinion:
+\itemize{
+\item \code{geom_keys} — the keys in the published geometry — must AGREE with the
+manifest. A disagreement means the notebook was handed the wrong GeoPackage,
+which is a defect to stop on, not a tie to break.
+\item \code{zone_sets} — the registry's \code{source} basename — is a cross-check,
+recorded in \code{why}, never a chooser.
 }
 
-The winner is recorded in \verb{boot$units[].zone_tbl} so the notebook's geometry check
-can assert its GeoPackage holds the same keys.
+There is no fallback guess. A field with two tables and no manifest row is an
+\strong{error}: "most recent \code{date_created}" looked reasonable and picked
+\code{ply_subregions_2026} for v2, whose keys match no published geometry — two
+defensible answers depending on who called, which is the ambiguity this rule
+exists to remove.
+
+The winner is recorded in \verb{boot$units[].zone_tbl} so the notebook's geometry
+check can assert its GeoPackage holds the same keys.
 }
+
 \concept{app}

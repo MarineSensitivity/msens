@@ -219,15 +219,22 @@ numbers for the same ground.
   different `area_km2` — and `boot$zones$subregion` had 6 rows for 4 subregions,
   with the shared keys resolved arbitrarily. The app would have listed every taxon
   twice.
-* **`app_zone_tbl()`** (new, exported) chooses ONE table per field from evidence, in
-  order: the keys of the published geometry (`geom_keys`), then the zone-set
-  registry's `source` basename (`zone_sets`), then — and only then, saying so —
-  the most recent `date_created`. v2 publishes **`ply_subregions_2025`**, the source
-  of the published `subregion_2025-08` zone set; `ply_subregions_2026` is the source
-  of no published subregion geometry at all. The other table's rows are **dropped,
-  never merged**, from `zone_taxon.parquet`, `boot$zones` and `boot$units`, and the
-  winner is recorded in **`boot$units[].zone_tbl`** so a geometry check can assert
-  its GeoPackage holds the same keys.
+* **`app_zone_tbl()`** (new, exported): **the release's own `manifest.json` names
+  the table.** Its `zones[]` rows carry `fld` *and* `tbl`, and v2's says
+  `subregion_key -> ply_subregions_2025` (`zone_set_key: subregion_2025-06`). That
+  is the first and normally the only evidence, and it is already an input of
+  `app_bundle_build()`. Everything else is a **check**: `geom_keys` must AGREE with
+  it or the build **stops** (a key the named table lacks means the wrong GeoPackage
+  was handed in — a defect, not a tie to break; keys the geometry lacks are fine,
+  since the `USA`/`FULL` rollups are scored and have no polygon), and `zone_sets` is
+  a cross-check recorded in `why`. **There is no fallback guess**: a field with two
+  tables and no manifest row is an error naming the field and the tables. An earlier
+  "most recent `date_created`" rule looked reasonable and picked
+  `ply_subregions_2026` for v2, whose keys match no published geometry — two
+  defensible answers depending on the caller, which is the ambiguity the rule exists
+  to remove. The loser's rows are **dropped, never merged**, from
+  `zone_taxon.parquet`, `boot$zones` and `boot$units`, and the winner is recorded in
+  **`boot$units[].zone_tbl`**.
 * **`app_zones_unique()`** (new, exported) is a builder-level **hard stop**:
   `(zone_fld, zone_value, key)` unique in `zone_taxon`, and each key once per
   `boot$zones` unit.
