@@ -24,7 +24,7 @@ relation src with (ms_merge_key, ds_key, cell_id, val)."><script async src="http
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.41.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -63,7 +63,16 @@ relation <code>src</code> with <code>(ms_merge_key, ds_key, cell_id, val)</code>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">turtle_sql</span><span class="op">(</span><span class="va">turtle_ds</span>, <span class="va">suit_ds</span>, <span class="va">ch_keys</span>, src <span class="op">=</span> <span class="st">"turtle_src"</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">turtle_sql</span><span class="op">(</span></span>
+<span>  <span class="va">turtle_ds</span>,</span>
+<span>  <span class="va">suit_ds</span>,</span>
+<span>  <span class="va">ch_keys</span>,</span>
+<span>  src <span class="op">=</span> <span class="st">"turtle_src"</span>,</span>
+<span>  suit_min <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  fill <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  half_even <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  ch_outer <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -87,6 +96,26 @@ over the survivors is the value).</p></dd>
 <dt id="arg-src">src<a class="anchor" aria-label="anchor" href="#arg-src"></a></dt>
 <dd><p>character; name of the source relation to read (default <code>"turtle_src"</code>).</p></dd>
 
+
+<dt id="arg-suit-min">suit_min<a class="anchor" aria-label="anchor" href="#arg-suit-min"></a></dt>
+<dd><p>numeric; suitability strictly below this is ABSENT, before the multiply
+(default <code>0</code> = keep everything; v7.1 uses <code>50</code>).</p></dd>
+
+
+<dt id="arg-fill">fill<a class="anchor" aria-label="anchor" href="#arg-fill"></a></dt>
+<dd><p>numeric or <code>NA</code>; suitability assumed for an ER cell with none retained (default <code>1</code>,
+the v1–v9 floor-of-1 range fill). <code>NA</code> DROPS such a cell unless critical habitat covers it.</p></dd>
+
+
+<dt id="arg-half-even">half_even<a class="anchor" aria-label="anchor" href="#arg-half-even"></a></dt>
+<dd><p>logical; <code>TRUE</code> rounds half-to-even (<code>round_even()</code>, what R does and what built
+v1–v7; DuckDB <code><a href="https://rdrr.io/r/base/Round.html" class="external-link">round()</a></code> differs on 28,598 v7 cells where ER = 50). Default <code>FALSE</code>.</p></dd>
+
+
+<dt id="arg-ch-outer">ch_outer<a class="anchor" aria-label="anchor" href="#arg-ch-outer"></a></dt>
+<dd><p>logical; <code>TRUE</code> keeps critical-habitat cells OUTSIDE the ER footprint (v1–v7's
+union). Default <code>FALSE</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -97,6 +126,25 @@ over the survivors is the value).</p></dd>
     <p>This is what keeps an Endangered species from painting flat: the plain rule values every
 range cell at the taxon's governing ER (<code>max(er, suit)</code> = 100 everywhere for <code>NMFS:EN</code>), while
 here the ER varies by DPS and the suitability still shows through.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="core-habitat-suit-min-fill-v-">Core habitat (<code>suit_min</code>, <code>fill</code>) — v7.1<a class="anchor" aria-label="anchor" href="#core-habitat-suit-min-fill-v-"></a></h2>
+
+
+<p>The defaults (<code>suit_min = 0</code>, <code>fill = 1</code>, <code>half_even = FALSE</code>, <code>ch_outer = FALSE</code>) reproduce the
+v8/v9 rule exactly. v7.1 thresholds the suitability term <em>before</em> the multiply
+(<code>suit_min = 50</code>, AquaMaps' own core-habitat default) and drops the floor-of-1 range fill
+(<code>fill = NA</code>), because a threshold alone removes none of it: for five of the six sea turtles
+half to nine tenths of the merged US area is fill, with no suitability value at all.</p>
+<p><code>suit_min &gt; 0</code> <strong>with <code>fill = 1</code> kept</strong> does not shrink a footprint, it RE-CREATES the fringe as
+a field of 1s: every cell whose suitability fell below the cut comes back at the floor. Under an
+ecoregional min–max rescale that field is then stretched back over 0–100, which is why the
+Aleutian Arc goes UP (70.9 → 74.5) under that combination. <code>fill = NA</code> is the pairing that means
+"no core habitat here".</p>
+<p>Critical habitat is never trimmed by either knob: <code>ch_keys</code> join the <strong>ER footprint</strong>, not the
+multiplied value, so a CH cell whose suitability was thresholded away (or that never had one)
+survives at its designation's value. <code>ch_outer = TRUE</code> additionally keeps CH cells that lie
+outside the ER footprint (v1–v7 unioned them; 31 such cells exist in v7).</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
