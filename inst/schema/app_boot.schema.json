@@ -72,6 +72,10 @@
         "properties": {
           "zone_type":    { "type": "string" },
           "zone_set_key": { "type": ["string", "null"] },
+          "zone_tbl": {
+            "type": ["string", "null"],
+            "description": "The ONE zone.tbl this unit publishes. A release may carry more than one table for a field (v2 has two for subregion_key); the bundle picks one and drops the other's rows, and names it here so a geometry check can assert its GeoPackage holds the same keys."
+          },
           "fld":          { "type": "string", "pattern": "_key$" },
           "label":        { "type": "string" },
           "pmtiles":      { "type": "string" },

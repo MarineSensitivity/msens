@@ -467,7 +467,8 @@ test_that("zone_taxon is normalized to ONE schema, er_score always a 0-1 fractio
                       "is_mbta", "mdl_key", "area_km2", "avg_suit") %in% names(d)),
                 info = gen)
     expect_true(all(is.na(d$er_score) | (d$er_score >= 0 & d$er_score <= 1)), info = gen)
-    expect_equal(nrow(d), 3, info = gen)
+    # 3 taxa per published zone: v2 also carries a subregion, so 6
+    expect_equal(nrow(d), if (gen == "v2") 6 else 3, info = gen)
   })
   # v3-v7 stored er_score on the RAW 1-100 scale; the normalizer divides
   with_synth("v7", function(con) expect_equal(sort(app_zone_taxon(con)$er_score),
@@ -958,7 +959,7 @@ test_that("REGRESSION: zone_taxon ids are text without .0 when the release store
 
     zt <- app_zone_taxon(con)
     expect_type(zt$taxon_id, "character")            # <- the loop, not as.character()
-    expect_identical(zt$taxon_id, c("137162", "126436", "137206"), info = gen)
+    expect_setequal(zt$taxon_id, c("137162", "126436", "137206"))
     expect_false(any(grepl("[.]", zt$taxon_id)), info = gen)
 
     # and the WRITTEN object: a DOUBLE here is exactly what the smoke gate caught
@@ -973,7 +974,7 @@ test_that("REGRESSION: zone_taxon ids are text without .0 when the release store
     tx <- app_taxon_table(con)
     expect_type(tx$taxon_id, "character")
     common <- intersect(zt$taxon_id, tx$taxon_id)
-    expect_equal(length(common), 3L, info = gen)
+    expect_equal(length(common), 3L, info = gen)   # intersect() is already unique
     expect_setequal(common, c("137162", "126436", "137206"))
   })
 })
@@ -1005,5 +1006,114 @@ test_that("REGRESSION: model joins match on a DOUBLE mdl_seq", {
     sh <- app_taxon_shards(con, gen)
     cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
     expect_gt(sum(vapply(cards, function(cd) length(cd$inputs), 0L)), 0L)
+  })
+})
+
+# ---- one zone table per field ------------------------------------------------
+
+test_that("REGRESSION: a field with two zone tables publishes exactly one", {
+  # v2 carries ply_subregions_2025 (AK, AKL48, L48, USA) and ply_subregions_2026
+  # (AK, GA, PA, USA) both under subregion_key. app_zone_taxon() dropped zone_tbl,
+  # so 13,077 (zone_fld, zone_value, key) groups came out duplicated -- the same
+  # taxon in the same subregion with two different area_km2 -- and boot$zones$
+  # subregion had six rows for four subregions.
+  with_synth("v2", function(con) {
+    n_tbl <- DBI::dbGetQuery(con, "SELECT count(DISTINCT tbl) n FROM zone
+                                    WHERE fld = 'subregion_key'")$n
+    expect_equal(n_tbl, 2L)                    # the fixture is the real shape
+
+    # the registry names ply_subregions_2025 as the source of a published zone set
+    zs <- data.frame(zone_set_key = "subregion_2025-08", zone_type = "subregion",
+                     source = "v1/ply_subregions_2025.gpkg", stringsAsFactors = FALSE)
+    ch <- app_zone_tbl(con, zone_sets = zs)
+    expect_identical(ch$tbl[ch$fld == "subregion_key"], "ply_subregions_2025")
+    expect_match(ch$why[ch$fld == "subregion_key"], "published zone set")
+
+    # geometry keys are stronger evidence still, and agree
+    ch2 <- app_zone_tbl(con, geom_keys = list(subregion = c("SR1", "SR2")))
+    expect_identical(ch2$tbl[ch2$fld == "subregion_key"], "ply_subregions_2025")
+    expect_match(ch2$why[ch2$fld == "subregion_key"], "exactly")
+
+    # with NO evidence it falls back to the newest, and SAYS it is a guess
+    ch3 <- app_zone_tbl(con)
+    expect_identical(ch3$tbl[ch3$fld == "subregion_key"], "ply_subregions_2026")
+    expect_match(ch3$why[ch3$fld == "subregion_key"], "A GUESS")
+
+    # the other table's rows are DROPPED, never merged
+    zt <- app_zone_taxon(con, ch)
+    expect_equal(nrow(zt), 6L)                 # 3 taxa x (1 programarea + 1 SR1), not 9
+    expect_setequal(zt$zone_value, c("AAA", "SR1"))
+    expect_false("ply_subregions_2026" %in% zt$zone_tbl)
+    k <- paste(zt$zone_fld, zt$zone_value, zt$mdl_key)
+    expect_equal(length(unique(k[duplicated(k)])), 0L)
+
+    z <- app_zones(con, chosen = ch)
+    expect_setequal(vapply(z$subregion, function(x) x$key, ""), c("SR1", "SR2"))
+    expect_false(anyDuplicated(vapply(z$subregion, function(x) x$key, "")) > 0)
+  })
+})
+
+test_that("the chosen zone_tbl is recorded in boot$units", {
+  with_synth("v2", function(con) {
+    DBI::dbExecute(con, "INSERT INTO zone_metric SELECT zone_seq,
+      (SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'), 10
+      FROM zone WHERE tbl = 'ply_subregions_2025'")
+    m <- manifest_build(con, "v2", base = BASE,
+                        zone_tiles = list(`subregion_2025-08` = "https://x/z.pmtiles"),
+                        zone_sets = NULL)
+    m$zones$zone_set_key <- "subregion_2025-08"
+    m$zones$pmtiles <- "https://x/z.pmtiles"
+    gk <- list(subregion = c("SR1", "SR2"))
+    ch <- app_zone_tbl(con, geom_keys = gk)
+    u  <- app_units(con, m, geom_keys = gk, chosen = ch)
+    sr <- Filter(function(x) x$zone_type == "subregion", u)
+    expect_length(sr, 1)
+    expect_identical(sr[[1]]$zone_tbl, "ply_subregions_2025")
+    expect_setequal(unlist(sr[[1]]$keys), c("SR1", "SR2"))
+  })
+})
+
+test_that("app_zones_unique is a hard stop on a duplicated zone key", {
+  # hand-built duplicates, so the assertion is tested rather than assumed
+  zt <- data.frame(zone_fld = "subregion_key", zone_value = c("AK", "AK", "GA"),
+                   mdl_key = c("1", "1", "2"), stringsAsFactors = FALSE)
+  boot_ok  <- list(zones = list(subregion = list(list(key = "AK"), list(key = "GA"))))
+  boot_dup <- list(zones = list(subregion = list(list(key = "AK"), list(key = "AK"))))
+
+  expect_error(app_zones_unique(zt, boot_ok), "duplicated (zone_fld, zone_value",
+               fixed = TRUE)
+  expect_error(app_zones_unique(zt, boot_ok), "subregion_key / AK / 1", fixed = TRUE)
+  expect_error(app_zones_unique(zt[-2, ], boot_dup), "lists AK more than once")
+  expect_true(app_zones_unique(zt[-2, ], boot_ok))
+  expect_true(app_zones_unique(NULL, boot_ok))       # a release with no zone_taxon
+})
+
+test_that("every generation's bundle holds each zone exactly once", {
+  for (gen in gens) with_synth(gen, function(con) {
+    d <- withr::local_tempdir()
+    b <- app_bundle_build(con, gen, d, manifest = manifest_build(con, gen, base = BASE),
+                          base = BASE)
+    expect_silent(app_zones_unique(app_zone_taxon(con), b$boot))
+  })
+})
+
+test_that("the builder STOPS when duplicates reach zone_taxon anyway", {
+  # `zone_tbl` is how app_zone_taxon() drops the other table's rows. A release with
+  # two tables for one field but NO zone_tbl column on zone_taxon cannot be filtered
+  # -- and then the builder-level assertion is the only thing between that and a
+  # bundle listing every taxon twice. So it is a hard stop, not a warning.
+  with_synth("v2", function(con) {
+    DBI::dbExecute(con, "CREATE OR REPLACE TABLE zone_taxon AS
+                           SELECT * EXCLUDE (zone_tbl) FROM zone_taxon")
+    expect_false("zone_tbl" %in% DBI::dbListFields(con, "zone_taxon"))
+
+    zt <- app_zone_taxon(con)                       # cannot filter: duplicates survive
+    k <- paste(zt$zone_fld, zt$zone_value, zt$mdl_key)
+    expect_gt(length(unique(k[duplicated(k)])), 0L)
+
+    expect_error(
+      app_bundle_build(con, "v2", withr::local_tempdir(),
+                       manifest = manifest_build(con, "v2", base = BASE), base = BASE),
+      "duplicated (zone_fld, zone_value", fixed = TRUE)
   })
 })

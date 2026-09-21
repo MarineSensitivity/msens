@@ -48,6 +48,9 @@ if (file.exists(file.path(root, "DESCRIPTION")) &&
 suppressMessages({library(DBI); library(duckdb)})
 
 taxonomy_csv <- Sys.getenv("MSENS_TAXONOMY_CSV", "")
+zs_csv <- Sys.getenv("MSENS_ZONE_SETS", "")
+zone_sets <- if (nzchar(zs_csv) && file.exists(zs_csv))
+  utils::read.csv(zs_csv, stringsAsFactors = FALSE) else NULL
 dir_out <- if (length(args) >= 3) args[3] else
   file.path(tempdir(), paste0("app_smoke_", ver))
 unlink(dir_out, recursive = TRUE)
@@ -68,7 +71,8 @@ chk <- function(ok, label, detail = "") {
 t0 <- Sys.time()
 m  <- manifest_build(con, ver, base = atlas_base_url())
 b  <- app_bundle_build(con, ver, dir_out, manifest = m, cell_tiles = tiles_on,
-                       taxonomy_csv = if (nzchar(taxonomy_csv)) taxonomy_csv else NULL)
+                       taxonomy_csv = if (nzchar(taxonomy_csv)) taxonomy_csv else NULL,
+                       zone_sets = zone_sets)
 say(sprintf("built in %.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))))
 
 say("\n-- structure ----------------------------------------------------------")
@@ -82,6 +86,28 @@ chk(b$n_shards > 0 && b$n_alias > 0, "taxon/ and alias/ shards exist",
     sprintf("%d / %d", b$n_shards, b$n_alias))
 chk(!length(b$failed), "every stage completed",
     if (length(b$failed)) paste(names(b$failed), collapse = ", ") else "")
+
+say("\n-- one zone table per field -------------------------------------------")
+ch <- app_zone_tbl(con, zone_sets = zone_sets)
+for (i in seq_len(nrow(ch)))
+  say(sprintf("  %-18s -> %-26s %s", ch$fld[i], ch$tbl[i],
+              if (ch$n_tables[i] > 1) sprintf("(%d tables: %s)", ch$n_tables[i], ch$why[i]) else ""))
+zt_chk <- app_zone_taxon(con, ch)
+kc <- intersect(c("key", "mdl_key"), names(zt_chk))[1]
+dups <- if (is.na(kc) || !nrow(zt_chk)) 0L else {
+  k <- paste(zt_chk$zone_fld, zt_chk$zone_value, zt_chk[[kc]])
+  length(unique(k[duplicated(k)]))
+}
+chk(dups == 0L, "(zone_fld, zone_value, key) is unique in zone_taxon",
+    sprintf("%d rows, %d dup groups", nrow(zt_chk), dups))
+chk(tryCatch({app_zones_unique(zt_chk, b$boot); TRUE}, error = function(e) FALSE),
+    "every boot$zones unit lists each key once",
+    paste(vapply(names(b$boot$zones), function(u)
+      sprintf("%s:%d", u, length(b$boot$zones[[u]])), ""), collapse = " "))
+ztp <- file.path(dir_out, "zone_taxon.parquet")
+say(sprintf("  ZONETAB %s | %d | %s | %d | %s", ver, nrow(zt_chk),
+            if (file.exists(ztp)) format(file.size(ztp)) else "-", dups,
+            paste(sprintf("%s=%s", sub("_key$", "", ch$fld), ch$tbl), collapse = " ")))
 
 say("\n-- boot$tables describes app/ exactly --------------------------------")
 chk(tryCatch({app_tables_match(dir_out, b$boot); TRUE}, error = function(e) FALSE),

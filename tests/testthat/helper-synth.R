@@ -90,11 +90,34 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2", "v1")) {
     fld = "programarea_key", v = c("AAA", "BBB"), stringsAsFactors = FALSE)
   names(zone)[4] <- vcol
   if (!old) zone$zone_set_key <- "programarea_2026-01"
+  # v2's real shape: TWO tables for ONE field, two keys in common, different areas.
+  # Dropping `zone_tbl` merged them into 13,077 duplicated (zone, taxon) rows.
+  if (identical(gen, "v2")) {
+    # an ADDITIONAL field with two tables, leaving programarea_key alone: two
+    # subregion tables sharing the key SR1, exactly as v2 shares AK and USA
+    z2 <- data.frame(
+      zone_seq = 3:6,
+      tbl = c("ply_subregions_2025", "ply_subregions_2025",
+              "ply_subregions_2026", "ply_subregions_2026"),
+      fld = "subregion_key", v = c("SR1", "SR2", "SR1", "SR3"),
+      stringsAsFactors = FALSE)
+    names(z2)[4] <- vcol
+    zone$date_created <- "2026-01-12"
+    z2$date_created <- c("2025-08-06", "2025-08-06", "2026-01-12", "2026-01-12")
+    zone <- rbind(zone, z2)
+  }
   DBI::dbWriteTable(con, "zone", zone)
   DBI::dbWriteTable(con, "zone_cell", data.frame(
     zone_seq    = rep(1:2, each = 4),
     cell_id     = id,
     pct_covered = c(100, 100, 100, 50, 100, 100, 100, 100)))
+  if (identical(gen, "v2"))
+    # the two subregion tables cover the SAME cells with different weights, so a
+    # merge shows up as a different area_km2 for the same (zone, taxon)
+    DBI::dbAppendTable(con, "zone_cell", data.frame(
+      zone_seq = rep(3:6, each = 4), cell_id = rep(id[1:4], 4),
+      pct_covered = c(100, 100, 100, 50,  100, 100, 50, 50,
+                      100,  50, 100, 50,  100, 100, 100, 100)))
 
   # zone_metric by the PUBLISHED identity: sum(coalesce(val,0)*pct)/sum(pct) over
   # every zone cell. Written out rather than computed so the test asserts against a
@@ -188,6 +211,14 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2", "v1")) {
     # v1/v2 stored a 0-1 rl_score; v3-v7 a 1-100 er_score beside rl_code
     if (gen %in% c("v1", "v2")) zt$rl_score <- c(0.01, 0.25, 0.05)
     else                      zt$er_score <- c(1, 25, 5)
+    if (identical(gen, "v2")) {
+      sr <- zt
+      sr$zone_tbl <- "ply_subregions_2025"; sr$zone_fld <- "subregion_key"
+      sr$zone_value <- "SR1"
+      sr2 <- sr; sr2$zone_tbl <- "ply_subregions_2026"
+      sr2$area_km2 <- sr2$area_km2 * 1.04    # the same taxon, a different area
+      zt <- rbind(zt, sr, sr2)               # SR1 appears under BOTH tables
+    }
     DBI::dbWriteTable(con, "zone_taxon", zt)
   } else {
     DBI::dbWriteTable(con, "taxon", data.frame(

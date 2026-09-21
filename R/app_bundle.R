@@ -151,6 +151,106 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
   tb[length(tb)]
 }
 
+#' The ONE zone table each spatial unit publishes
+#'
+#' A release may carry more than one `zone.tbl` for a single `fld`. v2 has two for
+#' `subregion_key` — `ply_subregions_2025` (AK, AKL48, L48, USA) and
+#' `ply_subregions_2026` (AK, GA, PA, USA), two keys in common — and because
+#' `app_zone_taxon()` dropped `zone_tbl`, `(zone_fld, zone_value, key)` came out
+#' duplicated **13,077 times**: the same taxon in the same subregion with two
+#' different `area_km2` (3,394,012 and 3,527,156 for *Arenaria interpres* in AK).
+#' `boot$zones$subregion` had 6 rows, the two key sets merged, and which table won
+#' the two shared keys was unspecified. The app would have listed every taxon twice.
+#'
+#' So a bundle publishes exactly one table per field, everywhere it is keyed by
+#' zone, and the other table's rows are **dropped, never merged**. The choice is
+#' made from evidence, in this order:
+#'
+#' 1. **`geom_keys`** — the keys in the published geometry. The table whose key set
+#'    matches exactly wins; failing that, the one with the largest overlap. This is
+#'    the strongest evidence there is: it is the geometry the app will actually draw.
+#' 2. **`zone_sets`** — the zone-set registry's `source` basename. v2's
+#'    `ply_subregions_2025` is the source of the published `subregion_2025-08`
+#'    (`v1/ply_subregions_2025.gpkg`); `ply_subregions_2026` is the source of no
+#'    published subregion set at all.
+#' 3. **`date_created`**, most recent first, ties broken by the greatest `tbl`. Only
+#'    when msens has neither input — and it is recorded as such, because "newest"
+#'    is a guess: on v2 it would pick `ply_subregions_2026`, whose keys match no
+#'    published geometry.
+#'
+#' The winner is recorded in `boot$units[].zone_tbl` so the notebook's geometry check
+#' can assert its GeoPackage holds the same keys.
+#'
+#' @param con a DBI connection to a release database
+#' @param geom_keys named list `zone_type -> keys present in the published geometry`
+#' @param zone_sets the zone-set registry (`data/zone_sets.csv`), or `NULL`
+#' @return a data frame `fld`, `tbl`, `why`, one row per field
+#' @importFrom DBI dbGetQuery dbListFields
+#' @export
+#' @concept app
+app_zone_tbl <- function(con, geom_keys = list(), zone_sets = NULL) {
+  vz <- sdm_val_col(con, "zone")
+  has_dc <- "date_created" %in% DBI::dbListFields(con, "zone")
+  d <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT fld, tbl, count(*) AS n,
+            {if (has_dc) 'max(date_created)' else 'CAST(NULL AS VARCHAR)'} AS dc,
+            string_agg(DISTINCT CAST({vz} AS VARCHAR), ',') AS keys
+       FROM zone GROUP BY 1, 2 ORDER BY 1, 2"))
+  if (!nrow(d)) return(data.frame(fld = character(), tbl = character(), why = character()))
+
+  pick <- function(g) {
+    if (nrow(g) == 1L) return(list(tbl = g$tbl[1], why = "only table for this field"))
+    type <- sub("_key$", "", g$fld[1])
+
+    gk <- geom_keys[[type]]
+    if (!is.null(gk) && length(gk)) {
+      ks  <- lapply(strsplit(g$keys, ",", fixed = TRUE), sort)
+      ov  <- vapply(ks, function(k) length(intersect(k, gk)), 0L)
+      ex  <- vapply(ks, function(k) setequal(k, gk), TRUE)
+      if (any(ex)) return(list(tbl = g$tbl[which(ex)[1]],
+                               why = "keys match the published geometry exactly"))
+      if (max(ov) > 0 && sum(ov == max(ov)) == 1L)
+        return(list(tbl = g$tbl[which.max(ov)],
+                    why = sprintf("largest overlap with the published geometry (%d of %d keys)",
+                                  max(ov), length(gk))))
+    }
+
+    if (!is.null(zone_sets) && nrow(zone_sets) && "source" %in% names(zone_sets)) {
+      zt <- zone_sets[zone_sets$zone_type %in% type, , drop = FALSE]
+      src <- sub("[.][^.]*$", "", basename(as.character(zt$source)))
+      hit <- which(g$tbl %in% src)
+      if (length(hit) == 1L)
+        return(list(tbl = g$tbl[hit],
+                    why = sprintf("source of the published zone set %s",
+                                  zt$zone_set_key[match(g$tbl[hit], src)])))
+    }
+
+    if (any(!is.na(g$dc))) {
+      o <- order(g$dc, g$tbl, decreasing = TRUE, na.last = TRUE)
+      return(list(tbl = g$tbl[o][1],
+                  why = sprintf("most recent date_created (%s) -- A GUESS: no geometry keys and no zone-set registry were given",
+                                g$dc[o][1])))
+    }
+    list(tbl = sort(g$tbl, decreasing = TRUE)[1],
+         why = "greatest tbl name -- A GUESS: no evidence available")
+  }
+
+  out <- do.call(rbind, lapply(split(d, d$fld), function(g) {
+    p <- pick(g)
+    data.frame(fld = g$fld[1], tbl = p$tbl, why = p$why,
+               n_tables = nrow(g), stringsAsFactors = FALSE)
+  }))
+  rownames(out) <- NULL
+  out
+}
+
+# a WHERE fragment keeping only the chosen table of each field
+.app_zone_where <- function(chosen, alias = "z") {
+  if (is.null(chosen) || !nrow(chosen)) return("TRUE")
+  paste(sprintf("(%s.fld = %s AND %s.tbl = %s)", alias, .sql_str(chosen$fld),
+                alias, .sql_str(chosen$tbl)), collapse = " OR ")
+}
+
 # ---- boot.json ---------------------------------------------------------------
 
 #' The 11-stop palettes the app must draw with
@@ -226,15 +326,17 @@ app_palettes <- function(names = c("spectral_r", "viridis", "cividis", "magma"))
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
-app_units <- function(con, manifest, geom_keys = list()) {
+app_units <- function(con, manifest, geom_keys = list(), chosen = NULL) {
   z <- manifest$zones
   if (is.null(z) || !nrow(z) || !"pmtiles" %in% names(z)) return(list())
   vz <- sdm_val_col(con, "zone")
+  if (is.null(chosen)) chosen <- app_zone_tbl(con, geom_keys)
+  w <- .app_zone_where(chosen, "z")
   scored <- DBI::dbGetQuery(con, glue::glue("
     SELECT DISTINCT z.{vz} AS zkey, z.fld
       FROM zone z JOIN zone_metric zm USING (zone_seq)
       JOIN metric m USING (metric_seq)
-     WHERE m.metric_key LIKE 'score!_%' ESCAPE '!'"))
+     WHERE ({w}) AND m.metric_key LIKE 'score!_%' ESCAPE '!'"))
   lab <- c(programarea = "Program areas", planarea = "Planning areas",
            ecoregion   = "Ecoregions",    subregion = "Subregions")
 
@@ -250,6 +352,9 @@ app_units <- function(con, manifest, geom_keys = list()) {
     list(zone_type    = type,
          zone_set_key = if ("zone_set_key" %in% names(z)) z$zone_set_key[i] else NULL,
          fld          = fld,
+         # the ONE table this unit publishes, so the notebook's geometry check can
+         # assert its GeoPackage holds the same keys
+         zone_tbl     = chosen$tbl[match(fld, chosen$fld)],
          label        = unname(if (type %in% names(lab)) lab[[type]] else
            paste0(toupper(substring(type, 1, 1)), substring(type, 2), "s")),
          pmtiles      = z$pmtiles[i],
@@ -257,6 +362,10 @@ app_units <- function(con, manifest, geom_keys = list()) {
          keys         = as.list(ks))
   })
   out <- Filter(Negate(is.null), out)
+  # ONE unit per field. `manifest$zones` has a row per (zone_set_key, tbl, fld), so a
+  # release with two tables for one field -- v2's subregion_key -- produced TWO
+  # units for it, offering the same picker entry twice with different key sets.
+  out <- out[!duplicated(vapply(out, function(u) u$fld, ""))]
   # Program Areas first, then the finest unit (most keys) first
   out[order(vapply(out, function(u) u$zone_type, "") != "programarea",
             -vapply(out, function(u) length(u$keys), 0L))]
@@ -279,18 +388,25 @@ app_units <- function(con, manifest, geom_keys = list()) {
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
-app_zones <- function(con, flds = NULL) {
+app_zones <- function(con, flds = NULL, chosen = NULL) {
   vz <- sdm_val_col(con, "zone")
   vm <- sdm_val_col(con, "zone_metric")
-  if (is.null(flds)) flds <- DBI::dbGetQuery(con, "SELECT DISTINCT fld FROM zone ORDER BY fld")$fld
+  if (is.null(chosen)) chosen <- app_zone_tbl(con)
+  # ONE table per field: v2 carries two for subregion_key, and merging them gave
+  # boot$zones$subregion six rows with the two shared keys resolved arbitrarily
+  w <- .app_zone_where(chosen, "z")
+  if (is.null(flds)) flds <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT DISTINCT fld FROM zone z WHERE {w} ORDER BY fld"))$fld
   d <- DBI::dbGetQuery(con, glue::glue("
     SELECT z.fld, z.{vz} AS zkey, count(*) AS n_cells,
            sum(c.area_km2 * zc.pct_covered / 100.0) AS area_km2
       FROM zone z JOIN zone_cell zc USING (zone_seq) JOIN cell c USING (cell_id)
+     WHERE {w}
      GROUP BY 1, 2 ORDER BY 1, 2"))
   m <- DBI::dbGetQuery(con, glue::glue("
     SELECT z.fld, z.{vz} AS zkey, mt.metric_key, zm.{vm} AS val
       FROM zone z JOIN zone_metric zm USING (zone_seq) JOIN metric mt USING (metric_seq)
+     WHERE {w}
      ORDER BY 1, 2, 3"))
   is_cov <- grepl("_coverage$", m$metric_key)
 
@@ -333,6 +449,10 @@ app_zones <- function(con, flds = NULL) {
 #' @param tables named list of `name -> list(href, bytes, digest)`; see
 #'   [app_table_manifest()]
 #' @param geom_keys optional geometry keys per zone type, see [app_units()]
+#' @param zone_sets the zone-set registry, used by [app_zone_tbl()] to choose the one
+#'   table per field when a release carries more than one
+#' @param chosen a precomputed [app_zone_tbl()] result, so every builder in one
+#'   bundle agrees on the same table
 #' @param built_at ISO timestamp to stamp (default: now, UTC, second precision)
 #' @return a validated `boot.json` object
 #' @importFrom DBI dbGetQuery dbListTables
@@ -340,7 +460,9 @@ app_zones <- function(con, flds = NULL) {
 #' @export
 #' @concept app
 app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
+                     zone_sets = NULL, chosen = NULL,
                      built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
+  if (is.null(chosen)) chosen <- app_zone_tbl(con, geom_keys, zone_sets)
   g   <- grid_spec_for(manifest$grid_id %||% grid_for_ver(ver))
   vm  <- sdm_val_col(con, "zone_metric")
   vz  <- sdm_val_col(con, "zone")
@@ -394,9 +516,9 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     study_areas = lapply(seq_len(nrow(sa)), function(i)
       list(key = sa$key[i], label = sa$label[i], lon = sa$lon[i], lat = sa$lat[i],
            zoom = sa$zoom[i], ecoregions = sa$ecoregions[i])),
-    units          = app_units(con, manifest, geom_keys),
+    units          = app_units(con, manifest, geom_keys, chosen),
     layers         = layers,
-    zones          = .obj(app_zones(con)),
+    zones          = .obj(app_zones(con, chosen = chosen)),
     flower_default = .obj(app_flower_default(con)),
     datasets       = app_datasets(con),
     palettes       = app_palettes(.app_colormaps(con, manifest)),
@@ -909,10 +1031,19 @@ app_alias_shards <- function(con, ver) {
 #' @importFrom DBI dbGetQuery dbListTables
 #' @export
 #' @concept app
-app_zone_taxon <- function(con) {
+app_zone_taxon <- function(con, chosen = NULL) {
   if (!"zone_taxon" %in% DBI::dbListTables(con))
     return(data.frame(zone_fld = character(), zone_value = character()))
-  d <- DBI::dbGetQuery(con, "SELECT * FROM zone_taxon")
+  if (is.null(chosen)) chosen <- app_zone_tbl(con)
+  # `zone_tbl` was DROPPED here, so v2's two subregion tables merged into 13,077
+  # duplicated (zone_fld, zone_value, key) rows -- the same taxon in the same
+  # subregion with two different area_km2, and the app listing it twice. The other
+  # table's rows are dropped, never merged.
+  keep_sql <- if ("zone_tbl" %in% DBI::dbListFields(con, "zone_taxon") && nrow(chosen))
+    sprintf(" WHERE %s", paste(sprintf(
+      "(zone_fld = %s AND zone_tbl = %s)", .sql_str(chosen$fld), .sql_str(chosen$tbl)),
+      collapse = " OR ")) else ""
+  d <- DBI::dbGetQuery(con, paste0("SELECT * FROM zone_taxon", keep_sql))
   parts <- split(seq_len(nrow(d)), paste(d$zone_fld, d$zone_value, sep = "\u001f"))
   out <- do.call(rbind, lapply(parts, function(i) {
     n <- .zone_taxon_normalize(d[i, , drop = FALSE])
@@ -1011,6 +1142,44 @@ app_model <- function(con, ver, dir_out) {
   p <- file.path(dir_out, "model.parquet")
   write_atlas_parquet(d, p)
   list(path = p, rows = nrow(d), columns = names(d))
+}
+
+#' Assert every zone-keyed object holds each zone exactly once
+#'
+#' A hard stop, not a warning. Two `zone.tbl` for one `fld` (v2's `subregion_key`)
+#' silently duplicated 13,077 `(zone_fld, zone_value, key)` rows in
+#' `zone_taxon.parquet` and gave `boot$zones$subregion` six rows for four subregions.
+#' Nothing errored; the app would simply have shown every taxon twice.
+#'
+#' @param zt the zone_taxon frame from [app_zone_taxon()]
+#' @param boot the boot object
+#' @return `TRUE`, invisibly; errors naming the first duplicated keys
+#' @export
+#' @concept app
+app_zones_unique <- function(zt, boot) {
+  if (!is.null(zt) && nrow(zt) && all(c("zone_fld", "zone_value") %in% names(zt))) {
+    kc <- intersect(c("key", "mdl_key"), names(zt))[1]
+    if (!is.na(kc)) {
+      k <- paste(zt$zone_fld, zt$zone_value, zt[[kc]], sep = "\u001f")
+      dup <- unique(k[duplicated(k)])
+      if (length(dup))
+        stop(sprintf(paste0(
+          "zone_taxon has %d duplicated (zone_fld, zone_value, %s) group(s) over ",
+          "%d rows.\n  e.g. %s\n  More than one `zone.tbl` for a field reached the ",
+          "bundle: choose ONE (app_zone_tbl()) and drop the other's rows."),
+          length(dup), kc, nrow(zt),
+          paste(gsub("\u001f", " / ", utils::head(dup, 2)), collapse = " | ")),
+          call. = FALSE)
+    }
+  }
+  for (unit in names(boot$zones)) {
+    ks <- vapply(boot$zones[[unit]], function(z) z$key, "")
+    if (anyDuplicated(ks))
+      stop(sprintf("boot$zones$%s lists %s more than once (%d entries, %d keys)",
+                   unit, paste(unique(ks[duplicated(ks)]), collapse = ", "),
+                   length(ks), length(unique(ks))), call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 #' Assert `boot$tables` names exactly the Parquet objects under `app/`
@@ -1376,6 +1545,9 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @param cell_tiles write the wide cell tiles (default `TRUE`)
 #' @param taxonomy_csv path to the WoRMS hierarchy CSV, passed to [app_taxonomy()].
 #'   `NULL` writes no `taxonomy.parquet` and advertises none.
+#' @param zone_sets the zone-set registry (`data/zone_sets.csv`), passed to
+#'   [app_zone_tbl()] so a release with two tables for one field publishes the one
+#'   the geometry actually corresponds to
 #' @param strict stop at the first failing stage (`TRUE`, the default), so a
 #'   half-written bundle is never published by accident. `FALSE` runs every stage,
 #'   records what failed in `$failed`, and leaves the stages that worked on disk —
@@ -1390,10 +1562,12 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                              base = atlas_base_url(), geom_keys = list(),
                              cell_tiles = TRUE, strict = TRUE,
-                             taxonomy_csv = NULL,
+                             taxonomy_csv = NULL, zone_sets = NULL,
                              built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
+  # resolved ONCE, so zone_taxon, boot$zones and boot$units cannot disagree
+  chosen <- app_zone_tbl(con, geom_keys, zone_sets)
   wrote <- list(); failed <- list()
   put <- function(rel, obj) {
     p <- file.path(dir_out, rel)
@@ -1440,7 +1614,7 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
   })
 
   zt <- stage("zone_taxon.parquet", {
-    d <- app_zone_taxon(con)
+    d <- app_zone_taxon(con, chosen)
     if (nrow(d)) {
       p <- file.path(dir_out, "zone_taxon.parquet")
       write_atlas_parquet(d, p)
@@ -1490,8 +1664,11 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
   boot <- stage("boot.json", {
     b <- app_boot(con, ver, manifest,
                   tables = app_table_manifest(unname(descr), ver, base),
-                  geom_keys = geom_keys, built_at = built_at)
+                  geom_keys = geom_keys, zone_sets = zone_sets, chosen = chosen,
+                  built_at = built_at)
     put("boot.json", b)
+    # a hard stop: one zone, one row, in every object keyed by zone
+    app_zones_unique(zt, b)
     # no object without a digest, no digest without an object
     app_tables_match(dir_out, b)
     b
