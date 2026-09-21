@@ -14,6 +14,7 @@ app_bundle_build(
   cell_tiles = TRUE,
   strict = TRUE,
   taxonomy_csv = NULL,
+  zone_sets = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -41,6 +42,10 @@ get at the parts.}
 
 \item{taxonomy_csv}{path to the WoRMS hierarchy CSV, passed to \code{\link[=app_taxonomy]{app_taxonomy()}}.
 \code{NULL} writes no \code{taxonomy.parquet} and advertises none.}
+
+\item{zone_sets}{the zone-set registry (\code{data/zone_sets.csv}), passed to
+\code{\link[=app_zone_tbl]{app_zone_tbl()}} so a release with two tables for one field publishes the one
+the geometry actually corresponds to}
 
 \item{built_at}{ISO timestamp}
 }

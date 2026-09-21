@@ -10,6 +10,8 @@ app_boot(
   manifest,
   tables = list(),
   geom_keys = list(),
+  zone_sets = NULL,
+  chosen = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -25,6 +27,12 @@ and \code{zones} the PMTiles}
 \code{\link[=app_table_manifest]{app_table_manifest()}}}
 
 \item{geom_keys}{optional geometry keys per zone type, see \code{\link[=app_units]{app_units()}}}
+
+\item{zone_sets}{the zone-set registry, used by \code{\link[=app_zone_tbl]{app_zone_tbl()}} to choose the one
+table per field when a release carries more than one}
+
+\item{chosen}{a precomputed \code{\link[=app_zone_tbl]{app_zone_tbl()}} result, so every builder in one
+bundle agrees on the same table}
 
 \item{built_at}{ISO timestamp to stamp (default: now, UTC, second precision)}
 }

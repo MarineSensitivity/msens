@@ -4,7 +4,7 @@
 \alias{app_zones}
 \title{Per-zone summaries, so a report on a Program Area never loads a cell}
 \usage{
-app_zones(con, flds = NULL)
+app_zones(con, flds = NULL, chosen = NULL)
 }
 \arguments{
 \item{con}{a DBI connection}

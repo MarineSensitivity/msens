@@ -209,6 +209,32 @@ numbers for the same ground.
   and the shared codec vectors are re-adopted (sha256 `50ad541a…`) with
   `place_encode_strict()` reproducing the new `reject_wrapped_ring` vector.
 
+## Fixed: v2's subregions were published twice
+
+* **A release may carry more than one `zone.tbl` for one `fld`, and v2 does**:
+  `ply_subregions_2025` (AK, AKL48, L48, USA) and `ply_subregions_2026`
+  (AK, GA, PA, USA), two keys in common. `app_zone_taxon()` dropped `zone_tbl`, so
+  `zone_taxon.parquet` carried **13,077 duplicated `(zone_fld, zone_value, key)`
+  groups** over 282,808 rows — the same taxon in the same subregion with two
+  different `area_km2` — and `boot$zones$subregion` had 6 rows for 4 subregions,
+  with the shared keys resolved arbitrarily. The app would have listed every taxon
+  twice.
+* **`app_zone_tbl()`** (new, exported) chooses ONE table per field from evidence, in
+  order: the keys of the published geometry (`geom_keys`), then the zone-set
+  registry's `source` basename (`zone_sets`), then — and only then, saying so —
+  the most recent `date_created`. v2 publishes **`ply_subregions_2025`**, the source
+  of the published `subregion_2025-08` zone set; `ply_subregions_2026` is the source
+  of no published subregion geometry at all. The other table's rows are **dropped,
+  never merged**, from `zone_taxon.parquet`, `boot$zones` and `boot$units`, and the
+  winner is recorded in **`boot$units[].zone_tbl`** so a geometry check can assert
+  its GeoPackage holds the same keys.
+* **`app_zones_unique()`** (new, exported) is a builder-level **hard stop**:
+  `(zone_fld, zone_value, key)` unique in `zone_taxon`, and each key once per
+  `boot$zones` unit.
+* `app_units()` now emits **one unit per field**: `manifest$zones` has a row per
+  (zone_set_key, tbl, fld), so a field with two tables offered the same picker entry
+  twice with different key sets.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,

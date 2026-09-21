@@ -4,7 +4,7 @@
 \alias{app_units}
 \title{The drawable scored spatial units of a release}
 \usage{
-app_units(con, manifest, geom_keys = list())
+app_units(con, manifest, geom_keys = list(), chosen = NULL)
 }
 \arguments{
 \item{con}{a DBI connection to a release database}

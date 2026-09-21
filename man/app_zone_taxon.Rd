@@ -4,7 +4,7 @@
 \alias{app_zone_taxon}
 \title{The normalised \code{app/zone_taxon.parquet}}
 \usage{
-app_zone_taxon(con)
+app_zone_taxon(con, chosen = NULL)
 }
 \arguments{
 \item{con}{a DBI connection}
