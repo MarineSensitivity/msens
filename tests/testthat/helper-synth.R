@@ -167,8 +167,11 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2", "v1")) {
         taxon_id = as.numeric(c(tid[1:3], tid[1:2], tid[4])),
         ds_key   = c(rep("ms_merge", 3), "am", "am", "am"),
         mdl_seq  = c(mseqs[1:3], 201L, 202L, 203L), stringsAsFactors = FALSE))
+      # `mdl_seq` as a DOUBLE on the ASSET side while `taxon` holds it as an INTEGER:
+      # the old `CAST(... AS VARCHAR)` on both sides compared "101.0" with "101" and
+      # the join matched NOTHING, silently -- every taxon lost its native asset.
       DBI::dbWriteTable(con, "model_asset", data.frame(
-        mdl_key = paste0("am|", tid[1:2]), mdl_seq = c(101L, 102L), ds_key = "ms_merge",
+        mdl_key = paste0("am|", tid[1:2]), mdl_seq = c(101, 102), ds_key = "ms_merge",
         cog_url = paste0("https://example.invalid/cog/usa05/", tid[1:2], ".tif"),
         grid_id = "usa05", ver = gen, stringsAsFactors = FALSE))
     }
@@ -176,6 +179,9 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2", "v1")) {
       zone_tbl = zone$tbl[1], zone_fld = "programarea_key", zone_value = "AAA",
       mdl_seq = mseqs[1:3], sp_cat = cat_[1:3], sp_common = cmn[1:3],
       sp_scientific = sci[1:3],
+      # DOUBLE, mirroring real v7's `DESCRIBE zone_taxon` (taxon_id DOUBLE, mdl_seq
+      # INTEGER). This is the column that published "22725044.0" beside
+      # taxon.parquet's "22725044" on every v7 bundle.
       taxon_id = as.numeric(tid[1:3]), taxon_authority = "worms",
       rl_code = c("LC", "EN", "VU"),
       area_km2 = c(75, 25, 50), avg_suit = c(0.5, 0.8, 0.3), stringsAsFactors = FALSE)

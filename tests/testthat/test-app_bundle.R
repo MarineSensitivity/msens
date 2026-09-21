@@ -940,3 +940,70 @@ test_that("app_taxonomy restricts the hierarchy to the release's taxa, or writes
     expect_false(any(grepl("[.]", got$taxon_id)))              # same id text as everywhere
   })
 })
+
+# ---- the fault that stayed green: a TYPE, not a text -------------------------
+#
+# Deleting app_zone_taxon()'s id-normalising loop left every existing test green,
+# because `as.character(137162)` is "137162" -- R drops the ".0" that DuckDB's
+# CAST keeps, so a text assertion on the in-R frame cannot see a DOUBLE at all.
+# What the real-data gate saw was the WRITTEN column: zone_taxon.parquet carried
+# taxon_id as DOUBLE while taxon.parquet carried VARCHAR, and nothing joined.
+# So these assert the TYPE and the written file, not the printed value.
+
+test_that("REGRESSION: zone_taxon ids are text without .0 when the release stores them as DOUBLE", {
+  for (gen in c("v7", "v7b", "v2")) with_synth(gen, function(con) {
+    src <- DBI::dbGetQuery(con, "SELECT column_type FROM (DESCRIBE SELECT * FROM zone_taxon)
+                                  WHERE column_name = 'taxon_id'")[[1]]
+    expect_identical(src, "DOUBLE", info = gen)      # the fixture is the real shape
+
+    zt <- app_zone_taxon(con)
+    expect_type(zt$taxon_id, "character")            # <- the loop, not as.character()
+    expect_identical(zt$taxon_id, c("137162", "126436", "137206"), info = gen)
+    expect_false(any(grepl("[.]", zt$taxon_id)), info = gen)
+
+    # and the WRITTEN object: a DOUBLE here is exactly what the smoke gate caught
+    d <- withr::local_tempdir()
+    write_atlas_parquet(zt, file.path(d, "zone_taxon.parquet"))
+    ty <- DBI::dbGetQuery(con, sprintf(
+      "SELECT column_type FROM (DESCRIBE SELECT * FROM read_parquet('%s'))
+        WHERE column_name = 'taxon_id'", file.path(d, "zone_taxon.parquet")))[[1]]
+    expect_identical(ty, "VARCHAR", info = gen)
+
+    # ...and the two published objects really do JOIN on it
+    tx <- app_taxon_table(con)
+    expect_type(tx$taxon_id, "character")
+    common <- intersect(zt$taxon_id, tx$taxon_id)
+    expect_equal(length(common), 3L, info = gen)
+    expect_setequal(common, c("137162", "126436", "137206"))
+  })
+})
+
+test_that("REGRESSION: model joins match on a DOUBLE mdl_seq", {
+  # `taxon` holds mdl_seq as an INTEGER and `model_asset` as a DOUBLE, so casting
+  # both to VARCHAR compared "101" with "101.0": the join matched NOTHING and every
+  # taxon silently lost its native asset.
+  for (gen in c("v7", "v7b")) with_synth(gen, function(con) {
+    expect_identical(
+      DBI::dbGetQuery(con, "SELECT column_type FROM (DESCRIBE SELECT * FROM model_asset)
+                             WHERE column_name = 'mdl_seq'")[[1]], "DOUBLE", info = gen)
+
+    a <- .app_assets(con)
+    expect_gt(nrow(a), 0)                               # non-zero, exact
+    expect_equal(nrow(a), 2L, info = gen)
+    expect_setequal(a$mdl_key, c("101", "102"))
+    expect_false(any(grepl("[.]", a$mdl_key)), info = gen)
+    # the assets attach to the taxa they belong to, not to nobody
+    expect_setequal(a$key, c("101", "102"))
+
+    # the naive both-sides VARCHAR cast the fix replaced: zero matches
+    naive <- DBI::dbGetQuery(con, "
+      SELECT count(*) n FROM model_asset ma
+        JOIN taxon t ON CAST(t.mdl_seq AS VARCHAR) = CAST(ma.mdl_seq AS VARCHAR)")$n
+    expect_equal(naive, 0L, info = gen)
+
+    # and the cards carry the asset through
+    sh <- app_taxon_shards(con, gen)
+    cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
+    expect_gt(sum(vapply(cards, function(cd) length(cd$inputs), 0L)), 0L)
+  })
+})
