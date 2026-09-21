@@ -1,8 +1,48 @@
 # msens 0.43.0
 
-**One scoring method, and one rule for places.** A drawn polygon and a picked Program
-Area now report the same numbers for the same ground, and "which cells does this
-polygon cover" has a single definition that a browser can reproduce.
+**The `{ver}/app/` data contract, and one scoring method.** Two changes an app or a
+report can see: the release now publishes a version-independent bundle the browser
+reads directly, and a drawn polygon and a picked Program Area finally report the same
+numbers for the same ground.
+
+## The `app/` bundle (new, `R/app_bundle.R`, `@concept app`)
+
+* **`app_bundle_build(con, ver, dir_out)`** writes `{ver}/app/` — `boot.json`,
+  `taxa.json`, 256-way `taxon/{xx}.json` and `alias/{xx}.json` shards,
+  `taxon.parquet`, `zone_taxon.parquet` and wide `cell/tile={t}/` Parquet — with ONE
+  schema for v1…v9. The per-version quirks (two grids, `mdl_seq` vs `mdl_key`,
+  `value` vs `val`, `is_ok` vs `is_valid_usa`, unsuffixed v1/v2 zone tables, the
+  `taxon_model` `ms_merge` self-edge, `model_asset` vs `native_asset`, v1/v2's absent
+  extinction-risk columns) are resolved here, where their tests already live.
+* Composed from **`app_boot()`**, **`app_taxa()`**, **`app_taxon_shards()`**,
+  **`app_alias_shards()`**, **`app_taxon_table()`**, **`app_zone_taxon()`**,
+  **`app_cell_tiles()`**, **`app_units()`**, **`app_zones()`**,
+  **`app_flower_default()`**, **`app_datasets()`** and **`app_palettes()`**, each
+  callable and each tested on its own.
+* **Every builder validates its own output** against `inst/schema/app_*.schema.json`
+  (`app_validate()`, `app_schema_path()`, `app_json()`), so a shape change fails in
+  the notebook that made it rather than in a browser three steps later.
+* **`app_capabilities()` / `app_manifest_block()`** decide what the app may offer by
+  **anonymous HTTPS HEAD of a sample object**, never by copying
+  `manifest$capabilities`. v7 and v7b advertise `cell_species_list` because the
+  *server* can read a `cell_model` that never left the server; S3 holds only
+  `tables/` for them. The probed URL and status are returned beside each capability.
+* **`app_cell_tiles()`** writes one DOUBLE column per scored `metric_key`, so nothing
+  joins on `metric_seq` (dropped and recreated every run), over every `cell` row of
+  any tile holding a `cell_metric` or `cell_model` row. **`app_cell_tile_check()`**
+  asserts the tile key at a given grid width and **`app_cell_tile_digests()`**
+  compares each metric's multiset digest with `cell_metric`'s.
+* **`zone_tbl_for()`** (new, exported) reads the zone table name from `zone` instead
+  of guessing `ply_subregions_2026_{ver}` — v1/v2 zone tables are unsuffixed, and the
+  guess produced an empty cache that never healed.
+* The v7.1 additions ride along **optional by presence**: a `methods` table becomes
+  `boot$methods`, and `{component}_coverage` zone metrics become each zone's
+  `coverage` block, kept out of `metrics`. A component with no row is **absent, not
+  zero** — reportability is the ABSENCE of the `_ecoregion_rescaled` row, never the
+  `_prepctareaweighting` row, which stays behind even for a dropped pair.
+* `flower_default` is **versioned**, retiring the shared, unversioned
+  `scores/cache/flower_default_subregions.csv` that the first release to run wrote
+  and every other release then read.
 
 ## One scoring method (D7 / D7b)
 

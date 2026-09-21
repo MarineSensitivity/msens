@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://marinesensitivity.org/schema/app_taxon.schema.json",
+  "title": "app/taxon/{xx}.json — one shard of full taxon cards",
+  "type": "object",
+  "required": ["schema", "ver", "shard", "taxa"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "integer", "minimum": 1 },
+    "ver":    { "type": "string", "pattern": "^v[0-9]+[a-z]?$" },
+    "shard":  { "type": "string", "pattern": "^[0-9a-f]{2}$" },
+    "taxa": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["key", "sci", "sp_cat", "merged", "inputs"],
+        "additionalProperties": false,
+        "properties": {
+          "key":    { "type": "string" },
+          "sci":    { "type": "string" },
+          "common": { "type": ["string", "null"] },
+          "sp_cat": { "type": "string" },
+          "taxon_id":        { "type": ["string", "null"] },
+          "taxon_authority": { "type": ["string", "null"] },
+          "rl":     { "type": ["string", "null"] },
+          "esa":    {
+            "type": ["object", "null"],
+            "properties": {
+              "code":   { "type": ["string", "null"] },
+              "source": { "type": ["string", "null"] }
+            }
+          },
+          "mmpa":     { "type": ["boolean", "null"] },
+          "mbta":     { "type": ["boolean", "null"] },
+          "er_score": { "type": ["number", "null"] },
+          "valid_usa":    { "type": ["boolean", "null"] },
+          "valid_global": { "type": ["boolean", "null"] },
+          "merged": {
+            "type": ["object", "null"],
+            "description": "null = no published surface (the ~192 residual taxa); the app shows the same notice production shows today",
+            "required": ["type", "url"],
+            "properties": {
+              "type":     { "type": "string", "enum": ["cog"] },
+              "url":      { "type": "string", "pattern": "^https://" },
+              "rescale":  { "type": ["array", "null"], "minItems": 2, "maxItems": 2,
+                            "items": { "type": "number" } },
+              "colormap": { "type": ["string", "null"] },
+              "bbox":     { "type": ["array", "null"], "minItems": 4, "maxItems": 4,
+                            "items": { "type": "number" },
+                            "description": "in the lon_span_agg frame: xmax may exceed 180; null when it spans the globe" }
+            }
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["ds_key", "mdl_key", "assets"],
+              "properties": {
+                "ds_key":  { "type": "string" },
+                "mdl_key": { "type": "string" },
+                "is_mask": { "type": ["boolean", "null"] },
+                "assets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["rep", "type", "url"],
+                    "properties": {
+                      "rep":          { "type": "string" },
+                      "type":         { "type": "string", "enum": ["cog", "pmtiles"] },
+                      "url":          { "type": "string" },
+                      "rescale":      { "type": ["array", "null"], "minItems": 2, "maxItems": 2,
+                                        "items": { "type": "number" } },
+                      "colormap":     { "type": ["string", "null"] },
+                      "source_layer": { "type": ["string", "null"] },
+                      "bbox":         { "type": ["array", "null"], "minItems": 4, "maxItems": 4,
+                                        "items": { "type": "number" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

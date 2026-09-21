@@ -7,6 +7,29 @@ export(add_pmfill)
 export(add_pmlabel)
 export(add_pmline)
 export(angular_distance)
+export(app_alias_shards)
+export(app_boot)
+export(app_bundle_build)
+export(app_capabilities)
+export(app_cell_tile_check)
+export(app_cell_tile_digests)
+export(app_cell_tiles)
+export(app_datasets)
+export(app_flower_default)
+export(app_json)
+export(app_manifest_block)
+export(app_palettes)
+export(app_schema_names)
+export(app_schema_path)
+export(app_table_descriptor)
+export(app_table_manifest)
+export(app_taxa)
+export(app_taxon_shards)
+export(app_taxon_table)
+export(app_units)
+export(app_validate)
+export(app_zone_taxon)
+export(app_zones)
 export(assert_within_tolerance)
 export(assign_mdl_id)
 export(atlas_access_default)
@@ -183,6 +206,7 @@ export(zone_set_group)
 export(zone_set_key)
 export(zone_set_resolve)
 export(zone_style)
+export(zone_tbl_for)
 import(httr2)
 import(leaflet)
 import(readr)
@@ -271,12 +295,16 @@ importFrom(htmltools,
   tags
 )
 importFrom(httr2,
+  req_error,
+  req_method,
   req_perform,
   req_perform_parallel,
+  req_timeout,
   req_url_path_append,
   req_url_query,
   request,
-  resp_body_json
+  resp_body_json,
+  resp_status
 )
 importFrom(janitor,clean_names)
 importFrom(jsonlite,
