@@ -16,8 +16,38 @@ test_that("the shared vector file is byte-identical with the atlas repo's copy",
   mine  <- system.file("fixtures", "place_codec.json", package = "msens")
   theirs <- "/Users/bbest/Github/MarineSensitivity/atlas/tests/fixtures/place_codec.json"
   expect_identical(fx$codec, "g1")
+  # the sha256 the atlas side records for this revision: a drift detector that works
+  # without the other repo on disk
+  expect_identical(
+    digest::digest(file = mine, algo = "sha256"),
+    "50ad541afff2c2cd2c0d005d89f8ba230e2d19f9595ffcf1b03c233899d2897f")
   skip_if_not(file.exists(theirs), "the atlas repo is not on this machine")
   expect_identical(tools::md5sum(mine)[[1]], tools::md5sum(theirs)[[1]])
+})
+
+test_that("every encode_reject vector is refused by the STRICT encoder, exactly", {
+  # the shared counterpart of ruling 2: the byte-level encoder refuses a ring that
+  # is still wrapped, and the high-level entry yields the token beside it
+  expect_gt(length(fx$encode_reject), 0)
+  for (v in fx$encode_reject) {
+    pl <- list(kind = "geom", name = v$name,
+               geometry = geojson_sfc(v$geometry), precision = v$precision)
+    e <- tryCatch(place_encode_strict(pl), error = function(e) e)
+    expect_s3_class(e, "msens_place_reject")
+    expect_identical(e$code, v$code, info = v$id)
+    expect_match(conditionMessage(e), sprintf("%.4f-degree step", v$max_step_deg),
+                 info = v$id)
+
+    # the unwrapped ring the fixture states, vertex for vertex
+    expect_equal(unname(sf::st_coordinates(unwrap_polygon(geojson_sfc(v$geometry)))[, c("X", "Y")]),
+                 unname(sf::st_coordinates(geojson_sfc(v$unwrapped))[, c("X", "Y")]),
+                 info = v$id)
+    # ...and the high-level entry yields the recorded token
+    expect_identical(place_encode(pl), v$token_via_high_level, info = v$id)
+    expect_identical(place_encode_strict(
+      list(kind = "geom", name = v$name, geometry = geojson_sfc(v$unwrapped),
+           precision = v$precision)), v$token_via_high_level, info = v$id)
+  }
 })
 
 test_that("every geometry vector ENCODES to the shared token, character for character", {

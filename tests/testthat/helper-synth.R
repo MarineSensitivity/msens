@@ -48,12 +48,12 @@ synth_metrics <- function(gen) {
              description = paste("metric", keys), stringsAsFactors = FALSE)
 }
 
-synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
+synth_release <- function(gen = c("v9", "v7", "v7b", "v2", "v1")) {
   gen <- match.arg(gen)
-  old <- gen %in% c("v2", "v7", "v7b")          # the v1-v7 shape
+  old <- gen %in% c("v1", "v2", "v7", "v7b")    # the v1-v7 shape
   grid_id <- if (old) "usa05" else "global05"
   vcol <- if (old) "value" else "val"
-  sfx  <- if (identical(gen, "v2")) "" else paste0("_", gen)
+  sfx  <- if (gen %in% c("v1", "v2")) "" else paste0("_", gen)  # v1/v2 unsuffixed
 
   # its OWN database file per release. Connections to the default ":memory:" share
   # one instance, so shutting one down closes the others mid-test -- and the
@@ -146,7 +146,7 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
       taxon_id = as.numeric(tid), taxon_authority = "worms", scientific_name = sci,
       common_name = cmn, sp_cat = cat_, mdl_seq = mseqs, is_ok = TRUE,
       redlist_code = c("LC", "EN", "VU", "LC"), stringsAsFactors = FALSE)
-    if (!identical(gen, "v2")) {                      # v1/v2 have NO ER columns
+    if (!gen %in% c("v1", "v2")) {                    # v1/v2 have NO ER columns
       taxon$extrisk_code <- c("LC", "EN", "VU", "LC")
       taxon$er_score     <- c(1, 25, 5, 20)           # RAW 1-100 on v3-v7
       taxon$is_mmpa      <- c(FALSE, FALSE, FALSE, TRUE)
@@ -159,7 +159,7 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
       mdl_seq = c(mseqs[1:3], 201L, 202L, 203L),
       ds_key = c(rep("ms_merge", 3), "am", "am", "am"),
       taxa = c(sci[1:3], sci[1:2], sci[4]), stringsAsFactors = FALSE))
-    if (!identical(gen, "v2")) {
+    if (!gen %in% c("v1", "v2")) {
       # v1-v7 taxon_model INCLUDES the ms_merge self-edge; v8+ does not
       # the 4th taxon HAS input edges but no merged model: that pairing is what
       # turns `mdl_key != key` into NA and injects the all-NA row
@@ -180,7 +180,7 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
       rl_code = c("LC", "EN", "VU"),
       area_km2 = c(75, 25, 50), avg_suit = c(0.5, 0.8, 0.3), stringsAsFactors = FALSE)
     # v1/v2 stored a 0-1 rl_score; v3-v7 a 1-100 er_score beside rl_code
-    if (identical(gen, "v2")) zt$rl_score <- c(0.01, 0.25, 0.05)
+    if (gen %in% c("v1", "v2")) zt$rl_score <- c(0.01, 0.25, 0.05)
     else                      zt$er_score <- c(1, 25, 5)
     DBI::dbWriteTable(con, "zone_taxon", zt)
   } else {
@@ -231,11 +231,26 @@ synth_release <- function(gen = c("v9", "v7", "v7b", "v2")) {
     msens::cell_grid_write(con, "global05")
   }
 
-  DBI::dbWriteTable(con, "dataset", data.frame(
+  ds <- data.frame(
     ds_key = c("ms_merge", "am"), name_display = c("Merged", "AquaMaps"),
     value_info = c("suitability 0-100", "suitability 0-100"),
     is_mask = FALSE, sort_order = c(1L, 2L),
-    citation = c("msens", "Kaschner et al."), stringsAsFactors = FALSE))
+    citation = c("msens", "Kaschner et al."), stringsAsFactors = FALSE)
+  # v1's `dataset` has NO is_mask column at all: selecting it unconditionally made
+  # the whole shard stage fail with a Binder Error on the real release
+  if (identical(gen, "v1")) ds$is_mask <- NULL
+  DBI::dbWriteTable(con, "dataset", ds)
+
+  # v3-v6 carry `cell_metric` rows for cells the `cell` table does not have (703 on
+  # real v3). The contract publishes only cells that ARE in `cell` -- the browser's
+  # `JOIN cell USING (cell_id)` drops the rest -- so the digest gate has to compare
+  # the same universe on both sides, or it reports 0 of 17 metrics matching.
+  if (identical(gen, "v1")) {
+    orphan <- max(id) + 1000L
+    DBI::dbExecute(con, sprintf(
+      "INSERT INTO cell_metric VALUES (%d, %d, 99)", orphan,
+      mseq[["extrisk_bird_ecoregion_rescaled"]]))
+  }
 
   if (identical(gen, "v7b"))
     # `release_method`, the name v7b's sdm.duckdb actually uses (`methods` is the

@@ -807,3 +807,136 @@ test_that("the smoke gate's grep for \"value\" would catch a regression", {
     expect_length(has_value(jsons), 1)
   })
 })
+
+# ---- what the all-release sweep found ----------------------------------------
+
+test_that("REGRESSION: a release whose `dataset` has no is_mask still builds", {
+  # v1's dataset has no such column; `SELECT ds_key, is_mask FROM dataset` failed
+  # with a Binder Error and took the whole shard stage with it. D11: a release that
+  # cannot supply a capability simply does not advertise it.
+  with_synth("v1", function(con) {
+    expect_false("is_mask" %in% DBI::dbListFields(con, "dataset"))
+    sh <- app_taxon_shards(con, "v1")
+    cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
+    expect_gt(length(cards), 0)
+    for (cd in cards) for (i in cd$inputs) expect_null(i$is_mask)   # NULL, not invented
+    expect_silent(app_datasets(con))
+  })
+})
+
+test_that("REGRESSION: cell_metric rows for cells absent from `cell` do not break the digest", {
+  # 703 such cells on real v3. The tiles publish only cells that ARE in `cell`
+  # (deliberately: the browser's JOIN drops the rest), so the source side of the
+  # digest has to be restricted the same way or every metric reports a mismatch.
+  with_synth("v1", function(con) {
+    orph <- DBI::dbGetQuery(con, "SELECT count(DISTINCT cm.cell_id) n FROM cell_metric cm
+      LEFT JOIN cell c USING (cell_id) WHERE c.cell_id IS NULL")$n
+    expect_equal(orph, 1L)                     # the fixture really has one
+
+    d <- withr::local_tempdir()
+    app_cell_tiles(con, file.path(d, "cell"))
+    dg <- app_cell_tile_digests(con, file.path(d, "cell"))
+    expect_true(all(dg$ok))
+
+    # the orphan is absent from the published tiles, as the contract says
+    ids <- DBI::dbGetQuery(con, sprintf(
+      "SELECT DISTINCT cell_id FROM read_parquet('%s/cell/*/data_0.parquet',
+         hive_partitioning = true)", d))$cell_id
+    have <- DBI::dbGetQuery(con, "SELECT cell_id FROM cell")$cell_id
+    expect_true(all(ids %in% have))
+  })
+})
+
+# ---- G: one id text on every published object --------------------------------
+
+test_that("REGRESSION: zone_taxon publishes the same id text as taxon.parquet", {
+  # `.app_id_cast()` reached app_taxon_table() and stopped there. zone_taxon is a
+  # PRECOMPUTED table read with SELECT *, so v7's DOUBLE taxon_id came straight
+  # through and this object said "22725044.0" beside the other's "22725044".
+  for (gen in c("v9", "v7", "v7b", "v2")) with_synth(gen, function(con) {
+    zt <- app_zone_taxon(con); tx <- app_taxon_table(con)
+    expect_true(all(is.na(zt$taxon_id) | grepl("^[0-9]+$", zt$taxon_id)), info = gen)
+    expect_false(any(grepl("[.]0$", zt$taxon_id)), info = gen)
+    # and the two objects really do join
+    expect_gt(length(intersect(zt$taxon_id, tx$taxon_id)), 0)
+  })
+})
+
+test_that("app_id_chr normalises every id shape, and refuses a fractional one", {
+  expect_identical(app_id_chr(c(137162, NA)), c("137162", NA))
+  expect_identical(app_id_chr(c("22725044.0", "7")), c("22725044", "7"))
+  expect_identical(app_id_chr(c(-42L, 0L)), c("-42", "0"))
+  expect_identical(app_id_chr(9007199254740992), "9007199254740992")  # no sci notation
+  expect_identical(app_id_chr(character(0)), character(0))
+  expect_error(app_id_chr(12.7, "taxon_id"), "not integral")
+  expect_error(app_id_chr("12.7", "taxon_id"), "not integral")
+  # ".0" means whole and is stripped; ".7" is a data error, never rounded
+  expect_false(identical(app_id_chr("12.0"), "12.7"))
+})
+
+# ---- B + F: taxonomy and the model mapping are IN the contract ---------------
+
+test_that("boot$tables names exactly the Parquet objects under app/", {
+  # taxonomy.parquet was written by the notebook OUTSIDE the bundle and the
+  # mdl_id -> mdl_key mapping lived outside app/ entirely, so neither had a digest
+  # and OPFS could never invalidate them.
+  for (gen in c("v9", "v7")) with_synth(gen, function(con) {
+    d <- withr::local_tempdir()
+    b <- app_bundle_build(con, gen, d, manifest = manifest_build(con, gen, base = BASE),
+                          base = BASE)
+    expect_silent(app_tables_match(d, b$boot))
+    for (nm in names(b$boot$tables)) expect_gt(nchar(b$boot$tables[[nm]]$digest), 8)
+
+    # seeded both ways: an object with no entry, and an entry with no object
+    file.copy(file.path(d, "taxon.parquet"), file.path(d, "surprise.parquet"))
+    expect_error(app_tables_match(d, b$boot), "written but NOT in boot")
+    file.remove(file.path(d, "surprise.parquet"))
+    bad <- b$boot; bad$tables$ghost <- list(href = "https://x", bytes = 1L, digest = "abcdefghij")
+    expect_error(app_tables_match(d, bad), "would 404")
+  })
+})
+
+test_that("app_model writes the mdl_id mapping on v8+ and nothing on v1-v7", {
+  with_synth("v9", function(con) {
+    d <- withr::local_tempdir()
+    t <- app_model(con, "v9", d)
+    expect_false(is.null(t))
+    expect_setequal(t$columns, c("mdl_id", "mdl_key", "ds_key"))
+    expect_true(file.exists(file.path(d, "model.parquet")))
+    b <- app_bundle_build(con, "v9", withr::local_tempdir(),
+                          manifest = manifest_build(con, "v9", base = BASE), base = BASE)
+    expect_true("model" %in% names(b$boot$tables))
+  })
+  for (gen in c("v7", "v2")) with_synth(gen, function(con) {
+    # no mdl_id: cell_model joins on mdl_seq directly, so no mapping is needed --
+    # and none is invented
+    d <- withr::local_tempdir()
+    expect_null(app_model(con, gen, d))
+    expect_false(file.exists(file.path(d, "model.parquet")))
+    b <- app_bundle_build(con, gen, withr::local_tempdir(),
+                          manifest = manifest_build(con, gen, base = BASE), base = BASE)
+    expect_false("model" %in% names(b$boot$tables))
+  })
+})
+
+test_that("app_taxonomy restricts the hierarchy to the release's taxa, or writes nothing", {
+  with_synth("v9", function(con) {
+    d <- withr::local_tempdir()
+    expect_null(app_taxonomy(con, "v9", d, NULL))              # no CSV -> nothing
+    expect_null(app_taxonomy(con, "v9", d, file.path(d, "absent.csv")))
+
+    csv <- file.path(d, "hier.csv")
+    tx  <- app_taxon_table(con)
+    utils::write.csv(data.frame(
+      species_id = c(tx$taxon_id, "999999"),                  # one taxon not in the release
+      Kingdom = "Animalia", Phylum = "Chordata", stringsAsFactors = FALSE),
+      csv, row.names = FALSE)
+    t <- app_taxonomy(con, "v9", d, csv)
+    expect_equal(t$rows, nrow(tx))                             # the stranger is dropped
+    expect_true(file.exists(file.path(d, "taxonomy.parquet")))
+    got <- DBI::dbGetQuery(con, sprintf(
+      "SELECT taxon_id FROM read_parquet('%s')", file.path(d, "taxonomy.parquet")))
+    expect_setequal(got$taxon_id, tx$taxon_id)
+    expect_false(any(grepl("[.]", got$taxon_id)))              # same id text as everywhere
+  })
+})

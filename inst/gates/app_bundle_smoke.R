@@ -47,6 +47,7 @@ if (file.exists(file.path(root, "DESCRIPTION")) &&
 }
 suppressMessages({library(DBI); library(duckdb)})
 
+taxonomy_csv <- Sys.getenv("MSENS_TAXONOMY_CSV", "")
 dir_out <- if (length(args) >= 3) args[3] else
   file.path(tempdir(), paste0("app_smoke_", ver))
 unlink(dir_out, recursive = TRUE)
@@ -66,7 +67,8 @@ chk <- function(ok, label, detail = "") {
 
 t0 <- Sys.time()
 m  <- manifest_build(con, ver, base = atlas_base_url())
-b  <- app_bundle_build(con, ver, dir_out, manifest = m, cell_tiles = tiles_on)
+b  <- app_bundle_build(con, ver, dir_out, manifest = m, cell_tiles = tiles_on,
+                       taxonomy_csv = if (nzchar(taxonomy_csv)) taxonomy_csv else NULL)
 say(sprintf("built in %.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))))
 
 say("\n-- structure ----------------------------------------------------------")
@@ -80,6 +82,54 @@ chk(b$n_shards > 0 && b$n_alias > 0, "taxon/ and alias/ shards exist",
     sprintf("%d / %d", b$n_shards, b$n_alias))
 chk(!length(b$failed), "every stage completed",
     if (length(b$failed)) paste(names(b$failed), collapse = ", ") else "")
+
+say("\n-- boot$tables describes app/ exactly --------------------------------")
+chk(tryCatch({app_tables_match(dir_out, b$boot); TRUE}, error = function(e) FALSE),
+    "no object without a digest, no digest without an object",
+    paste(names(b$boot$tables), collapse = ", "))
+
+say("\n-- ids are one text on every object ------------------------------------")
+pqs <- unique(dirname(list.files(dir_out, "[.]parquet$", recursive = TRUE, full.names = TRUE)))
+pqs <- unique(c(list.files(dir_out, "[.]parquet$", full.names = TRUE),
+                grep("/cell$", pqs, value = TRUE)))
+float_ids <- character()
+for (p in pqs) {
+  src <- if (dir.exists(p)) sprintf("'%s/*/data_0.parquet'", p) else sprintf("'%s'", p)
+  ty <- tryCatch(DBI::dbGetQuery(con, sprintf(
+    "SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM read_parquet(%s))", src)),
+    error = function(e) NULL)
+  if (is.null(ty)) next
+  hit <- ty$column_name %in% msens:::.APP_ID_COLS |
+         grepl("_id$", ty$column_name)
+  bad <- ty[hit & grepl("^(DOUBLE|FLOAT|REAL|DECIMAL)", toupper(ty$column_type)), ]
+  if (nrow(bad)) float_ids <- c(float_ids,
+    sprintf("%s:%s(%s)", basename(p), bad$column_name, bad$column_type))
+}
+chk(!length(float_ids), "no id column is floating point in any published Parquet",
+    if (length(float_ids)) paste(float_ids, collapse = " ") else
+      sprintf("%d objects", length(pqs)))
+
+dot0 <- Filter(function(f) any(grepl('"[-0-9]+[.]0+"', readLines(f, warn = FALSE))),
+               list.files(dir_out, "[.]json$", recursive = TRUE, full.names = TRUE))
+chk(!length(dot0), "no id string matches \\.0$ in any published JSON",
+    if (length(dot0)) basename(dot0[1]) else "")
+
+say("\n-- the methods block ---------------------------------------------------")
+mt <- intersect(c("release_method", "methods"), DBI::dbListTables(con))[1]
+if (!is.na(mt)) {
+  n_src <- DBI::dbGetQuery(con, sprintf("SELECT count(*) n FROM %s", mt))$n
+  ok <- !is.null(b$boot$methods) && length(b$boot$methods) == n_src &&
+        all(vapply(b$boot$methods, function(x)
+          setequal(names(x), c("method_key", "val", "description")), TRUE))
+  chk(ok, sprintf("`%s` (%d rows) becomes boot$methods with method_key/val/description", mt, n_src),
+      if (is.null(b$boot$methods)) "ABSENT" else sprintf("%d rows", length(b$boot$methods)))
+  chk(!any(vapply(b$boot$methods, function(x) "value" %in% names(x), TRUE)),
+      "no methods row carries `value`")
+} else {
+  chk(is.null(b$boot$methods) && !("methods" %in% names(b$boot)),
+      "no release_method table -> no `methods` key at all",
+      if (is.null(b$boot$methods)) "absent" else "PRESENT")
+}
 
 say("\n-- the word `value` never appears in a published object ---------------")
 jsons <- list.files(dir_out, "[.]json$", recursive = TRUE, full.names = TRUE)

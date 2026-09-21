@@ -547,6 +547,56 @@ app_datasets <- function(con) {
   invisible(n)
 }
 
+#' Normalise an id column to the text every generation must publish
+#'
+#' The R-side twin of the SQL cast. An id reaches a published object by several
+#' routes — a `SELECT` this package writes, a `SELECT *` of a precomputed table, a
+#' column already read into R — and only the first was covered, so v7's
+#' `zone_taxon.parquet` still carried `taxon_id` as a DOUBLE and published
+#' `"22725044.0"` while `taxon.parquet` beside it said `"22725044"`. One contract,
+#' two spellings, and every join between them empty.
+#'
+#' Whole numbers become digits only; `NA` stays `NA`; a trailing `.0` on a string is
+#' stripped (it means whole); anything genuinely fractional is an **error**, never a
+#' rounded neighbour — see [app_taxon_table()].
+#'
+#' @param x an id vector (numeric, integer, integer64 or character)
+#' @param what name used in the error message
+#' @return a character vector
+#' @examples
+#' app_id_chr(c(137162, NA))          # "137162" NA
+#' app_id_chr(c("22725044.0", "7"))   # "22725044" "7"
+#' @export
+#' @concept app
+app_id_chr <- function(x, what = "id") {
+  if (is.null(x) || !length(x)) return(character(0))
+  if (inherits(x, "integer64")) x <- as.character(x)
+  chr <- if (is.character(x)) x else if (is.numeric(x)) {
+    frac <- !is.na(x) & x != floor(x)
+    if (any(frac))
+      stop(sprintf(paste0(
+        "%d of %d `%s` values are not integral (e.g. %s). Casting one to an ",
+        "integer ROUNDS, which is a different and possibly existing id."),
+        sum(frac), length(x), what, paste(utils::head(x[frac], 3), collapse = ", ")),
+        call. = FALSE)
+    # sprintf("%.0f"), not format(): exact to 2^53 and never scientific notation,
+    # which is the other way an id turns into something that is not an id
+    ifelse(is.na(x), NA_character_, sprintf("%.0f", x))
+  } else as.character(x)
+
+  chr <- sub("^(-?[0-9]+)[.]0+$", "\\1", chr)          # ".0" means whole
+  bad <- which(!is.na(chr) & !grepl("^-?[0-9]+$", chr))
+  if (length(bad))
+    stop(sprintf("%d of %d `%s` values are not integral (e.g. %s).",
+                 length(bad), length(chr), what,
+                 paste(utils::head(chr[bad], 3), collapse = ", ")), call. = FALSE)
+  chr
+}
+
+# every column name this package treats as an id wherever it publishes one
+.APP_ID_COLS <- c("taxon_id", "mdl_seq", "mdl_id", "worms_id", "sp_id", "zone_seq",
+                  "metric_seq", "programarea_id")
+
 # the normalised taxon SELECT every app_* builder reads. One SQL, four schemas:
 # v1/v2 have no ER columns at all, v3-v7 keep er_score on the raw 1-100 scale.
 .app_taxon_sql <- function(con) {
@@ -561,7 +611,7 @@ app_datasets <- function(con) {
       collapse = " OR "), ")")
   marine <- if (!is.na(k$marine)) sprintf(" AND t.%s", k$marine) else ""
   glue::glue("
-    SELECT CAST(t.{k$key} AS VARCHAR)        AS key,
+    SELECT {.app_id_cast(con, 'taxon', k$key, paste0('t.', k$key))} AS key,
            t.scientific_name                 AS sci,
            {nn('common_name', 't.common_name', 'VARCHAR')}      AS common,
            t.sp_cat                          AS sp_cat,
@@ -663,7 +713,8 @@ isTRUE_v <- function(x) !is.na(x) & x
     k <- .app_taxon_cols(con)
     DBI::dbGetQuery(con, glue::glue(
       "SELECT CAST(t.{k$key} AS VARCHAR) AS key,
-              CAST(tm.mdl_seq AS VARCHAR) AS mdl_key, tm.ds_key
+              {.app_id_cast(con, 'taxon_model', 'mdl_seq', 'tm.mdl_seq')} AS mdl_key,
+              tm.ds_key
          FROM taxon_model tm JOIN taxon t
            ON {.app_id_cast(con, 'taxon', 'taxon_id', 't.taxon_id')}
             = {.app_id_cast(con, 'taxon_model', 'taxon_id', 'tm.taxon_id')}"))
@@ -700,14 +751,17 @@ isTRUE_v <- function(x) !is.na(x) & x
   if (!"model_asset" %in% tb) return(none)
   k <- .app_taxon_cols(con)
   DBI::dbGetQuery(con, glue::glue("
-    SELECT CAST(t.{k$key} AS VARCHAR) AS key, CAST(ma.mdl_seq AS VARCHAR) AS mdl_key,
+    SELECT {.app_id_cast(con, 'taxon', k$key, paste0('t.', k$key))} AS key,
+           {.app_id_cast(con, 'model_asset', 'mdl_seq', 'ma.mdl_seq')} AS mdl_key,
            ma.ds_key, 'cog' AS asset_type, 'native' AS representation,
            ma.cog_url AS asset_url,
            1.0 AS rescale_min, 100.0 AS rescale_max, 'spectral_r' AS colormap,
            CAST(NULL AS VARCHAR) AS source_layer,
            CAST(NULL AS DOUBLE) AS xmin, CAST(NULL AS DOUBLE) AS xmax,
            CAST(NULL AS DOUBLE) AS ymin, CAST(NULL AS DOUBLE) AS ymax
-      FROM model_asset ma JOIN taxon t ON CAST(t.{k$key} AS VARCHAR) = CAST(ma.mdl_seq AS VARCHAR)"))
+      FROM model_asset ma JOIN taxon t
+        ON {.app_id_cast(con, 'taxon', k$key, paste0('t.', k$key))}
+         = {.app_id_cast(con, 'model_asset', 'mdl_seq', 'ma.mdl_seq')}"))
 }
 
 # the merged surface of a taxon: the `ms_merge` COG published for its own key.
@@ -756,8 +810,14 @@ app_taxon_shards <- function(con, ver) {
   a <- .app_assets(con)
   e <- .app_edges(con)
   mg <- .app_merged(a)
+  # v1's `dataset` has no `is_mask` at all -- selecting it unconditionally made the
+  # whole shard stage fail with `Binder Error: Referenced column "is_mask" not
+  # found`. D11: a release that cannot supply a capability simply does not
+  # advertise it, so the flag comes back NULL rather than invented.
   ds <- if ("dataset" %in% DBI::dbListTables(con))
-    DBI::dbGetQuery(con, "SELECT ds_key, is_mask FROM dataset") else
+    DBI::dbGetQuery(con, sprintf("SELECT ds_key, %s AS is_mask FROM dataset",
+      if ("is_mask" %in% DBI::dbListFields(con, "dataset")) "is_mask"
+      else "CAST(NULL AS BOOLEAN)")) else
       data.frame(ds_key = character(), is_mask = logical())
 
   card <- function(i) {
@@ -860,7 +920,126 @@ app_zone_taxon <- function(con) {
           as.data.frame(n), stringsAsFactors = FALSE)
   }))
   rownames(out) <- NULL
+  # The SQL cast reached app_taxon_table() and stopped there. `zone_taxon` is a
+  # PRECOMPUTED table read with SELECT *, so v7's DOUBLE taxon_id came straight
+  # through and this file published "22725044.0" beside taxon.parquet's "22725044".
+  for (nm in intersect(names(out), .APP_ID_COLS))
+    out[[nm]] <- app_id_chr(out[[nm]], nm)
+  # the model id is an id too, whatever the generation calls it
+  if ("mdl_key" %in% names(out) && !any(grepl("[|]", out$mdl_key, fixed = FALSE)))
+    out$mdl_key <- app_id_chr(out$mdl_key, "mdl_key")
   out
+}
+
+#' The WoRMS hierarchy the Composition treemap joins, restricted to this release
+#'
+#' Written by the NOTEBOOK until now, outside `app_bundle_build()` and therefore
+#' outside `boot$tables` — so the browser had no digest for it and **OPFS could
+#' never invalidate it**: a cached taxonomy from a previous release stayed until
+#' someone cleared site data by hand. An object the app reads is an object the
+#' contract has to describe.
+#'
+#' The CSV is an INPUT, not something msens goes looking for: the hierarchy is a
+#' dated WoRMS export shared across releases
+#' (`apps/scores/data/taxonomic_hierarchy_worms_2025-10-30.csv`), and a builder that
+#' guessed its path would silently publish whichever copy happened to be nearest.
+#'
+#' @param con a DBI connection to a release database
+#' @param ver version label
+#' @param dir_out the `app/` directory
+#' @param taxonomy_csv path to the WoRMS hierarchy CSV, or `NULL` to write nothing
+#'   (a release with no hierarchy on hand advertises none — nothing is invented)
+#' @return a list with `path`, `rows` and `taxa`, or `NULL` when nothing was written
+#' @importFrom utils read.csv
+#' @export
+#' @concept app
+app_taxonomy <- function(con, ver, dir_out, taxonomy_csv = NULL) {
+  if (is.null(taxonomy_csv) || !nzchar(taxonomy_csv) || !file.exists(taxonomy_csv))
+    return(NULL)
+  tx <- app_taxon_table(con)
+  d  <- utils::read.csv(taxonomy_csv, stringsAsFactors = FALSE, colClasses = "character")
+  # `species_id` is what the shared export actually calls it; the others are the
+  # spellings WoRMS itself uses, kept so a re-export under any of them still works
+  idc <- intersect(c("taxon_id", "species_id", "AphiaID", "aphia_id", "worms_id"),
+                   names(d))
+  if (!length(idc))
+    stop(sprintf("`%s` has no recognizable taxon id column (looked for %s)",
+                 basename(taxonomy_csv),
+                 paste(c("taxon_id", "species_id", "AphiaID", "aphia_id", "worms_id"),
+                       collapse = ", ")),
+         call. = FALSE)
+  names(d)[names(d) == idc[1]] <- "taxon_id"
+  d$taxon_id <- app_id_chr(d$taxon_id, "taxon_id")   # same text as every other object
+  d <- d[!is.na(d$taxon_id) & d$taxon_id %in% tx$taxon_id, , drop = FALSE]
+  d <- d[!duplicated(d$taxon_id), , drop = FALSE]
+  rownames(d) <- NULL
+  p <- file.path(dir_out, "taxonomy.parquet")
+  write_atlas_parquet(d, p)
+  list(path = p, rows = nrow(d), taxa = nrow(tx), columns = names(d))
+}
+
+#' The `mdl_id` -> `mdl_key` mapping the `cell_model` join needs
+#'
+#' `cell_model` stores the compact integer `mdl_id` on v8+; every name in the app
+#' comes from `mdl_key`. The mapping lived only in `{ver}/tables/model.parquet`,
+#' OUTSIDE `app/` and outside `boot$tables`, so the browser fetched a 1.1 MB table
+#' it could not cache-invalidate to resolve a click. This writes the three columns
+#' the join actually needs.
+#'
+#' **v8+ only.** A release whose `model` table has no `mdl_id` joins `cell_model`
+#' directly on `mdl_seq` and needs no mapping at all: it writes nothing and
+#' advertises nothing (D11 — a release that cannot supply a capability simply does
+#' not advertise it).
+#'
+#' @param con a DBI connection
+#' @param ver version label
+#' @param dir_out the `app/` directory
+#' @return a list with `path` and `rows`, or `NULL` on a release without `mdl_id`
+#' @importFrom DBI dbListTables dbListFields dbGetQuery
+#' @export
+#' @concept app
+app_model <- function(con, ver, dir_out) {
+  if (!"model" %in% DBI::dbListTables(con)) return(NULL)
+  f <- DBI::dbListFields(con, "model")
+  if (!all(c("mdl_id", "mdl_key") %in% f)) return(NULL)   # v1-v7: no mapping needed
+  d <- DBI::dbGetQuery(con, sprintf(
+    "SELECT %s AS mdl_id, CAST(mdl_key AS VARCHAR) AS mdl_key, %s
+       FROM model WHERE mdl_id IS NOT NULL ORDER BY mdl_id",
+    .app_id_cast(con, "model", "mdl_id", "mdl_id"),
+    if ("ds_key" %in% f) "ds_key" else "CAST(NULL AS VARCHAR) AS ds_key"))
+  d$mdl_id <- app_id_chr(d$mdl_id, "mdl_id")
+  p <- file.path(dir_out, "model.parquet")
+  write_atlas_parquet(d, p)
+  list(path = p, rows = nrow(d), columns = names(d))
+}
+
+#' Assert `boot$tables` names exactly the Parquet objects under `app/`
+#'
+#' No object without a digest, no digest without an object. A missing entry is an
+#' object OPFS can never invalidate (`taxonomy.parquet` and the model mapping were
+#' both in that state); a surplus entry is a fetch that 404s.
+#'
+#' @param dir_out the `app/` directory
+#' @param boot the boot object
+#' @return `TRUE`, invisibly; errors naming both differences
+#' @export
+#' @concept app
+app_tables_match <- function(dir_out, boot) {
+  files <- list.files(dir_out, "[.]parquet$", recursive = TRUE)
+  # a partitioned object is named by its directory, the way boot$tables names it
+  on_disk <- unique(ifelse(grepl("/", files, fixed = TRUE),
+                           sub("/.*$", "", files), sub("[.]parquet$", "", files)))
+  named <- names(boot$tables)
+  miss <- setdiff(on_disk, named); extra <- setdiff(named, on_disk)
+  if (length(miss) || length(extra))
+    stop(sprintf(paste0(
+      "boot$tables does not describe app/ exactly.\n",
+      "  written but NOT in boot$tables (no digest, so OPFS can never ",
+      "invalidate it): %s\n",
+      "  in boot$tables but NOT written (the app would 404): %s"),
+      if (length(miss)) paste(miss, collapse = ", ") else "(none)",
+      if (length(extra)) paste(extra, collapse = ", ") else "(none)"), call. = FALSE)
+  invisible(TRUE)
 }
 
 # ---- wide cell tiles ---------------------------------------------------------
@@ -1054,10 +1233,17 @@ app_cell_tile_digests <- function(con, dir) {
       "SELECT cell_id, {kq} AS val FROM {.app_tiles_as_client(dir)}
          WHERE {kq} IS NOT NULL"),
       cols = c("cell_id", "val"))
+    # ...and the SOURCE side restricted to the SAME universe the tiles publish:
+    # every `cell` row of a tile that holds a metric row. v3 has 703 `cell_metric`
+    # cells with no `cell` row at all, so an unrestricted source digest compared a
+    # set the contract deliberately excludes (the browser's `JOIN cell USING
+    # (cell_id)` drops them too) and reported 0 of 17 metrics matching on v3-v6.
     b <- hash_query(con, glue::glue(
-      "SELECT cm.cell_id, cm.{vc} AS val FROM cell_metric cm JOIN metric m
-         USING (metric_seq) WHERE m.metric_key = {DBI::dbQuoteString(con, k)}
-         AND cm.{vc} IS NOT NULL"),
+      "SELECT cm.cell_id, cm.{vc} AS val FROM cell_metric cm
+         JOIN metric m USING (metric_seq)
+         JOIN cell   c ON c.cell_id = cm.cell_id
+        WHERE m.metric_key = {DBI::dbQuoteString(con, k)}
+          AND cm.{vc} IS NOT NULL"),
       cols = c("cell_id", "val"))
     data.frame(metric_key = k, tiles = a, cell_metric = b, ok = identical(a, b),
                stringsAsFactors = FALSE)
@@ -1188,6 +1374,8 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @param base atlas base URL
 #' @param geom_keys optional geometry keys per zone type, see [app_units()]
 #' @param cell_tiles write the wide cell tiles (default `TRUE`)
+#' @param taxonomy_csv path to the WoRMS hierarchy CSV, passed to [app_taxonomy()].
+#'   `NULL` writes no `taxonomy.parquet` and advertises none.
 #' @param strict stop at the first failing stage (`TRUE`, the default), so a
 #'   half-written bundle is never published by accident. `FALSE` runs every stage,
 #'   records what failed in `$failed`, and leaves the stages that worked on disk —
@@ -1202,6 +1390,7 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                              base = atlas_base_url(), geom_keys = list(),
                              cell_tiles = TRUE, strict = TRUE,
+                             taxonomy_csv = NULL,
                              built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
@@ -1263,6 +1452,27 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
     d
   })
 
+  stage("taxonomy.parquet", {
+    t <- app_taxonomy(con, ver, dir_out, taxonomy_csv)
+    if (!is.null(t)) {
+      descr$taxonomy <- app_table_descriptor(
+        t$path, "taxonomy", ver, base, rows = t$rows,
+        columns = lapply(t$columns, function(n) list(name = n, type = "character")))
+      note("taxonomy.parquet", file.size(t$path))
+    }
+    t
+  })
+  stage("model.parquet", {
+    t <- app_model(con, ver, dir_out)
+    if (!is.null(t)) {
+      descr$model <- app_table_descriptor(
+        t$path, "model", ver, base, rows = t$rows,
+        columns = lapply(t$columns, function(n) list(name = n, type = "character")))
+      note("model.parquet", file.size(t$path))
+    }
+    t
+  })
+
   tiles <- NULL
   if (isTRUE(cell_tiles)) tiles <- stage("cell/", {
     t <- app_cell_tiles(con, file.path(dir_out, "cell"))
@@ -1282,6 +1492,8 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                   tables = app_table_manifest(unname(descr), ver, base),
                   geom_keys = geom_keys, built_at = built_at)
     put("boot.json", b)
+    # no object without a digest, no digest without an object
+    app_tables_match(dir_out, b)
     b
   })
   stage("taxa.json", put("taxa.json", app_taxa(con, ver)))

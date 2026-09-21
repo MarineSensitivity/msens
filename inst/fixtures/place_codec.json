@@ -712,5 +712,42 @@
       "code": "truncated",
       "why": "a varint that never terminates"
     }
+  ],
+  "encode_reject": [
+    {
+      "id": "reject_wrapped_ring",
+      "kind": "encode_reject",
+      "why": "the BYTE-LEVEL encoder refuses a ring that is still wrapped; the high-level entry normalizes first and yields the bering token",
+      "name": "Bering box",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [-170, 51],
+            [-170, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "code": "wrapped",
+      "wrapped_edge": 1,
+      "max_step_deg": 340,
+      "unwrapped": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [190, 51],
+            [190, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "token_via_high_level": "g1.Bering%20box.EAMBAQSg4BTwnAbAuAIAAJBOv7gCAA"
+    }
   ]
 }

@@ -16,17 +16,21 @@ export(app_cell_tile_digests)
 export(app_cell_tiles)
 export(app_datasets)
 export(app_flower_default)
+export(app_id_chr)
 export(app_json)
 export(app_manifest_block)
+export(app_model)
 export(app_one_file_per_partition)
 export(app_palettes)
 export(app_schema_names)
 export(app_schema_path)
 export(app_table_descriptor)
 export(app_table_manifest)
+export(app_tables_match)
 export(app_taxa)
 export(app_taxon_shards)
 export(app_taxon_table)
+export(app_taxonomy)
 export(app_units)
 export(app_validate)
 export(app_zone_taxon)
@@ -413,5 +417,6 @@ importFrom(tidyr,
 importFrom(utils,
   URLencode,
   modifyList,
-  packageVersion
+  packageVersion,
+  read.csv
 )

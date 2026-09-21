@@ -181,6 +181,34 @@ numbers for the same ground.
   and the synthetic fixture uses the real one. On real v7b: 4 rows,
   `method_key / val / description`.
 
+## Round 3: every registered release, and two objects the contract had lost
+
+* **`app_id_chr()`** (new, exported) is the R-side twin of the SQL id cast, applied
+  to **every** published id on every object. `.app_id_cast()` had reached
+  `app_taxon_table()` and stopped there, so v7's `zone_taxon.parquet` — read with
+  `SELECT *` from a precomputed table — still published `"22725044.0"` beside
+  `taxon.parquet`'s `"22725044"`: one contract, two spellings, and every join
+  between them empty. The `model_asset` and `taxon_model` joins were casting the
+  same way and matching nothing. The smoke gate now asserts no id column is floating
+  point in any published Parquet and no id string ends in `.0` in any JSON.
+* **`app_taxonomy()`** and **`app_model()`** (new) bring into `app/` the two objects
+  the browser needs and `boot$tables` did not describe: the WoRMS hierarchy
+  (previously written by the notebook, outside the bundle) and the
+  `mdl_id -> mdl_key` mapping the `cell_model` join needs (previously only
+  `{ver}/tables/model.parquet`, outside `app/`). Neither had a digest, so **OPFS
+  could never invalidate them**. `app_model()` is v8+ only: a release without
+  `mdl_id` joins on `mdl_seq` directly, writes nothing and advertises nothing.
+  **`app_tables_match()`** asserts `boot$tables` names exactly the Parquet objects
+  written — no object without a digest, no digest without an object.
+* **A release whose `dataset` has no `is_mask`** (v1) no longer takes the whole shard
+  stage down with a Binder Error; the flag comes back NULL rather than invented.
+* **`cell_metric` rows for cells absent from `cell`** (703 on v3) no longer make the
+  digest gate report every metric as a mismatch: both sides are now restricted to the
+  universe the contract publishes, which is what the browser's `JOIN cell` keeps.
+* The smoke gate **asserts the `methods` block** rather than tolerating its absence,
+  and the shared codec vectors are re-adopted (sha256 `50ad541a…`) with
+  `place_encode_strict()` reproducing the new `reject_wrapped_ring` vector.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,

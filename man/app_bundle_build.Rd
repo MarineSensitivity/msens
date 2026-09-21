@@ -13,6 +13,7 @@ app_bundle_build(
   geom_keys = list(),
   cell_tiles = TRUE,
   strict = TRUE,
+  taxonomy_csv = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -37,6 +38,9 @@ records what failed in \verb{$failed}, and leaves the stages that worked on disk
 the notebook's diagnostic pass. Either way a failure NAMES its stage and the
 outputs already written, so nobody needs to build a parallel composition to
 get at the parts.}
+
+\item{taxonomy_csv}{path to the WoRMS hierarchy CSV, passed to \code{\link[=app_taxonomy]{app_taxonomy()}}.
+\code{NULL} writes no \code{taxonomy.parquet} and advertises none.}
 
 \item{built_at}{ISO timestamp}
 }
