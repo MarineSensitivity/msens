@@ -175,3 +175,66 @@ test_that("a drawn polygon tracing a zone reproduces that zone's published score
   expect_equal(unname(s[["turtle"]]),   80 / 3)
   expect_equal(unname(s[["primprod"]]), 40 / 3)
 })
+
+# A GEO-shaped case: the coverage where the two formulas diverge most ------------
+#
+# REGRESSION 1 above pins turtle at 100/350 = 28.6 % coverage, which is a normal
+# Program Area, not the pathological one. The case that actually broke reports is
+# St George Basin (GEO), where turtle covers 1.41 % of the area: published 0.70,
+# old formula 49.85. `inst/gates/pa_tracing.R` asserts that on the real release;
+# this reproduces the SHAPE in milliseconds, so the rule is pinned even on a
+# machine with no 29 GB database.
+
+synth_sliver <- function(n_cells = 100L, n_with = 1L, val = 80) {
+  con <- DBI::dbConnect(duckdb::duckdb(),
+                        dbdir = tempfile("synth_sliver_", fileext = ".duckdb"))
+  id <- seq_len(n_cells)
+  DBI::dbWriteTable(con, "cell", data.frame(
+    cell_id = id, lon = 0, lat = 0, area_km2 = 25, in_usa = TRUE))
+  DBI::dbWriteTable(con, "metric", data.frame(
+    metric_seq = 1:2,
+    metric_key = c("extrisk_turtle_ecoregion_rescaled",
+                   "extrisk_bird_ecoregion_rescaled"),
+    description = "m"))
+  DBI::dbWriteTable(con, "cell_metric", rbind(
+    data.frame(cell_id = id[seq_len(n_with)], metric_seq = 1L, val = val),
+    data.frame(cell_id = id,                  metric_seq = 2L, val = 50)))
+  DBI::dbWriteTable(con, "zone", data.frame(
+    zone_seq = 1L, tbl = "z", fld = "programarea_key", val = "GEOISH"))
+  DBI::dbWriteTable(con, "zone_cell", data.frame(
+    zone_seq = 1L, cell_id = id, pct_covered = 100))
+  # the PUBLISHED value, by the identity: sum(coalesce(val,0)*pct)/sum(pct)
+  DBI::dbWriteTable(con, "zone_metric", data.frame(
+    zone_seq = 1L, metric_seq = 1:2,
+    val = c(val * n_with / n_cells, 50)))
+  con
+}
+
+test_that("REGRESSION 1e: a ~1 % coverage component reads 99x high under the old formula", {
+  con <- synth_sliver(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  cells <- cells_in_pra(con, "GEOISH")
+  expect_equal(nrow(cells), 100)
+
+  d <- scores_for_cells(con, cells, denominator = "all")
+  t <- d[d$component == "turtle", ]
+  expect_equal(t$coverage, 0.01)                 # the GEO shape: ~1 % covered
+  expect_equal(t$mean_where_present, 80)
+  expect_equal(t$score, 0.8)                     # blended: 80 * 0.01
+
+  # ...and that IS the published number, to the last bit
+  pub <- scores_for_pra(con, "GEOISH")
+  expect_equal(t$score, pub$score[pub$component == "turtle"])
+
+  # the old formula says 80 where the release published 0.8 — off by 79.2, which is
+  # the synthetic twin of GEO's measured 49.14
+  old <- scores_for_cells(con, cells, blend = FALSE, denominator = "all")
+  o <- old$score[old$component == "turtle"]
+  expect_equal(o, 80)
+  expect_equal(o - t$score, 79.2)
+  expect_gt(o - t$score, 0.5)                    # far outside any report tolerance
+
+  # a fully covered component in the SAME area is untouched, so the blend is not
+  # simply shrinking everything
+  expect_equal(d$score[d$component == "bird"], 50)
+  expect_equal(old$score[old$component == "bird"], 50)
+})

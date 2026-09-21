@@ -66,6 +66,19 @@ numbers for the same ground.
   hardcoding `value` — which made both work on every served release and fail on a
   v8/v9 source database.
 
+## Gates you can run
+
+* **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
+  opens the release READ-ONLY, runs all 20 Program Areas and exits **0** when every
+  assertion holds, **1** on any failure, **77** when the database is not on the
+  machine (a CI step that forgets to mount the data cannot report a pass it never
+  ran). It asserts that `blend = TRUE` reproduces every published `zone_metric` to
+  <= 1e-9, that `denominator = "study_area"` stays within 0.5 per component, that the
+  GAA outline traced through `cells_in_polygon_grid()` gives exactly the published
+  `zone_cell` count — and, **deliberately red**, that the OLD formula still fails on
+  >= 12 areas and by >= 49.1447 on GEO. A gate that only checked the good path would
+  pass if the blend quietly stopped being a blend.
+
 ## Places: one rule, shared with the browser
 
 * **`cells_in_polygon_grid(poly, grid)`** (new, `R/place.R`, `@concept place`) answers
