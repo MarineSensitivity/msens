@@ -1,3 +1,9 @@
+# msens 0.42.0
+
+* **`.GRID_VER` gains `v7b = "usa05"`** — the v7.1 patch release id (`grid.R`), a surgical patch of
+  the public v7 release on the same `usa05` grid. Registered so `grid_for_ver("v7b")` resolves
+  rather than erroring on an unknown version.
+
 # msens 0.41.0
 
 * **`zone_crosswalk(a, b, key_a, key_b, iou_min, hint)`** — pairs zones of two layers only where they
