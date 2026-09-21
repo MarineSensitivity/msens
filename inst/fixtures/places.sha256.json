@@ -1,0 +1,31 @@
+{
+  "note": "sha256 of every coverage fixture SHARED with msens inst/fixtures/places/. The files are copied byte for byte and prettier is told to leave tests/fixtures/places alone, so these hashes are the same on both sides: if one repo edits a fixture, tests/geo/adoptedFixtures.test.ts goes red here and the copies have drifted apart.",
+  "source": "msens inst/fixtures/places/",
+  "owed_to_msens": [
+    "normalize-seam-141-usa05.json",
+    "normalize-threshold-200-jump-global05.json",
+    "normalize-threshold-wide-segment-global05.json"
+  ],
+  "owed_note": "the three files above were written HERE (TypeScript side) and msens has not adopted them yet: the number 180 was pinned by no fixture in either language, and neither was the per-vertex 141.10 frame shift. They are hand-derived (see each file's note), not read off this implementation, and they are listed so the direction of the copy is not lost.",
+  "files": {
+    "antimeridian_global05.json": "4bb250ede1c39be59380225265b4061946ed71a0fb881fec1ce3fd1bc85c6c30",
+    "antimeridian_usa05.json": "39252d40bd348ce3546914d845cf80630d75e9dc185578aca62dd86314ec829c",
+    "gulf_rectangle.json": "eb5ca9018852d6f7011684b4a3023516c523eb3352e42d87cf9ff34950f286cb",
+    "half_cell_even.json": "1af8d94246c8ef24c8e255197a1ea5bfd0db495d2d1a6b99928794db19f5f985",
+    "half_cell_even_up.json": "a72a11108dc0effade14a53dce9dff2760a76a0d4b7142433ea38b399bdf4864",
+    "multipolygon.json": "b7df69d707e85fdc8781af29be0831ba57e7014193bde1069e10bd031a68b72e",
+    "normalize-aleutian-twice-global05.json": "44858d8b417a7d30d10daaa1b50e53c7a56b14b2d63d3243a399b2984d4c3b8e",
+    "normalize-already-unwrapped-global05.json": "8773c4b187dc137a33368bf048f46c483e76b3c81eb45fc86a79c7bca7e5736f",
+    "normalize-box-180-global05.json": "55324f70fc264fdefe89d12df46b8263093736063784483ccbc8f5bf88a56681",
+    "normalize-box-180-usa05.json": "379b2619b465554ae3c6b0f2cb5033ab937466c269ea2aa2921cfe8cda078935",
+    "normalize-hole-outer-crosses-global05.json": "b0a748a06197de118f10e3eb5b7af6da727db3aac220d0a3e70a6a53f49df5e8",
+    "normalize-multipolygon-split-global05.json": "b7369c5532216000457794279f959afc80768be4ac4c3e8f78d4689bb6d05ffc",
+    "normalize-near-zero-global05.json": "f1d8423350a381cd9e43791b83e74cc7cb6c90994d7d86504119995245585562",
+    "normalize-seam-141-usa05.json": "4f496f9f1317996394e788033a84911979f35533f08719af7bf317193a324585",
+    "normalize-threshold-200-jump-global05.json": "596362151718f1134a5fc6b6da8b000f88ab47c49b5591ec7beace50e7a101e7",
+    "normalize-threshold-wide-segment-global05.json": "25112093ec586c404a2db0bc02a46cdc23c082be389033aa18e425d63a04b45b",
+    "polygon_hole.json": "bb9bf32f70e59bbdc06d4bce3dbf98d2161092f43d63b952c893153664fa91e5",
+    "programarea_gaa.json": "942699eb402274a9612ea8f5071a83926977e114817898f5fb83c733a3d0cc43",
+    "sliver_corner.json": "4ce995ed5aba6d6fa944f04747b22f80c3b69d02f54c8792c5ff9e026145cc33"
+  }
+}

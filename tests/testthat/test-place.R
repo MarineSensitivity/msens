@@ -264,3 +264,72 @@ test_that("cells_in_polygon unwraps at the sf boundary, so a drawn place still w
   expect_setequal(d$cell_id, want$cell_id)
   expect_true(all(d$pct_covered == 100))
 })
+
+
+# The shared-fixture manifest --------------------------------------------------
+
+test_that("the fixture directory is byte-identical with the atlas repo's", {
+  d <- system.file("fixtures", "places", package = "msens")
+  a <- "/Users/bbest/Github/MarineSensitivity/atlas/tests/fixtures/places"
+  mine <- sort(list.files(d, "[.]json$"))
+  expect_equal(length(mine), 33)
+
+  # the recorded hashes: a drift detector that works without the atlas repo
+  m <- jsonlite::fromJSON(
+    system.file("fixtures", "places.sha256.json", package = "msens"),
+    simplifyVector = FALSE)
+  expect_gt(length(m$files), 0)
+  for (f in names(m$files)) {
+    expect_true(f %in% mine, info = f)
+    expect_identical(digest::digest(file = file.path(d, f), algo = "sha256"),
+                     m$files[[f]], info = f)
+  }
+
+  # ...and when both repos ARE on this machine, every one of the 33, both ways
+  skip_if_not(dir.exists(a), "the atlas repo is not on this machine")
+  expect_identical(mine, sort(list.files(a, "[.]json$")))
+  for (f in mine)
+    expect_identical(digest::digest(file = file.path(d, f), algo = "sha256"),
+                     digest::digest(file = file.path(a, f), algo = "sha256"),
+                     info = f)
+})
+
+test_that("the 180-degree threshold is pinned from BOTH sides", {
+  # Round 1 shipped a rule nothing tested: with the threshold moved to 90, and
+  # separately to 270, all 581 place tests stayed green. No fixture had a genuine
+  # step between 90 and 180 (must NOT unwrap) or a raw jump between 180 and 270
+  # (MUST unwrap). The TypeScript side authored both; they are adopted here.
+
+  # from BELOW: a genuine 120-degree segment must pass through UNCHANGED. At a
+  # threshold of 90 the bottom edge reads as a crossing and the ring turns inside out.
+  wide <- place_fixture("normalize-threshold-wide-segment-global05")
+  expect_equal(unname(sf::st_coordinates(unwrap_polygon(wide$geometry))[, "X"]),
+               unname(sf::st_coordinates(wide$geometry)[, "X"]))
+  expect_equal(nrow(cells_in_polygon_grid(unwrap_polygon(wide$geometry), wide$grid)), 2400)
+  expect_equal(wide$cells_if_read_literally, 2400)      # unwrap changes nothing here
+
+  # from ABOVE: a raw step of 200 degrees (100 -> -100) IS a crossing and must
+  # unwrap to 100 -> 260. At a threshold of 270 it would not fire and the
+  # 160-degree box would stay its 200-degree complement.
+  jump <- place_fixture("normalize-threshold-200-jump-global05")
+  expect_equal(unname(sf::st_coordinates(unwrap_polygon(jump$geometry))[, "X"]),
+               c(100, 260, 260, 100, 100))
+  expect_equal(nrow(cells_in_polygon_grid(unwrap_polygon(jump$geometry), jump$grid)), 3200)
+  expect_equal(jump$cells_if_read_literally, 4000)      # and 4,000 if left alone
+
+  # the two are what make the threshold a measurement rather than a preference
+  expect_lt(120, 180)
+  expect_gt(200, 180)
+})
+
+test_that("usa05's own 141.10 seam is pinned, not just the antimeridian", {
+  # Unwrapping leaves this ring alone -- every edge is 2 degrees. What decides the
+  # answer is the PER-VERTEX frame shift, which sends 140 to 500 and 142 to 142 and
+  # tears the ring open across the grid. Out of contract as a place; in contract as
+  # a twin, and until now no fixture pinned the shift at all.
+  fx <- place_fixture("normalize-seam-141-usa05")
+  expect_equal(unname(sf::st_coordinates(unwrap_polygon(fx$geometry))[, "X"]),
+               unname(sf::st_coordinates(fx$geometry)[, "X"]))
+  expect_equal(nrow(cells_in_polygon_grid(fx$geometry, fx$grid)), 3085)
+  expect_equal(fx$cells_if_read_literally, 3085)
+})

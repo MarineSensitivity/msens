@@ -136,7 +136,14 @@ numbers for the same ground.
   compiled 7200. No release ever wrote `cell_grid`, so the blind fallback was always
   taken: right for `global05` by coincidence, wrong for every `usa05` release, and
   silently so — a v7 cell with 477 models returned 0 species.
-* `inst/fixtures/places/*.json` carries 30 fixtures — polygon, grid spec and expected
+* The 180-degree threshold in `unwrap_ring()` is now pinned from **both** sides by
+  fixtures the TypeScript side authored: a genuine 120-degree segment that must NOT
+  unwrap, and a raw 200-degree jump that MUST. Moving the threshold to 90 or to 270
+  used to leave every place test green. `normalize-seam-141-usa05` pins the
+  per-vertex `usa05` frame shift, which nothing tested either.
+* `inst/fixtures/places.sha256.json` is adopted from the atlas repo and asserted per
+  file, so a fixture edited on one side alone turns the other side red.
+* `inst/fixtures/places/*.json` carries 33 fixtures — polygon, grid spec and expected
   `(cell_id, pct)` — shared byte-identically with the atlas app's TypeScript twin.
   The coverage fixtures are written **unwrapped**; the seven new `normalize-*` files
   are the shared vectors for the unwrap rule, each carrying the ring as written, the

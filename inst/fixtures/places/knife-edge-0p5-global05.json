@@ -19,11 +19,26 @@
     "type": "Polygon",
     "coordinates": [
       [
-        [-89.9525, 27.05],
-        [-89.95, 27.05],
-        [-89.95, 27.055],
-        [-89.9525, 27.055],
-        [-89.9525, 27.05]
+        [
+          -89.9525,
+          27.05
+        ],
+        [
+          -89.95,
+          27.05
+        ],
+        [
+          -89.95,
+          27.055
+        ],
+        [
+          -89.9525,
+          27.055
+        ],
+        [
+          -89.9525,
+          27.05
+        ]
       ]
     ]
   },
@@ -32,9 +47,11 @@
     "cell_id": 9059401,
     "exact_pct": 0.5,
     "raw_pct_unsnapped": "0.50000000000022737",
+    "raw_pct_unsnapped_msens": "0.49999999999875822",
     "pct_without_snap": 1,
+    "pct_without_snap_msens": 0,
     "pct_with_snap": 0,
     "rule": "pct = round_half_even(round(frac * 100, 9)); R: round(round(x, 9))",
-    "note": "raw_pct_unsnapped is this clipper's value, for documentation — another implementation will land a few 1e-13 elsewhere. What both must agree on is pct_with_snap."
+    "note": "the two clippers land on OPPOSITE sides of the same half (atlas raw_pct_unsnapped vs msens raw_pct_unsnapped_msens), so pct_without_snap disagrees between the repos and pct_with_snap does not. pct_with_snap is the published number and the only one either side must reproduce."
   }
 }
