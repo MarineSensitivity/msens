@@ -19,6 +19,8 @@ test_that("functions the workflows/apps call are actually exported", {
     "assign_mdl_id", "dataset_is_scored",
     # cross-version schema resolution (apps AND the versioned docs)
     "sdm_cols",
+    # zone coverage + the reporting floor (build_v7b.qmd)
+    "coverage_sql", "coverage_floor",
     # version + manifest registry
     "atlas_base_url", "atlas_latest", "atlas_versions", "atlas_resolve_ver",
     "atlas_manifest", "validate_manifest", "manifest_build", "manifest_can",
