@@ -1031,16 +1031,12 @@ test_that("REGRESSION: a field with two zone tables publishes exactly one", {
     expect_identical(ch$tbl[ch$fld == "subregion_key"], "ply_subregions_2025")
     expect_match(ch$why[ch$fld == "subregion_key"], "named by manifest.json", fixed = TRUE)
 
-    # geometry keys are a CHECK on that choice, not a second opinion -- but only
-    # where a unit will be published, so the zones have to be scored first (D16)
-    sq <- DBI::dbGetQuery(con,
-      "SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'")$metric_seq[1]
-    DBI::dbExecute(con, sprintf(
-      "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone
-        WHERE tbl = 'ply_subregions_2025'", sq))
+    # D17: subregion can never be a unit, so its geometry is IGNORED -- the choice
+    # of table still matters (zone_taxon and boot$zones are keyed by it)
     ch2 <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR2")))
     expect_identical(ch2$tbl[ch2$fld == "subregion_key"], "ply_subregions_2025")
-    expect_match(ch2$why[ch2$fld == "subregion_key"], "geometry keys agree", fixed = TRUE)
+    expect_match(ch2$why[ch2$fld == "subregion_key"],
+                 "not a drawable unit type: geometry ignored", fixed = TRUE)
 
     # and with NO manifest there is no guess at all
     expect_error(app_zone_tbl(con), "manifest names none of them", fixed = TRUE)
@@ -1061,21 +1057,20 @@ test_that("REGRESSION: a field with two zone tables publishes exactly one", {
 
 test_that("the chosen zone_tbl is recorded in boot$units", {
   with_synth("v2", function(con) {
+    # D17: score the PROGRAMAREA zones -- they are the drawable type
     DBI::dbExecute(con, "INSERT INTO zone_metric SELECT zone_seq,
       (SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'), 10
-      FROM zone WHERE tbl = 'ply_subregions_2025'")
-    m <- manifest_build(con, "v2", base = BASE,
-                        zone_tiles = list(`subregion_2025-08` = "https://x/z.pmtiles"),
-                        zone_sets = NULL)
-    m$zones$zone_set_key <- "subregion_2025-08"
+      FROM zone WHERE fld = 'programarea_key'")
+    m <- synth_manifest(con, "v2", BASE)
     m$zones$pmtiles <- "https://x/z.pmtiles"
-    gk <- list(subregion = c("SR1", "SR2"))
+    # D17: the unit is the programarea; its chosen table is what units[] records
+    gk <- list(programarea = c("AAA", "BBB"))
     ch <- app_zone_tbl(con, synth_manifest(con, "v2", BASE), geom_keys = gk)
     u  <- app_units(con, m, geom_keys = gk, chosen = ch)
-    sr <- Filter(function(x) x$zone_type == "subregion", u)
-    expect_length(sr, 1)
-    expect_identical(sr[[1]]$zone_tbl, "ply_subregions_2025")
-    expect_setequal(unlist(sr[[1]]$keys), c("SR1", "SR2"))
+    expect_length(u, 1)
+    expect_identical(u[[1]]$zone_type, "programarea")
+    expect_identical(u[[1]]$zone_tbl, "ply_programareas_2026")
+    expect_setequal(unlist(u[[1]]$keys), c("AAA", "BBB"))
   })
 })
 
@@ -1161,20 +1156,24 @@ test_that("geometry keys that DISAGREE with the manifest stop the build", {
     mf <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2025",
                                   zone_set_key = "subregion_2025-08",
                                   stringsAsFactors = FALSE))
-    # the check runs only where a unit is published, so score both subregions (D16)
+    # the check runs only for a DRAWABLE type that will be a unit (D16 + D17), so
+    # score the programareas and disagree about THEIR geometry
     sq <- DBI::dbGetQuery(con,
       "SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'")$metric_seq[1]
     DBI::dbExecute(con, sprintf(
       "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone
-        WHERE tbl = 'ply_subregions_2025'", sq))
-    # the keys of the OTHER table: the notebook was handed the wrong GeoPackage
-    expect_error(app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR3"))),
+        WHERE fld = 'programarea_key'", sq))
+    mf$zones <- rbind(mf$zones, data.frame(
+      fld = "programarea_key", tbl = "ply_programareas_2026",
+      zone_set_key = "programarea_2026-01", stringsAsFactors = FALSE))
+    # a key the release does not have: the notebook was handed the wrong GeoPackage
+    expect_error(app_zone_tbl(con, mf, geom_keys = list(programarea = c("AAA", "ZZZ"))),
                  "does not match the table the manifest names", fixed = TRUE)
-    expect_error(app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR3"))),
+    expect_error(app_zone_tbl(con, mf, geom_keys = list(programarea = c("AAA", "ZZZ"))),
                  "wrong GeoPackage", fixed = TRUE)
     # ...and the right ones are recorded as agreeing
-    ch <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("SR1", "SR2")))
-    expect_match(ch$why[ch$fld == "subregion_key"], "geometry keys agree", fixed = TRUE)
+    ch <- app_zone_tbl(con, mf, geom_keys = list(programarea = c("AAA", "BBB")))
+    expect_match(ch$why[ch$fld == "programarea_key"], "geometry keys agree", fixed = TRUE)
   })
 })
 
@@ -1252,12 +1251,15 @@ test_that("REGRESSION: a manifest naming two tables for one field stops the buil
 
 # a release whose `subregion_key` has `n_scored` of its zones carrying a score_%
 # metric, so the "is this a unit?" gate can be driven directly
+# D17: only programarea/planarea can be a unit, so a fixture about units scores
+# PROGRAMAREA zones. (It reads "subregions" because that is the shape the defect
+# was found in; the type is what changed, not the rule under test.)
 synth_scored_subregions <- function(n_scored) {
   con <- synth_release("v9")
   DBI::dbExecute(con, "INSERT INTO zone (zone_seq, tbl, fld, val, zone_set_key) VALUES
-    (3, 'ply_subregions_2026_v9', 'subregion_key', 'AK',  'subregion_2025-06'),
-    (4, 'ply_subregions_2026_v9', 'subregion_key', 'GA',  'subregion_2025-06'),
-    (5, 'ply_subregions_2026_v9', 'subregion_key', 'USA', 'subregion_2025-06')")
+    (3, 'ply_programareas_2026_v9', 'programarea_key', 'AK',  'programarea_2026-01'),
+    (4, 'ply_programareas_2026_v9', 'programarea_key', 'GA',  'programarea_2026-01'),
+    (5, 'ply_programareas_2026_v9', 'programarea_key', 'USA', 'programarea_2026-01')")
   # cells, or app_zones() lists nothing: it summarises zone JOIN zone_cell JOIN cell
   DBI::dbExecute(con, "INSERT INTO zone_cell
     SELECT z.zone_seq, c.cell_id, 100 FROM zone z, cell c WHERE z.zone_seq IN (3, 4, 5)")
@@ -1267,7 +1269,7 @@ synth_scored_subregions <- function(n_scored) {
   for (k in keys)
     DBI::dbExecute(con, sprintf(
       "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone
-        WHERE fld = 'subregion_key' AND val = '%s'", sq, k))
+        WHERE fld = 'programarea_key' AND val = '%s'", sq, k))
   con
 }
 
@@ -1281,16 +1283,16 @@ test_that("a field with fewer than 2 scored zones ignores its geometry, and says
     con <- synth_scored_subregions(n)
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
     mf <- synth_manifest(con, "v9", BASE)
-    gk <- list(subregion = c("AK", "AT", "GA", "PA"))   # AT is in NO release's table
+    gk <- list(programarea = c("AK", "AT", "GA", "PA")) # AT is in NO release's table
 
     ch <- expect_silent(app_zone_tbl(con, mf, geom_keys = gk))
-    expect_match(ch$why[ch$fld == "subregion_key"],
-                 sprintf("no unit: %d of 3 zones scored; geometry not checked", n),
+    expect_match(ch$why[ch$fld == "programarea_key"],
+                 sprintf("no unit: %d of 5 zones scored; geometry not checked", n),
                  fixed = TRUE, info = paste("n_scored", n))
     # ...and no unit is published for it
     m2 <- mf; m2$zones$pmtiles <- "https://x/z.pmtiles"
     u <- app_units(con, m2, geom_keys = gk, chosen = ch)
-    expect_false("subregion" %in% vapply(u, function(x) x$zone_type, ""))
+    expect_false("programarea" %in% vapply(u, function(x) x$zone_type, ""))
   })
 })
 
@@ -1300,14 +1302,14 @@ test_that("REGRESSION: where a unit IS published, a geometry key that is not sco
   mf <- synth_manifest(con, "v9", BASE)
 
   expect_error(
-    app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "GA", "AT"))),
+    app_zone_tbl(con, mf, geom_keys = list(programarea = c("AK", "GA", "AT"))),
     "in the geometry but NOT in that table: AT", fixed = TRUE)
   expect_error(
-    app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "GA", "AT"))),
+    app_zone_tbl(con, mf, geom_keys = list(programarea = c("AK", "GA", "AT"))),
     "wrong GeoPackage", fixed = TRUE)
   expect_error(
     app_bundle_build(con, "v9", withr::local_tempdir(), manifest = mf, base = BASE,
-                     geom_keys = list(subregion = c("AK", "GA", "AT"))),
+                     geom_keys = list(programarea = c("AK", "GA", "AT"))),
     "in the geometry but NOT in that table", fixed = TRUE)
 })
 
@@ -1318,19 +1320,19 @@ test_that("a unit publishes exactly the keys that are both scored and drawn", {
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   mf <- synth_manifest(con, "v9", BASE)
   mf$zones$pmtiles <- "https://x/z.pmtiles"
-  gk <- list(subregion = c("AK", "GA"))      # the geometry draws no USA
+  gk <- list(programarea = c("AK", "GA"))    # the geometry draws no USA
 
   ch <- app_zone_tbl(con, mf, geom_keys = gk)
-  expect_match(ch$why[ch$fld == "subregion_key"], "geometry keys agree", fixed = TRUE)
+  expect_match(ch$why[ch$fld == "programarea_key"], "geometry keys agree", fixed = TRUE)
 
   u  <- app_units(con, mf, geom_keys = gk, chosen = ch)
-  sr <- Filter(function(x) x$zone_type == "subregion", u)
+  sr <- Filter(function(x) x$zone_type == "programarea", u)
   expect_length(sr, 1)
   expect_setequal(unlist(sr[[1]]$keys), c("AK", "GA"))     # scored AND drawn
   expect_false("USA" %in% unlist(sr[[1]]$keys))
 
   z <- app_zones(con, chosen = ch)
-  expect_true("USA" %in% vapply(z$subregion, function(x) x$key, ""))   # kept here
+  expect_true("USA" %in% vapply(z$programarea, function(x) x$key, "")) # kept here
 })
 
 test_that("a scored zone with NO zone_taxon rows publishes n_taxa = 0 and keeps its unit", {
@@ -1340,31 +1342,31 @@ test_that("a scored zone with NO zone_taxon rows publishes n_taxa = 0 and keeps 
   con <- synth_scored_subregions(2)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   expect_equal(DBI::dbGetQuery(con,
-    "SELECT count(*) n FROM zone_taxon WHERE zone_fld = 'subregion_key'")$n, 0L)
+    "SELECT count(*) n FROM zone_taxon WHERE zone_value IN ('AK','GA','USA')")$n, 0L)
 
   mf <- synth_manifest(con, "v9", BASE); mf$zones$pmtiles <- "https://x/z.pmtiles"
-  ch <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "GA")))
+  ch <- app_zone_tbl(con, mf, geom_keys = list(programarea = c("AK", "GA")))
   z  <- app_zones(con, chosen = ch)
 
-  sr <- z$subregion
+  sr <- Filter(function(e) e$key %in% c("AK", "GA", "USA"), z$programarea)
   expect_gt(length(sr), 0)
   for (e in sr) {
     expect_true("n_taxa" %in% names(e))
     expect_identical(e$n_taxa, 0L)              # 0, not absent and not invented
     expect_gt(e$n_cells, 0)                     # the zone is real
   }
-  # the programarea zones DO have zone_taxon rows, so the field is not always 0
+  # AAA DOES have zone_taxon rows, so the field is not always 0
   expect_true(any(vapply(z$programarea, function(e) e$n_taxa, 0L) > 0L))
 
   # ...and the unit is still published, because the score is real
-  u  <- app_units(con, mf, geom_keys = list(subregion = c("AK", "GA")), chosen = ch)
-  expect_true("subregion" %in% vapply(u, function(x) x$zone_type, ""))
+  u  <- app_units(con, mf, geom_keys = list(programarea = c("AK", "GA")), chosen = ch)
+  expect_true("programarea" %in% vapply(u, function(x) x$zone_type, ""))
 
   # the schema requires it
   b <- app_boot(con, "v9", mf, chosen = ch)
   expect_silent(app_validate(b, "boot"))
   bad <- b
-  bad$zones$subregion <- lapply(b$zones$subregion, function(e) { e$n_taxa <- NULL; e })
+  bad$zones$programarea <- lapply(b$zones$programarea, function(e) { e$n_taxa <- NULL; e })
   expect_error(app_validate(bad, "boot"), "n_taxa")
 })
 
@@ -1434,28 +1436,32 @@ test_that("REGRESSION: only a `score_` metric makes a zone count toward a unit",
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
   # three subregion zones, each with a NON-score metric and none with a score_ one
+  # the AK/GA/PA zones carry only a NON-score metric; AAA/BBB carry a score_ one
   n_score <- DBI::dbGetQuery(con, "
     SELECT count(*) n FROM zone z JOIN zone_metric zm USING (zone_seq)
       JOIN metric m USING (metric_seq)
-     WHERE z.fld = 'subregion_key' AND m.metric_key LIKE 'score!_%' ESCAPE '!'")$n
+     WHERE z.val IN ('AK','GA','PA') AND m.metric_key LIKE 'score!_%' ESCAPE '!'")$n
   expect_equal(n_score, 0L)
   expect_gte(DBI::dbGetQuery(con, "
     SELECT count(*) n FROM zone z JOIN zone_metric zm USING (zone_seq)
-     WHERE z.fld = 'subregion_key'")$n, 3L)
+     WHERE z.val IN ('AK','GA','PA')")$n, 3L)
 
-  # .app_scored_keys(): the field has NO scored keys
-  expect_null(.app_scored_keys(con)[["subregion_key"]])
+  # .app_scored_keys(): only the score_-bearing keys count
+  sk <- .app_scored_keys(con)[["programarea_key"]]
+  expect_setequal(sk, c("AAA", "BBB"))
+  expect_false(any(c("AK", "GA", "PA") %in% sk))
 
-  # so the geometry is ignored rather than checked -- even keys the table lacks
+  # so a geometry naming an unscored key is caught, and one naming only the scored
+  # keys agrees
   mf <- synth_manifest(con, "v9", BASE); mf$zones$pmtiles <- "https://x/z.pmtiles"
-  ch <- expect_silent(app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "AT"))))
-  expect_match(ch$why[ch$fld == "subregion_key"], "no unit: 0 of", fixed = TRUE)
+  expect_error(app_zone_tbl(con, mf, geom_keys = list(programarea = c("AAA", "AK"))),
+               "in the geometry but NOT in that table: AK", fixed = TRUE)
+  ch <- app_zone_tbl(con, mf, geom_keys = list(programarea = c("AAA", "BBB")))
 
-  # ...and app_units() -- which runs its OWN copy of the query -- publishes none
-  u <- app_units(con, mf, geom_keys = list(subregion = c("AK", "GA", "PA")), chosen = ch)
-  expect_false("subregion" %in% vapply(u, function(x) x$zone_type, ""))
-  # the programarea unit is unaffected, so this is not a vacuous "no units" pass
-  expect_true("programarea" %in% vapply(u, function(x) x$zone_type, ""))
+  # ...and app_units() -- its OWN copy of the query -- offers only the scored keys
+  u <- app_units(con, mf, geom_keys = list(programarea = c("AAA", "BBB")), chosen = ch)
+  expect_length(u, 1)
+  expect_setequal(unlist(u[[1]]$keys), c("AAA", "BBB"))
 })
 
 # ---- round 10: no silent, nondeterministic tie-break in manifest_build --------
@@ -1539,4 +1545,102 @@ test_that("app_zone_tbl refuses a manifest rebuilt from the database", {
     published <- rebuilt; published$zones$zone_set_key <- "subregion_2025-08"
     expect_silent(app_zone_tbl(con, published))
   })
+})
+
+# ---- D17: at most ONE drawable unit per release ------------------------------
+
+# score every zone of the given fields, so "what the data supports" is maximal
+synth_all_types_scored <- function(flds = c("programarea_key", "subregion_key",
+                                            "ecoregion_key", "planarea_key")) {
+  con <- synth_release("v9")
+  vint <- c(programarea_key = "programarea_2026-01", subregion_key = "subregion_2025-06",
+            ecoregion_key = "ecoregion_2025-06", planarea_key = "planarea_2025-06")
+  tb <- c(programarea_key = "ply_programareas_2026_v9", subregion_key = "ply_subregions_2026_v9",
+          ecoregion_key = "ply_ecoregions_2025", planarea_key = "ply_planareas_2025_v9")
+  seq0 <- 2L
+  for (f in setdiff(flds, "programarea_key")) {
+    for (k in c("K1", "K2")) {
+      seq0 <- seq0 + 1L
+      DBI::dbExecute(con, sprintf(
+        "INSERT INTO zone (zone_seq, tbl, fld, val, zone_set_key)
+           VALUES (%d, '%s', '%s', '%s', '%s')", seq0, tb[[f]], f, k, vint[[f]]))
+    }
+  }
+  DBI::dbExecute(con, "INSERT INTO zone_cell
+    SELECT z.zone_seq, c.cell_id, 100 FROM zone z, cell c WHERE z.zone_seq > 2")
+  sq <- DBI::dbGetQuery(con,
+    "SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'")$metric_seq[1]
+  DBI::dbExecute(con, sprintf(
+    "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone WHERE fld IN (%s)",
+    sq, paste(sprintf("'%s'", flds), collapse = ", ")))
+  con
+}
+
+mf_all <- function(con) {
+  z <- DBI::dbGetQuery(con, "SELECT DISTINCT zone_set_key, tbl, fld FROM zone
+                              ORDER BY fld, tbl")
+  z$pmtiles <- "https://x/z.pmtiles"
+  list(zones = z, id_field = "mdl_key", grid_id = "global05")
+}
+
+test_that("REGRESSION: a release scoring every zone type publishes ONLY programarea", {
+  # D17 (Ben, 2026-09-22). Subregions and ecoregions are camera presets and scoring
+  # context, not places a user draws a report for -- however much the data supports.
+  con <- synth_all_types_scored(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mf <- mf_all(con)
+  # all four really are scored, or the test proves nothing
+  expect_setequal(names(.app_scored_keys(con)),
+                  c("programarea_key", "subregion_key", "ecoregion_key", "planarea_key"))
+
+  u <- app_units(con, mf, chosen = app_zone_tbl(con, mf))
+  expect_length(u, 1)
+  expect_identical(u[[1]]$zone_type, "programarea")
+  expect_setequal(unlist(u[[1]]$keys), c("AAA", "BBB"))
+
+  # ...and every type keeps its scores in boot$zones
+  z <- app_zones(con, chosen = app_zone_tbl(con, mf))
+  expect_setequal(names(z), c("programarea", "subregion", "ecoregion", "planarea"))
+  for (nm in names(z)) expect_gt(length(z[[nm]]), 0)
+})
+
+test_that("REGRESSION: a release with no Program Areas publishes planarea (v1)", {
+  con <- synth_all_types_scored(c("planarea_key", "ecoregion_key"))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "DELETE FROM zone_metric WHERE zone_seq IN
+                        (SELECT zone_seq FROM zone WHERE fld = 'programarea_key')")
+  mf <- mf_all(con)
+  expect_false("programarea_key" %in% names(.app_scored_keys(con)))
+
+  u <- app_units(con, mf, chosen = app_zone_tbl(con, mf))
+  expect_length(u, 1)
+  expect_identical(u[[1]]$zone_type, "planarea")
+  # ecoregion is scored and drawable-shaped, and still not a unit
+  expect_true("ecoregion_key" %in% names(.app_scored_keys(con)))
+})
+
+test_that("APP_UNIT_TYPES is the whole rule, first match wins", {
+  expect_identical(APP_UNIT_TYPES, c("programarea", "planarea"))
+  expect_false("subregion" %in% APP_UNIT_TYPES)
+  expect_false("ecoregion" %in% APP_UNIT_TYPES)
+
+  # neither type scored -> no unit at all, rather than falling back to another
+  con <- synth_all_types_scored(c("subregion_key", "ecoregion_key"))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "DELETE FROM zone_metric WHERE zone_seq IN
+                        (SELECT zone_seq FROM zone WHERE fld = 'programarea_key')")
+  mf <- mf_all(con)
+  expect_length(app_units(con, mf, chosen = app_zone_tbl(con, mf)), 0)
+})
+
+test_that("geometry for a type that will never be a unit is ignored, and recorded", {
+  # the notebook passes a geometry per zone type; the extras belong to types D17
+  # excludes, so checking them would stop a build over a GeoPackage never opened
+  con <- synth_all_types_scored(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mf <- mf_all(con)
+  ch <- expect_silent(app_zone_tbl(con, mf, geom_keys = list(
+    programarea = c("AAA", "BBB"),
+    subregion   = c("NOT_A_KEY_AT_ALL"))))      # would stop if it were checked
+  expect_match(ch$why[ch$fld == "subregion_key"],
+               "not a drawable unit type: geometry ignored", fixed = TRUE)
+  expect_match(ch$why[ch$fld == "programarea_key"], "geometry keys agree", fixed = TRUE)
 })
