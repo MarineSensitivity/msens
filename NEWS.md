@@ -282,6 +282,21 @@ numbers for the same ground.
   a rebuilt one has already collapsed the rows the app path is asking about.
   `app_bundle_build()` and the smoke gate consume the **published** `manifest.json`.
 
+## D17: a release publishes at most ONE drawable unit
+
+* **`APP_UNIT_TYPES`** (new, exported) is the whole rule, first match wins:
+  `c("programarea", "planarea")`. `app_units()` publishes **`programarea`** if it
+  qualifies (>= 2 scored zones + PMTiles), else **`planarea`** (which is v1, having
+  no Program Areas), else none — **never subregion, never ecoregion**, however much
+  the data supports. v9 scores all four types and publishes only `programarea`.
+  Their scores stay in `boot$zones` untouched: they are camera presets and scoring
+  context, not places a user draws a report for. A later decision is one line here.
+* The geometry check runs for the **chosen unit's type only**. A caller may pass a
+  geometry per zone type (the notebook does); the extras belong to types that can
+  never be a unit, so checking them would stop a build over a GeoPackage the app
+  never opens. Ignoring one is recorded in `why`
+  (`"not a drawable unit type: geometry ignored"`).
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
