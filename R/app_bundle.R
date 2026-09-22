@@ -194,8 +194,22 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
 #' @importFrom DBI dbGetQuery dbListFields
 #' @export
 #' @concept app
+# the keys of a field that carry a `score_%` metric -- the same set app_units()
+# gates a drawable unit on. A choropleth is drawn from that metric, so a zone
+# without one has nothing to draw.
+.app_scored_keys <- function(con) {
+  vz <- sdm_val_col(con, "zone")
+  d <- DBI::dbGetQuery(con, glue::glue("
+    SELECT DISTINCT z.fld, CAST(z.{vz} AS VARCHAR) AS zkey
+      FROM zone z JOIN zone_metric zm USING (zone_seq)
+      JOIN metric m USING (metric_seq)
+     WHERE m.metric_key LIKE 'score!_%' ESCAPE '!'"))
+  split(d$zkey, d$fld)
+}
+
 app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = NULL) {
   vz <- sdm_val_col(con, "zone")
+  scored <- tryCatch(.app_scored_keys(con), error = function(e) list())
   d <- DBI::dbGetQuery(con, glue::glue(
     "SELECT fld, tbl, count(*) AS n,
             string_agg(DISTINCT CAST({vz} AS VARCHAR), ',') AS keys
@@ -241,19 +255,32 @@ app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = N
     # geometry keys must AGREE; a mismatch is the wrong GeoPackage, not a tie
     gk <- geom_keys[[type]]
     if (!is.null(gk) && length(gk)) {
-      ks <- sort(strsplit(g$keys[match(tbl, g$tbl)], ",", fixed = TRUE)[[1]])
-      # SUBSET, not setequal: a key in the table but absent from the geometry is
-      # normal -- the whole-study-area rollups (`USA` on v8, `FULL` on v7) are
-      # scored and have no polygon. A key in the GEOMETRY that the table does not
-      # have is the other thing entirely: the wrong GeoPackage.
-      extra <- setdiff(gk, ks)
-      if (length(extra))
-        stop(sprintf(paste0(
-          "the geometry given for `%s` does not match the table the manifest names.\n",
-          "  manifest: %s -> %s\n  in the geometry but NOT in that table: %s\n",
-          "  A mismatch means the wrong GeoPackage was handed in; it is not a tie to break."),
-          fld, fld, tbl, paste(extra, collapse = ", ")), call. = FALSE)
-      why <- paste0(why, "; geometry keys agree")
+      # Against the SCORED keys, not the table's full key set, and only where a unit
+      # will actually be published (master-plan D16). A field becomes a drawable unit
+      # only when >= 2 of its zones carry a `score_%` metric; the geometry matters to
+      # a unit and to nothing else. Measured: the subregion zones are scored on v8/v9
+      # only (5 of 5), v6 0 of 4, v7/v7b only `FULL` (1 of 5). Checking the full table
+      # stopped v1 ("in the geometry but NOT in that table: AT, GA, PA") and v4-v7b
+      # ("AT") over fields that would never be a unit -- the right stop, the wrong
+      # universe.
+      sk <- sort(unique(as.character(scored[[fld]] %||% character())))
+      if (length(sk) < 2L) {
+        why <- paste0(why, sprintf("; no unit: %d of %d zones scored; geometry not checked",
+                                   length(sk), g$n[match(tbl, g$tbl)]))
+      } else {
+        # SUBSET, not setequal: a key scored but not drawn -- the whole-study-area
+        # rollups `USA` (v8) and `FULL` (v7) have no polygon -- is normal. A key in
+        # the GEOMETRY that is not scored on this release is the other thing
+        # entirely: the wrong GeoPackage.
+        extra <- setdiff(gk, sk)
+        if (length(extra))
+          stop(sprintf(paste0(
+            "the geometry given for `%s` does not match the table the manifest names.\n",
+            "  manifest: %s -> %s\n  in the geometry but NOT in that table: %s\n",
+            "  A mismatch means the wrong GeoPackage was handed in; it is not a tie to break."),
+            fld, fld, tbl, paste(extra, collapse = ", ")), call. = FALSE)
+        why <- paste0(why, "; geometry keys agree")
+      }
     }
 
     # the registry is a cross-check, recorded, never a chooser
