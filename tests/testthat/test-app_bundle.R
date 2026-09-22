@@ -1194,3 +1194,41 @@ test_that("the zone-set registry is a cross-check, not a chooser", {
                  fixed = TRUE)
   })
 })
+
+test_that("REGRESSION: a manifest naming two tables for one field stops the build", {
+  # `manifest_build()` on a release with two tables for a field emits BOTH rows, so
+  # it names no single table -- it reproduces the ambiguity it is being asked to
+  # settle. Taking the first row would make the answer depend on row order, which is
+  # the same defect round 6 removed from the date guess.
+  with_synth("v2", function(con) {
+    two <- list(zones = data.frame(
+      fld = c("programarea_key", "subregion_key", "subregion_key"),
+      tbl = c("ply_programareas_2026", "ply_subregions_2025", "ply_subregions_2026"),
+      stringsAsFactors = FALSE))
+
+    expect_error(app_zone_tbl(con, two), "names no single table", fixed = TRUE)
+    expect_error(app_zone_tbl(con, two), "the manifest lists 2 rows", fixed = TRUE)
+    expect_error(app_zone_tbl(con, two), "subregion_key", fixed = TRUE)
+    expect_error(app_zone_tbl(con, two),
+                 "ply_subregions_2025, ply_subregions_2026", fixed = TRUE)
+    # row order must not decide it either
+    rev2 <- two; rev2$zones <- two$zones[c(1, 3, 2), ]
+    expect_error(app_zone_tbl(con, rev2), "names no single table", fixed = TRUE)
+
+    # and the whole build stops, not just the helper
+    expect_error(
+      app_bundle_build(con, "v2", withr::local_tempdir(), manifest = two, base = BASE),
+      "names no single table", fixed = TRUE)
+
+    # BENIGN: two rows for one field naming the SAME table (a manifest listing a
+    # zone set twice) is not ambiguous -- it names one table, so it is chosen
+    same <- list(zones = data.frame(
+      fld = c("programarea_key", "subregion_key", "subregion_key"),
+      tbl = c("ply_programareas_2026", "ply_subregions_2025", "ply_subregions_2025"),
+      zone_set_key = c("programarea_2026-01", "subregion_2025-06", "subregion_2025-08"),
+      stringsAsFactors = FALSE))
+    ch <- app_zone_tbl(con, same)
+    expect_identical(ch$tbl[ch$fld == "subregion_key"], "ply_subregions_2025")
+    expect_match(ch$why[ch$fld == "subregion_key"], "named by manifest.json", fixed = TRUE)
+  })
+})
