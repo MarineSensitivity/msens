@@ -9,8 +9,11 @@ app_zone_tbl(con, manifest = NULL, geom_keys = list(), zone_sets = NULL)
 \arguments{
 \item{con}{a DBI connection to a release database}
 
-\item{manifest}{the release manifest (from \code{\link[=manifest_build]{manifest_build()}} or
-\code{\link[=atlas_manifest]{atlas_manifest()}}); its \code{zones[]} rows name the table per field}
+\item{manifest}{the release's \strong{published} manifest (\code{\link[=atlas_manifest]{atlas_manifest()}}, or the
+\code{manifest.json} beside the database); its \code{zones[]} rows name the table per
+field. A manifest rebuilt by \code{\link[=manifest_build]{manifest_build()}} is \strong{not} acceptable here — it
+has already collapsed the rows this needs — and one whose \code{zones} lack
+\code{zone_set_key} is refused.}
 
 \item{geom_keys}{named list \verb{zone_type -> keys present in the published geometry},
 checked against the manifest's choice}

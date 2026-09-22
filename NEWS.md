@@ -264,6 +264,24 @@ numbers for the same ground.
   published for this zone" where it is 0. The smoke gate prints a WARNING line per
   such key.
 
+## Fixed: a rebuilt manifest was nondeterministic
+
+* **`manifest_build()` no longer breaks a tie silently.** It collapsed `zones` to one
+  row per `zone_set_key` with `order(zone_set_key, -n)` + `!duplicated()`; v2's two
+  subregion tables both have **n = 4**, so the winner was whichever row the engine
+  returned first — `load_all()` on the source tree and the installed package, **at
+  the same commit**, produced different manifests, and a bundle built from the loser
+  published subregion `USA` with 9,792 taxa where the published manifest's table has
+  17,307. A tie is now an **error** naming both tables and the field, unless
+  `zone_sets` decides it (a `source` basename matching exactly one), and the zone
+  query is `ORDER BY fld, tbl` so even the non-tie path cannot depend on engine row
+  order. Round 6's "two rows for one field" stop never fired here, because this had
+  already collapsed them.
+* **`app_zone_tbl()` refuses a manifest rebuilt from the database**: a published
+  manifest carries `zone_set_key` on every `zones` row and a rebuilt one may not, and
+  a rebuilt one has already collapsed the rows the app path is asking about.
+  `app_bundle_build()` and the smoke gate consume the **published** `manifest.json`.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
