@@ -151,6 +151,19 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
   tb[length(tb)]
 }
 
+# the keys of a field that carry a `score_%` metric -- the same set app_units()
+# gates a drawable unit on. A choropleth is drawn from that metric, so a zone
+# without one has nothing to draw.
+.app_scored_keys <- function(con) {
+  vz <- sdm_val_col(con, "zone")
+  d <- DBI::dbGetQuery(con, glue::glue("
+    SELECT DISTINCT z.fld, CAST(z.{vz} AS VARCHAR) AS zkey
+      FROM zone z JOIN zone_metric zm USING (zone_seq)
+      JOIN metric m USING (metric_seq)
+     WHERE m.metric_key LIKE 'score!_%' ESCAPE '!'"))
+  split(d$zkey, d$fld)
+}
+
 #' The ONE zone table each spatial unit publishes
 #'
 #' A release may carry more than one `zone.tbl` for a single `fld`. v2 has two for
@@ -194,19 +207,6 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
 #' @importFrom DBI dbGetQuery dbListFields
 #' @export
 #' @concept app
-# the keys of a field that carry a `score_%` metric -- the same set app_units()
-# gates a drawable unit on. A choropleth is drawn from that metric, so a zone
-# without one has nothing to draw.
-.app_scored_keys <- function(con) {
-  vz <- sdm_val_col(con, "zone")
-  d <- DBI::dbGetQuery(con, glue::glue("
-    SELECT DISTINCT z.fld, CAST(z.{vz} AS VARCHAR) AS zkey
-      FROM zone z JOIN zone_metric zm USING (zone_seq)
-      JOIN metric m USING (metric_seq)
-     WHERE m.metric_key LIKE 'score!_%' ESCAPE '!'"))
-  split(d$zkey, d$fld)
-}
-
 app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = NULL) {
   vz <- sdm_val_col(con, "zone")
   scored <- tryCatch(.app_scored_keys(con), error = function(e) list())
