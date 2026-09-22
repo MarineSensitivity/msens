@@ -242,6 +242,28 @@ numbers for the same ground.
   (zone_set_key, tbl, fld), so a field with two tables offered the same picker entry
   twice with different key sets.
 
+## The geometry check asks about UNITS, not about every field (D16)
+
+* **`app_zone_tbl()`'s geometry check now compares the geometry's keys against the
+  release's SCORED keys** — the same `score_%`-metric set `app_units()` gates a
+  drawable unit on — **and only where that set has at least 2 keys**. A field with
+  fewer than 2 scored zones publishes no unit, so its geometry is IGNORED rather
+  than being an error, and `why` records it
+  (`"no unit: 1 of 5 zones scored; geometry not checked"`).
+  The subregion zones carry a score only on v8 and v9 (5 of 5); v6 has 0 of 4,
+  v7/v7b only the `FULL` rollup. Checking the full zone table stopped v1 (*"in the
+  geometry but NOT in that table: AT, GA, PA"*) and v4–v7b (*"AT"*) over fields that
+  would never be a unit. The stop's purpose — catch the wrong GeoPackage — was
+  right; its universe was wrong. **Where a unit IS published the subset rule is
+  unchanged**, and a key scored but not drawn (`USA`, `FULL`) is still fine.
+* **`boot$zones[unit][].n_taxa`** (new, required by the schema) is the count of that
+  zone's `zone_taxon` rows. v8 scores subregion `AT` and gives it 52,674 cells but
+  publishes no `zone_taxon` rows for it (v9 has 7,562). That is a gap in the
+  release's table: nothing is invented and the unit is not dropped, because the
+  score is real — the count is published and the app says "no species table
+  published for this zone" where it is 0. The smoke gate prints a WARNING line per
+  such key.
+
 ## Gates you can run
 
 * **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
