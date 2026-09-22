@@ -466,6 +466,15 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
       FROM zone z JOIN zone_metric zm USING (zone_seq) JOIN metric mt USING (metric_seq)
      WHERE {w}
      ORDER BY 1, 2, 3"))
+  # How many species rows this zone actually has. v8 scores subregion `AT` and gives
+  # it 52,674 cells but publishes NO `zone_taxon` rows for it (v9 has 7,562). That is
+  # a gap in the release's table, not ours: nothing is invented and the unit is not
+  # dropped -- the score is real -- so the count is published and the app says "no
+  # species table published for this zone" where it is 0.
+  nt <- if ("zone_taxon" %in% DBI::dbListTables(con))
+    DBI::dbGetQuery(con, "SELECT zone_fld AS fld, CAST(zone_value AS VARCHAR) AS zkey,
+                                 count(*) AS n_taxa FROM zone_taxon GROUP BY 1, 2") else
+      data.frame(fld = character(), zkey = character(), n_taxa = integer())
   is_cov <- grepl("_coverage$", m$metric_key)
 
   stats::setNames(lapply(flds, function(fld) {
@@ -476,9 +485,11 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
               , drop = FALSE]
       sc <- mi[!grepl("_coverage$", mi$metric_key), , drop = FALSE]
       cv <- mi[ grepl("_coverage$", mi$metric_key), , drop = FALSE]
+      ni <- nt$n_taxa[nt$fld == fld & nt$zkey == k]
       list(key      = k,
            n_cells  = as.integer(rows$n_cells[i]),
            area_km2 = as.numeric(rows$area_km2[i]),
+           n_taxa   = if (length(ni)) as.integer(ni[1]) else 0L,
            metrics  = .obj(stats::setNames(as.list(as.numeric(sc$val)), sc$metric_key)),
            coverage = if (nrow(cv))
              stats::setNames(as.list(as.numeric(cv$val)),

@@ -118,7 +118,7 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["key", "n_cells", "area_km2", "metrics"],
+          "required": ["key", "n_cells", "area_km2", "n_taxa", "metrics"],
           "properties": {
             "key":      { "type": "string" },
             "name":     { "type": ["string", "null"] },
@@ -131,6 +131,10 @@
               "items": { "type": "number" }
             },
             "n_cells":  { "type": "integer", "minimum": 0 },
+            "n_taxa": {
+              "type": "integer", "minimum": 0,
+              "description": "Rows this zone has in zone_taxon. 0 is a real answer, not a placeholder: v8 scores subregion AT and gives it 52,674 cells but publishes no zone_taxon rows for it. Nothing is invented and the unit is not dropped (the score is real); the app shows 'no species table published for this zone' where this is 0."
+            },
             "area_km2": { "type": "number", "minimum": 0 },
             "metrics":  { "type": "object", "additionalProperties": { "type": "number" } },
             "coverage": { "type": ["object", "null"],
