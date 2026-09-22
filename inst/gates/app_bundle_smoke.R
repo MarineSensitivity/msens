@@ -161,7 +161,11 @@ for (u in b$boot$units)
   say(sprintf("  UNIT %s %-12s %3d keys  (%s)", ver, u$zone_type, length(u$keys),
               u$zone_tbl))
 if (!length(b$boot$units)) say(sprintf("  UNIT %s (none)", ver))
-for (unit in names(b$boot$zones)) {
+# PER UNIT: a zone that is not part of a published unit is not something the app
+# will offer, so a missing species table there is not a warning anyone can act on.
+# v3-v7b score their ecoregion/planarea zones without publishing them as units.
+unit_types <- vapply(b$boot$units, function(u) u$zone_type, "")
+for (unit in intersect(names(b$boot$zones), unit_types)) {
   sc <- vapply(b$boot$zones[[unit]], function(z) length(z$metrics) > 0, TRUE)
   nt <- vapply(b$boot$zones[[unit]], function(z) z$n_taxa %||% -1L, 0L)
   ks <- vapply(b$boot$zones[[unit]], function(z) z$key, "")
