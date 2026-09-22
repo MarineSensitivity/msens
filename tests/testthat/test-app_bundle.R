@@ -1364,3 +1364,93 @@ test_that("a scored zone with NO zone_taxon rows publishes n_taxa = 0 and keeps 
   bad$zones$subregion <- lapply(b$zones$subregion, function(e) { e$n_taxa <- NULL; e })
   expect_error(app_validate(bad, "boot"), "n_taxa")
 })
+
+# ---- round 9: n_taxa is per ZONE, and `score_` really is the filter ------------
+
+# three subregion zones with deliberately DIFFERENT taxon counts, so a per-field
+# total cannot masquerade as a per-zone one
+synth_taxa_counts <- function(n_by_key = c(AK = 0L, GA = 1L, PA = 3L),
+                              metric_like = "score") {
+  con <- synth_release("v9")
+  # the programarea zones get a score_ metric so they publish a unit: without one,
+  # "no subregion unit" would pass vacuously on a release with no units at all
+  sq0 <- DBI::dbGetQuery(con,
+    "SELECT metric_seq FROM metric WHERE metric_key LIKE 'score!_%' ESCAPE '!'")$metric_seq[1]
+  DBI::dbExecute(con, sprintf(
+    "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone
+      WHERE fld = 'programarea_key'", sq0))
+  keys <- names(n_by_key)
+  for (i in seq_along(keys))
+    DBI::dbExecute(con, sprintf(
+      "INSERT INTO zone (zone_seq, tbl, fld, val, zone_set_key)
+         VALUES (%d, 'ply_subregions_2026_v9', 'subregion_key', '%s', 'subregion_2025-06')",
+      2L + i, keys[i]))
+  DBI::dbExecute(con, "INSERT INTO zone_cell
+    SELECT z.zone_seq, c.cell_id, 100 FROM zone z, cell c WHERE z.zone_seq > 2")
+  sq <- DBI::dbGetQuery(con, sprintf(
+    "SELECT metric_seq FROM metric WHERE metric_key LIKE '%s%%'", metric_like))$metric_seq[1]
+  DBI::dbExecute(con, sprintf(
+    "INSERT INTO zone_metric SELECT zone_seq, %d, 10 FROM zone WHERE zone_seq > 2", sq))
+  for (i in seq_along(keys)) {
+    n <- n_by_key[[i]]
+    if (n > 0) DBI::dbExecute(con, sprintf(
+      "INSERT INTO zone_taxon SELECT 'subregion_key', '%s', sp_cat, sp_common,
+         sp_scientific, taxon_id, taxon_authority, er_code, er_score, is_mmpa,
+         is_mbta, mdl_key, area_km2, avg_suit
+         FROM zone_taxon WHERE zone_fld = 'programarea_key' LIMIT %d", keys[i], n))
+  }
+  con
+}
+
+test_that("REGRESSION: n_taxa counts THAT zone's rows, not the whole field's", {
+  # `sum(nt$n_taxa[nt$fld == fld])` gives every zone of the field the same total,
+  # so a zone with no species table looks populated and one with few looks rich.
+  con <- synth_taxa_counts(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mf <- synth_manifest(con, "v9", BASE); mf$zones$pmtiles <- "https://x/z.pmtiles"
+  ch <- app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "GA", "PA")))
+  z  <- app_zones(con, chosen = ch)$subregion
+
+  got <- stats::setNames(vapply(z, function(e) e$n_taxa, 0L),
+                         vapply(z, function(e) e$key, ""))
+  expect_identical(got[c("AK", "GA", "PA")], c(AK = 0L, GA = 1L, PA = 3L))
+  # the three must not be equal, or a per-field total would pass
+  expect_equal(length(unique(got[c("AK", "GA", "PA")])), 3L)
+  expect_false(any(got[c("AK", "GA", "PA")] == sum(c(0L, 1L, 3L))))
+
+  # the zone with 0 is still published, with its cells
+  ak <- Filter(function(e) e$key == "AK", z)[[1]]
+  expect_identical(ak$n_taxa, 0L)
+  expect_gt(ak$n_cells, 0)
+})
+
+test_that("REGRESSION: only a `score_` metric makes a zone count toward a unit", {
+  # Dropping the LIKE 'score!_%' filter makes ANY zone_metric row count, so a field
+  # whose zones carry only coverage/preweight metrics becomes a unit that has no
+  # composite to draw a choropleth from.
+  con <- synth_taxa_counts(metric_like = "extrisk_bird_ecoregion_rescaled")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  # three subregion zones, each with a NON-score metric and none with a score_ one
+  n_score <- DBI::dbGetQuery(con, "
+    SELECT count(*) n FROM zone z JOIN zone_metric zm USING (zone_seq)
+      JOIN metric m USING (metric_seq)
+     WHERE z.fld = 'subregion_key' AND m.metric_key LIKE 'score!_%' ESCAPE '!'")$n
+  expect_equal(n_score, 0L)
+  expect_gte(DBI::dbGetQuery(con, "
+    SELECT count(*) n FROM zone z JOIN zone_metric zm USING (zone_seq)
+     WHERE z.fld = 'subregion_key'")$n, 3L)
+
+  # .app_scored_keys(): the field has NO scored keys
+  expect_null(.app_scored_keys(con)[["subregion_key"]])
+
+  # so the geometry is ignored rather than checked -- even keys the table lacks
+  mf <- synth_manifest(con, "v9", BASE); mf$zones$pmtiles <- "https://x/z.pmtiles"
+  ch <- expect_silent(app_zone_tbl(con, mf, geom_keys = list(subregion = c("AK", "AT"))))
+  expect_match(ch$why[ch$fld == "subregion_key"], "no unit: 0 of", fixed = TRUE)
+
+  # ...and app_units() -- which runs its OWN copy of the query -- publishes none
+  u <- app_units(con, mf, geom_keys = list(subregion = c("AK", "GA", "PA")), chosen = ch)
+  expect_false("subregion" %in% vapply(u, function(x) x$zone_type, ""))
+  # the programarea unit is unaffected, so this is not a vacuous "no units" pass
+  expect_true("programarea" %in% vapply(u, function(x) x$zone_type, ""))
+})
