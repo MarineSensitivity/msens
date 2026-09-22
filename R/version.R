@@ -428,10 +428,14 @@ manifest_build <- function(con, ver, status = "released",
   # zone_set_key when the release carries it, so the app can resolve each spatial
   # unit's PMTiles by vintage rather than a hardcoded, unversioned filename
   has_zsk <- has("zone") && "zone_set_key" %in% DBI::dbListFields(con, "zone")
+  # ORDER BY fld, tbl -- fully deterministic. `ORDER BY 3` (fld alone) left the row
+  # order of two tables under one fld to the engine, and it really does vary:
+  # load_all() on the source tree and the installed package, same commit, gave
+  # v2's subregion rows in opposite orders.
   zones <- if (has("zone"))
     DBI::dbGetQuery(con, if (has_zsk)
-      "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY 3"
-      else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY 2") else data.frame()
+      "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY fld, tbl"
+      else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY fld, tbl") else data.frame()
   # A release that predates the column gets its zone_set_key from the registry,
   # matched on (zone_type, this version). Without this only v8 -- the one release
   # that stamps the column into its own `zone` table -- ever carried zone tiles.
@@ -441,15 +445,43 @@ manifest_build <- function(con, ver, status = "released",
   # One row per SPATIAL UNIT, not per source table. v2 and v3 each carry two
   # subregion tables under one `fld` (a legacy of synthesising subregions per
   # release), which both resolve to the same canonical vintage -- so the manifest
-  # listed subregion twice and an app keying its picker on the manifest would
-  # offer the same choice twice. Collapse on zone_set_key, keeping the largest
-  # `n` so the count still describes the unit rather than whichever table sorted
-  # first.
+  # listed subregion twice and an app keying its picker on the manifest would offer
+  # the same choice twice.
+  #
+  # Collapse on zone_set_key keeping the largest `n` -- and STOP on a tie. v2's two
+  # subregion tables both have n = 4, so `!duplicated()` broke the tie by whichever
+  # row the engine returned first: the source tree and the installed package, at the
+  # same commit, produced DIFFERENT manifests, and the bundle built from the loser
+  # published `USA` with 9,792 taxa where the published manifest's table has 17,307.
+  # A silent, nondeterministic tie-break is worse than an error, and round 6's "two
+  # rows for one field" stop never fired because this had already collapsed them.
   if (nrow(zones) && "zone_set_key" %in% names(zones)) {
-    ord <- order(zones$zone_set_key, -as.numeric(zones$n))
-    zones <- zones[ord, , drop = FALSE]
-    zones <- zones[!duplicated(zones$zone_set_key) | is.na(zones$zone_set_key), , drop = FALSE]
-    zones <- zones[order(zones$fld), , drop = FALSE]
+    zones <- zones[order(zones$fld, zones$tbl), , drop = FALSE]
+    keep <- rep(TRUE, nrow(zones))
+    for (zk in unique(zones$zone_set_key[!is.na(zones$zone_set_key)])) {
+      i <- which(zones$zone_set_key == zk)
+      if (length(i) < 2L) next
+      n <- as.numeric(zones$n[i])
+      best <- i[n == max(n)]
+      if (length(best) > 1L) {
+        # the registry may still decide it: a `source` basename matching exactly one
+        src <- if (!is.null(zone_sets) && "source" %in% names(zone_sets))
+          sub("[.][^.]*$", "", basename(as.character(zone_sets$source))) else character()
+        hit <- best[zones$tbl[best] %in% src]
+        if (length(hit) == 1L) best <- hit else
+          stop(sprintf(paste0(
+            "zone set `%s` (%s) is served by %d tables with the same %d zones: %s.\n",
+            "  Nothing here can choose between them, and picking one silently made ",
+            "the manifest depend on engine row order -- the same commit gave ",
+            "different answers from the source tree and the installed package.\n",
+            "  Pass `zone_sets` (a `source` naming one of them), or fix the release."),
+            zk, zones$fld[i][1], length(best), max(n),
+            paste(zones$tbl[best], collapse = ", ")), call. = FALSE)
+      }
+      keep[setdiff(i, best[1])] <- FALSE
+    }
+    zones <- zones[keep, , drop = FALSE]
+    zones <- zones[order(zones$fld, zones$tbl), , drop = FALSE]
     rownames(zones) <- NULL
   }
 

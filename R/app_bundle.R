@@ -198,8 +198,11 @@ zone_tbl_for <- function(con, fld, ver = NULL) {
 #' check can assert its GeoPackage holds the same keys.
 #'
 #' @param con a DBI connection to a release database
-#' @param manifest the release manifest (from [manifest_build()] or
-#'   [atlas_manifest()]); its `zones[]` rows name the table per field
+#' @param manifest the release's **published** manifest ([atlas_manifest()], or the
+#'   `manifest.json` beside the database); its `zones[]` rows name the table per
+#'   field. A manifest rebuilt by [manifest_build()] is **not** acceptable here — it
+#'   has already collapsed the rows this needs — and one whose `zones` lack
+#'   `zone_set_key` is refused.
 #' @param geom_keys named list `zone_type -> keys present in the published geometry`,
 #'   checked against the manifest's choice
 #' @param zone_sets the zone-set registry (`data/zone_sets.csv`), cross-check only
@@ -220,6 +223,16 @@ app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = N
   mz <- manifest$zones
   have_mz <- !is.null(mz) && is.data.frame(mz) && nrow(mz) &&
              all(c("fld", "tbl") %in% names(mz))
+  # A PUBLISHED manifest carries `zone_set_key` on every zones row; one rebuilt from
+  # the database by manifest_build() may not, and a rebuilt one is not an acceptable
+  # input for the app path: it has already collapsed the very rows being asked about.
+  # Refuse it rather than reading a choice it did not really make.
+  if (have_mz && (!"zone_set_key" %in% names(mz) || any(is.na(mz$zone_set_key))))
+    stop(paste0(
+      "the manifest's `zones` rows are missing `zone_set_key`, so this is a ",
+      "manifest rebuilt from the database rather than the release's published one.\n",
+      "  Pass the PUBLISHED manifest.json: a rebuilt one has already collapsed the ",
+      "rows this needs, and did so without the evidence to choose."), call. = FALSE)
 
   pick <- function(g) {
     fld  <- g$fld[1]
