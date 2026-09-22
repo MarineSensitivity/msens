@@ -45,7 +45,7 @@ if (file.exists(file.path(root, "DESCRIPTION")) &&
 } else {
   suppressMessages(library(msens)); say("msens: installed")
 }
-suppressMessages({library(DBI); library(duckdb)})
+suppressMessages({library(DBI); library(duckdb); library(sf)})
 
 taxonomy_csv <- Sys.getenv("MSENS_TAXONOMY_CSV", "")
 zs_csv <- Sys.getenv("MSENS_ZONE_SETS", "")
@@ -86,13 +86,40 @@ if (length(mf_local)) {
 }
 say("release manifest: ", mf_src)
 
+# REAL geometry keys, read from the GeoPackages the zone-set registry names, so the
+# gate exercises the path the notebook uses (master-plan D16). The canonical
+# subregion geometry (2025-06) is passed to every release UNCUT: where a field has
+# fewer than 2 scored zones no unit is published and the geometry is ignored.
+geom_keys <- list()
+if (!is.null(zone_sets) && nrow(zone_sets) && "source" %in% names(zone_sets)) {
+  derived <- path.expand("~/_big/msens/derived")
+  canon <- zone_sets[!duplicated(zone_sets$zone_type) |
+                       (zone_sets$zone_type == "subregion" &
+                        grepl("2025-06", zone_sets$zone_set_key)), , drop = FALSE]
+  canon <- canon[order(canon$zone_type, canon$zone_set_key != "subregion_2025-06"), ]
+  canon <- canon[!duplicated(canon$zone_type), , drop = FALSE]
+  for (i in seq_len(nrow(canon))) {
+    f <- file.path(derived, canon$source[i])
+    if (!file.exists(f)) next
+    x <- tryCatch(sf::st_read(f, quiet = TRUE), error = function(e) NULL)
+    if (is.null(x)) next
+    kc <- paste0(canon$zone_type[i], "_key")
+    if (!kc %in% names(x)) kc <- grep("_key$", names(x), value = TRUE)[1]
+    if (is.na(kc)) next
+    geom_keys[[canon$zone_type[i]]] <- sort(unique(as.character(x[[kc]])))
+  }
+}
+if (length(geom_keys))
+  for (nm in names(geom_keys))
+    say(sprintf("  geometry %-12s %s", nm, paste(geom_keys[[nm]], collapse = ",")))
+
 t0 <- Sys.time()
 m  <- manifest_build(con, ver, base = atlas_base_url())
 # the published zones[] rows are the deciding evidence; keep them
 if (!is.null(rel) && !is.null(rel$zones) && is.data.frame(rel$zones)) m$zones <- rel$zones
 b  <- app_bundle_build(con, ver, dir_out, manifest = m, cell_tiles = tiles_on,
                        taxonomy_csv = if (nzchar(taxonomy_csv)) taxonomy_csv else NULL,
-                       zone_sets = zone_sets)
+                       zone_sets = zone_sets, geom_keys = geom_keys)
 say(sprintf("built in %.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))))
 
 say("\n-- structure ----------------------------------------------------------")
@@ -108,7 +135,7 @@ chk(!length(b$failed), "every stage completed",
     if (length(b$failed)) paste(names(b$failed), collapse = ", ") else "")
 
 say("\n-- one zone table per field -------------------------------------------")
-ch <- app_zone_tbl(con, m, zone_sets = zone_sets)
+ch <- app_zone_tbl(con, m, geom_keys = geom_keys, zone_sets = zone_sets)
 for (i in seq_len(nrow(ch)))
   say(sprintf("  %-18s -> %-26s %s", ch$fld[i], ch$tbl[i],
               if (ch$n_tables[i] > 1) sprintf("(%d tables: %s)", ch$n_tables[i], ch$why[i]) else ""))
@@ -128,6 +155,21 @@ ztp <- file.path(dir_out, "zone_taxon.parquet")
 say(sprintf("  ZONETAB %s | %d | %s | %d | %s", ver, nrow(zt_chk),
             if (file.exists(ztp)) format(file.size(ztp)) else "-", dups,
             paste(sprintf("%s=%s", sub("_key$", "", ch$fld), ch$tbl), collapse = " ")))
+
+say("\n-- units published, and zones scored with no species rows -------------")
+for (u in b$boot$units)
+  say(sprintf("  UNIT %s %-12s %3d keys  (%s)", ver, u$zone_type, length(u$keys),
+              u$zone_tbl))
+if (!length(b$boot$units)) say(sprintf("  UNIT %s (none)", ver))
+for (unit in names(b$boot$zones)) {
+  sc <- vapply(b$boot$zones[[unit]], function(z) length(z$metrics) > 0, TRUE)
+  nt <- vapply(b$boot$zones[[unit]], function(z) z$n_taxa %||% -1L, 0L)
+  ks <- vapply(b$boot$zones[[unit]], function(z) z$key, "")
+  bad <- which(sc & nt == 0L)
+  for (i in bad)
+    say(sprintf("  WARNING %s %s %s: scored but 0 zone_taxon rows (n_cells %d)",
+                ver, unit, ks[i], b$boot$zones[[unit]][[i]]$n_cells))
+}
 
 say("\n-- boot$tables describes app/ exactly --------------------------------")
 chk(tryCatch({app_tables_match(dir_out, b$boot); TRUE}, error = function(e) FALSE),
