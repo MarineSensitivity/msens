@@ -12,6 +12,24 @@
 # learns which generation it is looking at — with one deliberate exception, the
 # `cell_model` id field, which the manifest already states.
 
+#' The zone types that may become a drawable unit, best first
+#'
+#' Master-plan **D17** (Ben, 2026-09-22): a release publishes **at most one**
+#' drawable unit — Program Areas, or Planning Areas on v1, which has no Program
+#' Areas. Never subregions, never ecoregions, whatever the data would support: those
+#' are camera presets and scoring context, not places a user draws a report for.
+#' Their scores stay in `boot$zones` untouched.
+#'
+#' First match wins, so a later decision is one line here rather than a rewrite of
+#' [app_units()].
+#'
+#' @return a character vector of zone types, in preference order
+#' @examples
+#' APP_UNIT_TYPES
+#' @export
+#' @concept app
+APP_UNIT_TYPES <- c("programarea", "planarea")
+
 .APP_SCHEMA    <- 1L
 .APP_TILE_SIDE <- 50L
 
@@ -267,6 +285,14 @@ app_zone_tbl <- function(con, manifest = NULL, geom_keys = list(), zone_sets = N
 
     # geometry keys must AGREE; a mismatch is the wrong GeoPackage, not a tie
     gk <- geom_keys[[type]]
+    # D17: only the chosen unit's geometry decides anything. A caller may pass
+    # geometries for every zone type (the notebook does); the extras belong to
+    # types that will never be a unit, so checking them would stop a build over a
+    # GeoPackage the app never opens.
+    if (!type %in% APP_UNIT_TYPES && !is.null(gk) && length(gk)) {
+      why <- paste0(why, "; not a drawable unit type: geometry ignored")
+      gk <- NULL
+    }
     if (!is.null(gk) && length(gk)) {
       # Against the SCORED keys, not the table's full key set, and only where a unit
       # will actually be published (master-plan D16). A field becomes a drawable unit
@@ -437,9 +463,14 @@ app_units <- function(con, manifest, geom_keys = list(), chosen = NULL) {
   # release with two tables for one field -- v2's subregion_key -- produced TWO
   # units for it, offering the same picker entry twice with different key sets.
   out <- out[!duplicated(vapply(out, function(u) u$fld, ""))]
-  # Program Areas first, then the finest unit (most keys) first
-  out[order(vapply(out, function(u) u$zone_type, "") != "programarea",
-            -vapply(out, function(u) length(u$keys), 0L))]
+  # D17: AT MOST ONE unit per release, the first type in APP_UNIT_TYPES that
+  # qualifies. v9 scores all four types and publishes only `programarea`; v1 has no
+  # Program Areas and publishes `planarea`. A type that is scored but not drawable
+  # keeps every one of its scores in boot$zones -- nothing is lost, it is just not
+  # a place a user draws a report for.
+  ty <- vapply(out, function(u) u$zone_type, "")
+  pick <- APP_UNIT_TYPES[APP_UNIT_TYPES %in% ty][1]
+  if (is.na(pick)) list() else out[ty == pick]
 }
 
 #' Per-zone summaries, so a report on a Program Area never loads a cell
