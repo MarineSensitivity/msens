@@ -1185,6 +1185,7 @@ test_that("two tables and no manifest row is an ERROR, never a guess", {
     expect_error(app_zone_tbl(con), "manifest names none of them", fixed = TRUE)
     # a manifest naming a table the release does not have is also an error
     bad <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2030",
+                                   zone_set_key = "subregion_2025-08",
                                    stringsAsFactors = FALSE))
     expect_error(app_zone_tbl(con, bad), "holds only", fixed = TRUE)
     # a release with ONE table per field needs no manifest at all
@@ -1195,6 +1196,7 @@ test_that("two tables and no manifest row is an ERROR, never a guess", {
 test_that("the zone-set registry is a cross-check, not a chooser", {
   with_synth("v2", function(con) {
     mf <- list(zones = data.frame(fld = "subregion_key", tbl = "ply_subregions_2025",
+                                  zone_set_key = "subregion_2025-08",
                                   stringsAsFactors = FALSE))
     zs <- data.frame(zone_set_key = "subregion_2025-08", zone_type = "subregion",
                      source = "v1/ply_subregions_2026.gpkg", stringsAsFactors = FALSE)
@@ -1216,6 +1218,7 @@ test_that("REGRESSION: a manifest naming two tables for one field stops the buil
     two <- list(zones = data.frame(
       fld = c("programarea_key", "subregion_key", "subregion_key"),
       tbl = c("ply_programareas_2026", "ply_subregions_2025", "ply_subregions_2026"),
+      zone_set_key = c("programarea_2026-01", "subregion_2025-06", "subregion_2025-08"),
       stringsAsFactors = FALSE))
 
     expect_error(app_zone_tbl(con, two), "names no single table", fixed = TRUE)
@@ -1453,4 +1456,87 @@ test_that("REGRESSION: only a `score_` metric makes a zone count toward a unit",
   expect_false("subregion" %in% vapply(u, function(x) x$zone_type, ""))
   # the programarea unit is unaffected, so this is not a vacuous "no units" pass
   expect_true("programarea" %in% vapply(u, function(x) x$zone_type, ""))
+})
+
+# ---- round 10: no silent, nondeterministic tie-break in manifest_build --------
+
+# a release with TWO tables of EQUAL n under one zone_set_key, written in a chosen
+# source row order so the engine's order can be varied deliberately
+synth_tied_zone_sets <- function(reversed = FALSE) {
+  con <- synth_release("v9")
+  tb <- c("ply_subregions_2025", "ply_subregions_2026")
+  if (reversed) tb <- rev(tb)
+  rows <- do.call(rbind, lapply(seq_along(tb), function(i)
+    data.frame(zone_seq = 2L + (i - 1L) * 2L + 1:2, tbl = tb[i],
+               fld = "subregion_key", val = c("AK", "GA"),
+               zone_set_key = "subregion_2025-06", stringsAsFactors = FALSE)))
+  DBI::dbAppendTable(con, "zone", rows)
+  con
+}
+
+test_that("REGRESSION: two tables with the same zone count STOP manifest_build", {
+  # v2's two subregion tables both have n = 4, so `!duplicated()` broke the tie by
+  # whichever row the engine returned first: the SOURCE TREE and the INSTALLED
+  # package, at the same commit, produced different manifests, and the bundle built
+  # from the loser published `USA` with 9,792 taxa where the right table has 17,307.
+  for (rev in c(FALSE, TRUE)) local({
+    con <- synth_tied_zone_sets(rev); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    e <- tryCatch(manifest_build(con, "v9", base = BASE), error = function(e) e)
+    expect_s3_class(e, "error")
+    expect_match(conditionMessage(e), "served by 2 tables with the same 2 zones",
+                 fixed = TRUE)
+    expect_match(conditionMessage(e), "ply_subregions_2025, ply_subregions_2026",
+                 fixed = TRUE)
+    expect_match(conditionMessage(e), "subregion_key", fixed = TRUE)
+    expect_match(conditionMessage(e), "engine row order", fixed = TRUE)
+  })
+})
+
+test_that("REGRESSION: the zone-set registry settles the tie, the same way both times", {
+  zs <- data.frame(zone_set_key = "subregion_2025-06", zone_type = "subregion",
+                   source = "v1/ply_subregions_2025.gpkg", stringsAsFactors = FALSE)
+  got <- vapply(c(FALSE, TRUE), function(rev) {
+    con <- synth_tied_zone_sets(rev); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    m <- manifest_build(con, "v9", base = BASE, zone_sets = zs)
+    m$zones$tbl[m$zones$fld == "subregion_key"]
+  }, "")
+  # the SAME answer whichever order the rows arrive in: that is the whole point
+  expect_identical(got, c("ply_subregions_2025", "ply_subregions_2025"))
+})
+
+test_that("the zone query's ordering does not depend on engine row order", {
+  # even without a tie, two tables under one fld must come back in a fixed order
+  zs <- data.frame(zone_set_key = c("subregion_2025-06", "subregion_2025-08"),
+                   zone_type = "subregion",
+                   source = c("ply_subregions_usa_2025-06.gpkg",
+                              "v1/ply_subregions_2025.gpkg"), stringsAsFactors = FALSE)
+  got <- lapply(c(FALSE, TRUE), function(rev) {
+    con <- synth_tied_zone_sets(rev); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+    # distinct zone_set_key per table: no collapse, so the ORDER BY is what is seen
+    DBI::dbExecute(con, "UPDATE zone SET zone_set_key = 'subregion_2025-08'
+                          WHERE tbl = 'ply_subregions_2026'")
+    m <- manifest_build(con, "v9", base = BASE, zone_sets = zs)
+    m$zones[, c("fld", "tbl")]
+  })
+  expect_identical(got[[1]], got[[2]])
+  sr <- got[[1]][got[[1]]$fld == "subregion_key", "tbl"]
+  expect_identical(sr, sort(sr))          # ORDER BY fld, tbl
+})
+
+test_that("app_zone_tbl refuses a manifest rebuilt from the database", {
+  # a rebuilt manifest has already collapsed the rows app_zone_tbl() is asking
+  # about, and did so without the evidence to choose
+  with_synth("v2", function(con) {
+    rebuilt <- list(zones = data.frame(
+      fld = "subregion_key", tbl = "ply_subregions_2025", n = 2L,
+      stringsAsFactors = FALSE))                       # no zone_set_key
+    expect_error(app_zone_tbl(con, rebuilt), "rebuilt from the database", fixed = TRUE)
+    expect_error(app_zone_tbl(con, rebuilt), "PUBLISHED manifest.json", fixed = TRUE)
+
+    na_key <- rebuilt; na_key$zones$zone_set_key <- NA_character_
+    expect_error(app_zone_tbl(con, na_key), "missing `zone_set_key`", fixed = TRUE)
+
+    published <- rebuilt; published$zones$zone_set_key <- "subregion_2025-08"
+    expect_silent(app_zone_tbl(con, published))
+  })
 })

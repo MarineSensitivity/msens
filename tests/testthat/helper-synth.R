@@ -331,6 +331,20 @@ synth_manifest <- function(con, gen, base = "https://example.invalid/marine-atla
       if (is.null(m$zones$zone_set_key)) m$zones$zone_set_key <- NA_character_
       m$zones$zone_set_key[m$zones$fld == "subregion_key"] <- "subregion_2025-08"
     }
+    # A PUBLISHED manifest carries zone_set_key on EVERY zones row -- v2's on S3
+    # does -- and app_zone_tbl() refuses one that does not, because a manifest
+    # missing it is a rebuilt one that has already collapsed the rows being asked
+    # about. `manifest_build()` only stamps it when a release has the column or a
+    # registry was passed, so fill it the way a published manifest would.
+    if (is.null(m$zones$zone_set_key)) m$zones$zone_set_key <- NA_character_
+    miss <- is.na(m$zones$zone_set_key)
+    if (any(miss)) {
+      vint <- c(programarea = "programarea_2026-01", ecoregion = "ecoregion_2025-06",
+                planarea = "planarea_2025-06", subregion = "subregion_2025-06")
+      ty <- sub("_key$", "", m$zones$fld[miss])
+      m$zones$zone_set_key[miss] <- ifelse(ty %in% names(vint), vint[ty],
+                                           paste0(ty, "_synthetic"))
+    }
   }
   m
 }
