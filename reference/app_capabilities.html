@@ -20,7 +20,7 @@ describes the bucket."><script async src="https://www.googletagmanager.com/gtag/
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,7 +57,14 @@ describes the bucket.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">app_capabilities</span><span class="op">(</span><span class="va">ver</span>, base <span class="op">=</span> <span class="fu"><a href="atlas_base_url.html">atlas_base_url</a></span><span class="op">(</span><span class="op">)</span>, sample <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, timeout <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">app_capabilities</span><span class="op">(</span></span>
+<span>  <span class="va">ver</span>,</span>
+<span>  base <span class="op">=</span> <span class="fu"><a href="atlas_base_url.html">atlas_base_url</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  sample <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  timeout <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  cell_tile <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  cell_model_tile <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -74,11 +81,22 @@ describes the bucket.</p>
 
 <dt id="arg-sample">sample<a class="anchor" aria-label="anchor" href="#arg-sample"></a></dt>
 <dd><p>named list of <code>capability -&gt; key relative to {base}/{ver}/</code>,
-overriding the defaults</p></dd>
+overriding the defaults (including <code>cell</code>/<code>cell_model</code> directly, if a
+caller needs a shape other than <code>tile={n}/data_0.parquet</code>)</p></dd>
 
 
 <dt id="arg-timeout">timeout<a class="anchor" aria-label="anchor" href="#arg-timeout"></a></dt>
 <dd><p>seconds per probe</p></dd>
+
+
+<dt id="arg-cell-tile">cell_tile<a class="anchor" aria-label="anchor" href="#arg-cell-tile"></a></dt>
+<dd><p>the real first <code>app/cell/tile={n}/</code> this release actually
+wrote, or <code>NULL</code> (default) to probe the never-real <code>tile=0</code> placeholder</p></dd>
+
+
+<dt id="arg-cell-model-tile">cell_model_tile<a class="anchor" aria-label="anchor" href="#arg-cell-model-tile"></a></dt>
+<dd><p>the real first <code>serve/cell_model/tile={n}/</code> this
+release actually wrote, or <code>NULL</code> (default) for the <code>tile=0</code> placeholder</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -90,6 +108,16 @@ overriding the defaults</p></dd>
     <p>A capability is TRUE only on a 200 (or 206). Anything else — 403, 404, a redirect,
 a timeout — is FALSE, and the probed URL and status are returned beside it so a
 FALSE can be explained rather than guessed at.</p>
+<p><code>cell</code> and <code>cell_model</code> default to <code>tile=0</code> — a placeholder that <strong>no real
+release ever publishes</strong> (<code>usa05</code> releases, v1-v7b, start at <code>tile=19</code>;
+<code>global05</code>, v8+, starts at <code>tile=436</code>), so an unhinted call 403s on both
+every time and under-reports them FALSE even when the tiles genuinely
+exist. Pass <code>cell_tile</code>/<code>cell_model_tile</code> — the REAL first tile number a
+build actually wrote (there is no way to discover this from the bucket
+alone: anonymous <code>ListObjectsV2</code> is denied, confirmed against the real
+bucket 2026-09-26) — whenever the caller has one, e.g. from
+<code><a href="app_bundle_build.html">app_bundle_build()</a></code>'s own written <code>cell/tile=*/</code> directory or
+<code>app_bundle_cell_model_plan()</code><code>$keys[1]</code>.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
