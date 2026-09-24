@@ -1,0 +1,753 @@
+{
+  "codec": "g1",
+  "note": "Shared vectors for the atlas place codec `g1` (plan D8). This file is the SAME file in both repos: atlas tests/fixtures/place_codec.json == msens inst/fixtures/place_codec.json, byte for byte. The R twin must decode every `token` below to exactly the `ints` given, and encode the same geometry back to the same `token`.",
+  "grammar": {
+    "hash": "#pl = place (\"~\" place)*",
+    "place": [
+      "\"z.\" set \".\" key (\",\" key)*   set in pa|pl|er|sr (the vintage comes from the release)",
+      "\"g1.\" name \".\" b64url(bytes)  name = percent-encoded UTF-8, <= 60 characters",
+      "\"u.\" name \".\" sha256_8        an upload too large to carry; prompts a re-upload"
+    ],
+    "bytes": "0x10, precision:u8 (3 by default; 4 when the bbox is < 0.5 deg), npoly:varint, per polygon nring:varint, per ring npt:varint (the closing vertex is omitted), per vertex zigzag-varint(dlon), zigzag-varint(dlat), in units of 10^-precision. The delta cursor starts at (0,0) and RUNS ACROSS rings and polygons. No compression: delta varints are already dense and raw-deflate has no base-R twin. Longitudes are stored UNWRAPPED (a Bering polygon runs 170..190).",
+    "varint": "LEB128, 7 bits per byte, low group first, high bit = continue",
+    "zigzag": "n >= 0 ? 2n : -2n - 1  (so -1 -> 1, 1 -> 2, -2 -> 3)",
+    "base64url": "RFC 4648 section 5 alphabet A-Za-z0-9-_ , NO padding",
+    "name_encoding": {
+      "unreserved": "A-Za-z0-9_-",
+      "escape": "every other UTF-8 byte as %XX with UPPERCASE hex",
+      "max_encoded_chars": 60
+    },
+    "quantize": "q = round_half_even(coord * 10^precision); the decoded coord is q / 10^precision, so the deviation is <= 0.5 * 10^-precision"
+  },
+  "budgets": {
+    "url_silent_max": 2000,
+    "url_long_max": 8000,
+    "simplify_tolerances_deg": [0.001, 0.002, 0.004, 0.008, 0.016],
+    "simplify_rule": "Douglas-Peucker, tolerance 0.001 deg doubling to 0.02 deg, a step accepted only while the area change is <= 1 % and every ring stays simple; then the `u.` form.",
+    "analysis_rule": "every analysis runs on decode(encode(geometry)), never on the input geometry"
+  },
+  "vectors": [
+    {
+      "id": "rect",
+      "kind": "geom",
+      "why": "the anchor vector: one ring, four vertices, precision 3. the byte stream is hand-computed in tests/geo/placeCodec.test.ts.",
+      "name": "Gulf box",
+      "name_encoded": "Gulf%20box",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-90, 27.5],
+            [-89, 27.5],
+            [-89, 28.5],
+            [-90, 28.5],
+            [-90, 27.5]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-90000, 27500],
+            [-89000, 27500],
+            [-89000, 28500],
+            [-90000, 28500]
+          ]
+        ]
+      ],
+      "deltas": [-90000, 27500, 1000, 0, 0, 1000, -1000, 0],
+      "bytes_hex": "10030101049ffe0ad8ad03d00f0000d00fcf0f00",
+      "bytes_length": 20,
+      "token": "g1.Gulf%20box.EAMBAQSf_grYrQPQDwAA0A_PDwA",
+      "token_length": 41,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-90, 27.5],
+            [-89, 27.5],
+            [-89, 28.5],
+            [-90, 28.5],
+            [-90, 27.5]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "poly30",
+      "kind": "geom",
+      "why": "30 vertices; the gate is <= 170 characters for the whole token.",
+      "name": "circle30",
+      "name_encoded": "circle30",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-88.72, 28],
+            [-88.726, 28.058],
+            [-88.744, 28.114],
+            [-88.773, 28.165],
+            [-88.813, 28.208],
+            [-88.86, 28.242],
+            [-88.913, 28.266],
+            [-88.971, 28.278],
+            [-89.029, 28.278],
+            [-89.087, 28.266],
+            [-89.14, 28.242],
+            [-89.187, 28.208],
+            [-89.227, 28.165],
+            [-89.256, 28.114],
+            [-89.274, 28.058],
+            [-89.28, 28],
+            [-89.274, 27.942],
+            [-89.256, 27.886],
+            [-89.227, 27.835],
+            [-89.187, 27.792],
+            [-89.14, 27.758],
+            [-89.087, 27.734],
+            [-89.029, 27.722],
+            [-88.971, 27.722],
+            [-88.913, 27.734],
+            [-88.86, 27.758],
+            [-88.813, 27.792],
+            [-88.773, 27.835],
+            [-88.744, 27.886],
+            [-88.726, 27.942],
+            [-88.72, 28]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-88720, 28000],
+            [-88726, 28058],
+            [-88744, 28114],
+            [-88773, 28165],
+            [-88813, 28208],
+            [-88860, 28242],
+            [-88913, 28266],
+            [-88971, 28278],
+            [-89029, 28278],
+            [-89087, 28266],
+            [-89140, 28242],
+            [-89187, 28208],
+            [-89227, 28165],
+            [-89256, 28114],
+            [-89274, 28058],
+            [-89280, 28000],
+            [-89274, 27942],
+            [-89256, 27886],
+            [-89227, 27835],
+            [-89187, 27792],
+            [-89140, 27758],
+            [-89087, 27734],
+            [-89029, 27722],
+            [-88971, 27722],
+            [-88913, 27734],
+            [-88860, 27758],
+            [-88813, 27792],
+            [-88773, 27835],
+            [-88744, 27886],
+            [-88726, 27942]
+          ]
+        ]
+      ],
+      "deltas": [
+        -88720, 28000, -6, 58, -18, 56, -29, 51, -40, 43, -47, 34, -53, 24, -58, 12, -58, 0, -58,
+        -12, -53, -24, -47, -34, -40, -43, -29, -51, -18, -56, -6, -58, 6, -58, 18, -56, 29, -51,
+        40, -43, 47, -34, 53, -24, 58, -12, 58, 0, 58, 12, 53, 24, 47, 34, 40, 43, 29, 51, 18, 56
+      ],
+      "bytes_hex": "100301011e9fea0ac0b5030b74237039664f565d446930731873007317692f5d434f553965236f0b730c73246f3a6550555e436a2f7417740074186a305e4450563a662470",
+      "bytes_length": 69,
+      "token": "g1.circle30.EAMBAR6f6grAtQMLdCNwOWZPVl1EaTBzGHMAcxdpL11DT1U5ZSNvC3MMcyRvOmVQVV5Dai90F3QAdBhqMF5EUFY6ZiRw",
+      "token_length": 104,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-88.72, 28],
+            [-88.726, 28.058],
+            [-88.744, 28.114],
+            [-88.773, 28.165],
+            [-88.813, 28.208],
+            [-88.86, 28.242],
+            [-88.913, 28.266],
+            [-88.971, 28.278],
+            [-89.029, 28.278],
+            [-89.087, 28.266],
+            [-89.14, 28.242],
+            [-89.187, 28.208],
+            [-89.227, 28.165],
+            [-89.256, 28.114],
+            [-89.274, 28.058],
+            [-89.28, 28],
+            [-89.274, 27.942],
+            [-89.256, 27.886],
+            [-89.227, 27.835],
+            [-89.187, 27.792],
+            [-89.14, 27.758],
+            [-89.087, 27.734],
+            [-89.029, 27.722],
+            [-88.971, 27.722],
+            [-88.913, 27.734],
+            [-88.86, 27.758],
+            [-88.813, 27.792],
+            [-88.773, 27.835],
+            [-88.744, 27.886],
+            [-88.726, 27.942],
+            [-88.72, 28]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "hole",
+      "kind": "geom",
+      "why": "two rings: the delta cursor RUNS ON from the last vertex of the outer ring into the first vertex of the hole. hand-computed too.",
+      "name": "ring with hole",
+      "name_encoded": "ring%20with%20hole",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-90, 27.5],
+            [-89, 27.5],
+            [-89, 28.5],
+            [-90, 28.5],
+            [-90, 27.5]
+          ],
+          [
+            [-89.75, 27.75],
+            [-89.25, 27.75],
+            [-89.25, 28.25],
+            [-89.75, 28.25],
+            [-89.75, 27.75]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-90000, 27500],
+            [-89000, 27500],
+            [-89000, 28500],
+            [-90000, 28500]
+          ],
+          [
+            [-89750, 27750],
+            [-89250, 27750],
+            [-89250, 28250],
+            [-89750, 28250]
+          ]
+        ]
+      ],
+      "deltas": [-90000, 27500, 1000, 0, 0, 1000, -1000, 0, 250, -750, 500, 0, 0, 500, -500, 0],
+      "bytes_hex": "10030102049ffe0ad8ad03d00f0000d00fcf0f0004f403db0be8070000e807e70700",
+      "bytes_length": 34,
+      "token": "g1.ring%20with%20hole.EAMBAgSf_grYrQPQDwAA0A_PDwAE9APbC-gHAADoB-cHAA",
+      "token_length": 68,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-90, 27.5],
+            [-89, 27.5],
+            [-89, 28.5],
+            [-90, 28.5],
+            [-90, 27.5]
+          ],
+          [
+            [-89.75, 27.75],
+            [-89.25, 27.75],
+            [-89.25, 28.25],
+            [-89.75, 28.25],
+            [-89.75, 27.75]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "multipolygon",
+      "kind": "geom",
+      "why": "npoly = 2; the cursor runs on across polygons as well as rings.",
+      "name": "two parts",
+      "name_encoded": "two%20parts",
+      "precision": 4,
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-90, 27.5],
+              [-89.95, 27.5],
+              [-89.95, 27.55],
+              [-90, 27.55],
+              [-90, 27.5]
+            ]
+          ],
+          [
+            [
+              [-89.9, 27.5],
+              [-89.85, 27.5],
+              [-89.85, 27.55],
+              [-89.9, 27.55],
+              [-89.9, 27.5]
+            ]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-900000, 275000],
+            [-899500, 275000],
+            [-899500, 275500],
+            [-900000, 275500]
+          ]
+        ],
+        [
+          [
+            [-899000, 275000],
+            [-898500, 275000],
+            [-898500, 275500],
+            [-899000, 275500]
+          ]
+        ]
+      ],
+      "deltas": [-900000, 275000, 500, 0, 0, 500, -500, 0, 1000, -500, 500, 0, 0, 500, -500, 0],
+      "bytes_hex": "1004020104bfee6df0c821e8070000e807e707000104d00fe707e8070000e807e70700",
+      "bytes_length": 35,
+      "token": "g1.two%20parts.EAQCAQS_7m3wyCHoBwAA6AfnBwABBNAP5wfoBwAA6AfnBwA",
+      "token_length": 62,
+      "decoded": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-90, 27.5],
+              [-89.95, 27.5],
+              [-89.95, 27.55],
+              [-90, 27.55],
+              [-90, 27.5]
+            ]
+          ],
+          [
+            [
+              [-89.9, 27.5],
+              [-89.85, 27.5],
+              [-89.85, 27.55],
+              [-89.9, 27.55],
+              [-89.9, 27.5]
+            ]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "bering",
+      "kind": "geom",
+      "why": "longitudes are stored UNWRAPPED: 190 stays 190, so a decoder needs no antimeridian guess.",
+      "name": "Bering box",
+      "name_encoded": "Bering%20box",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [190, 51],
+            [190, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [170000, 51000],
+            [190000, 51000],
+            [190000, 56000],
+            [170000, 56000]
+          ]
+        ]
+      ],
+      "deltas": [170000, 51000, 20000, 0, 0, 5000, -20000, 0],
+      "bytes_hex": "1003010104a0e014f09c06c0b8020000904ebfb80200",
+      "bytes_length": 22,
+      "token": "g1.Bering%20box.EAMBAQSg4BTwnAbAuAIAAJBOv7gCAA",
+      "token_length": 46,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [190, 51],
+            [190, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "small_p4",
+      "kind": "geom",
+      "why": "bbox 0.1 deg < 0.5, so precision is 4 (0.0001 deg) instead of 3.",
+      "name": "small box",
+      "name_encoded": "small%20box",
+      "precision": 4,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-894000, 282000],
+            [-893000, 282000],
+            [-893000, 283000],
+            [-894000, 283000]
+          ]
+        ]
+      ],
+      "deltas": [-894000, 282000, 1000, 0, 0, 1000, -1000, 0],
+      "bytes_hex": "1004010104df906da0b622d00f0000d00fcf0f00",
+      "bytes_length": 20,
+      "token": "g1.small%20box.EAQBAQTfkG2gtiLQDwAA0A_PDwA",
+      "token_length": 42,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "name_reserved",
+      "kind": "geom",
+      "why": "non-ASCII plus every character the grammar reserves (~ . , %): the name is percent-encoded UTF-8 over the unreserved set A-Za-z0-9_- , so none of them survives raw into the token.",
+      "name": "Bahía ~ São, 50% .test",
+      "name_encoded": "Bah%C3%ADa%20%7E%20S%C3%A3o%2C%2050%25%20%2Etest",
+      "precision": 4,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-894000, 282000],
+            [-893000, 282000],
+            [-893000, 283000],
+            [-894000, 283000]
+          ]
+        ]
+      ],
+      "deltas": [-894000, 282000, 1000, 0, 0, 1000, -1000, 0],
+      "bytes_hex": "1004010104df906da0b622d00f0000d00fcf0f00",
+      "bytes_length": 20,
+      "token": "g1.Bah%C3%ADa%20%7E%20S%C3%A3o%2C%2050%25%20%2Etest.EAQBAQTfkG2gtiLQDwAA0A_PDwA",
+      "token_length": 79,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    },
+    {
+      "id": "empty_name",
+      "kind": "geom",
+      "why": "an unnamed place: the name part is empty, the two dots stay.",
+      "name": "",
+      "name_encoded": "",
+      "precision": 4,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "ints": [
+        [
+          [
+            [-894000, 282000],
+            [-893000, 282000],
+            [-893000, 283000],
+            [-894000, 283000]
+          ]
+        ]
+      ],
+      "deltas": [-894000, 282000, 1000, 0, 0, 1000, -1000, 0],
+      "bytes_hex": "1004010104df906da0b622d00f0000d00fcf0f00",
+      "bytes_length": 20,
+      "token": "g1..EAQBAQTfkG2gtiLQDwAA0A_PDwA",
+      "token_length": 31,
+      "decoded": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-89.4, 28.2],
+            [-89.3, 28.2],
+            [-89.3, 28.3],
+            [-89.4, 28.3],
+            [-89.4, 28.2]
+          ]
+        ]
+      },
+      "max_deviation_deg": 0
+    }
+  ],
+  "zones": [
+    {
+      "id": "zone_pa",
+      "kind": "zone",
+      "why": "the `z.` form with several keys; the vintage comes from the release, never from the token.",
+      "place": {
+        "kind": "zone",
+        "set": "pa",
+        "keys": ["CGM", "SOC", "GEO"]
+      },
+      "token": "z.pa.CGM,SOC,GEO"
+    },
+    {
+      "id": "zone_reserved",
+      "kind": "zone",
+      "why": "zone keys are percent-encoded with the same rule as names, so a key may contain , ~ or . safely.",
+      "place": {
+        "kind": "zone",
+        "set": "er",
+        "keys": ["Gulf, North", "Chukchi~Beaufort", "a.b"]
+      },
+      "token": "z.er.Gulf%2C%20North,Chukchi%7EBeaufort,a%2Eb"
+    }
+  ],
+  "upload": {
+    "id": "upload",
+    "kind": "upload",
+    "why": "the `u.` form: the geometry was too large to carry even after the ladder, so the link names it and prompts a re-upload. sha256_8 = the first 8 hex characters of the sha256 of the canonical GeoJSON.",
+    "place": {
+      "kind": "upload",
+      "name": "Big survey area",
+      "digest": "3f1a9c04"
+    },
+    "token": "u.Big%20survey%20area.3f1a9c04"
+  },
+  "multiple": {
+    "why": "several places in one hash, joined with \"~\"",
+    "places": [
+      {
+        "kind": "geom",
+        "name": "Gulf box",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [-90, 27.5],
+              [-89, 27.5],
+              [-89, 28.5],
+              [-90, 28.5],
+              [-90, 27.5]
+            ]
+          ]
+        }
+      },
+      {
+        "kind": "zone",
+        "set": "pa",
+        "keys": ["CGM", "SOC", "GEO"]
+      },
+      {
+        "kind": "upload",
+        "name": "Big survey area",
+        "digest": "3f1a9c04"
+      }
+    ],
+    "hash": "g1.Gulf%20box.EAMBAQSf_grYrQPQDwAA0A_PDwA~z.pa.CGM,SOC,GEO~u.Big%20survey%20area.3f1a9c04"
+  },
+  "reject": [
+    {
+      "token": "",
+      "code": "empty",
+      "why": "empty token"
+    },
+    {
+      "token": "g1",
+      "code": "shape",
+      "why": "no dot-separated parts at all"
+    },
+    {
+      "token": "g1.name",
+      "code": "shape",
+      "why": "missing the payload part"
+    },
+    {
+      "token": "g1.name.AAAA.BBBB",
+      "code": "shape",
+      "why": "too many parts: a literal dot inside a name must be %2E"
+    },
+    {
+      "token": "g1.name.A+B/C=",
+      "code": "b64",
+      "why": "base64url has no +, / or = "
+    },
+    {
+      "token": "g1.name.",
+      "code": "empty",
+      "why": "empty payload"
+    },
+    {
+      "token": "g2.name.EAMBAQSf_grYrQPQDwAA0A_PDwA",
+      "code": "scheme",
+      "why": "unknown codec prefix"
+    },
+    {
+      "token": "z.xx.CGM",
+      "code": "set",
+      "why": "unknown zone set (pa|pl|er|sr)"
+    },
+    {
+      "token": "z.pa.",
+      "code": "empty",
+      "why": "no zone keys"
+    },
+    {
+      "token": "u.name.3f1a9c0",
+      "code": "digest",
+      "why": "sha256_8 is exactly 8 lowercase hex chars"
+    },
+    {
+      "token": "u.name.3F1A9C04",
+      "code": "digest",
+      "why": "sha256_8 is lowercase"
+    },
+    {
+      "token": "g1.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.EAMBAQSf_grYrQPQDwAA0A_PDwA",
+      "code": "name",
+      "why": "name over 60 characters"
+    },
+    {
+      "token": "g1.name.EQMBAQSf_grYrQPQDwAA0A_PDwA",
+      "code": "magic",
+      "why": "wrong magic byte (0x11, not 0x10)"
+    },
+    {
+      "token": "g1.name.EAABAQM",
+      "code": "precision",
+      "why": "precision 0"
+    },
+    {
+      "token": "g1.name.EAMA",
+      "code": "empty",
+      "why": "npoly = 0"
+    },
+    {
+      "token": "g1.name.EAMBAA",
+      "code": "empty",
+      "why": "a polygon with no rings"
+    },
+    {
+      "token": "g1.name.EAMBAQIAAAIC",
+      "code": "degenerate",
+      "why": "a ring with fewer than 3 vertices"
+    },
+    {
+      "token": "g1.name.EAMBAQSf_grYrQPQDwAA0A8",
+      "code": "truncated",
+      "why": "the vertex stream stops mid-ring"
+    },
+    {
+      "token": "g1.name.EAMBAQSf_grYrQPQDwAA0A_PDwAA",
+      "code": "trailing",
+      "why": "bytes after the last vertex"
+    },
+    {
+      "token": "g1.name.EAOA",
+      "code": "truncated",
+      "why": "a varint that never terminates"
+    }
+  ],
+  "encode_reject": [
+    {
+      "id": "reject_wrapped_ring",
+      "kind": "encode_reject",
+      "why": "the BYTE-LEVEL encoder refuses a ring that is still wrapped; the high-level entry normalizes first and yields the bering token",
+      "name": "Bering box",
+      "precision": 3,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [-170, 51],
+            [-170, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "code": "wrapped",
+      "wrapped_edge": 1,
+      "max_step_deg": 340,
+      "unwrapped": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [170, 51],
+            [190, 51],
+            [190, 56],
+            [170, 56],
+            [170, 51]
+          ]
+        ]
+      },
+      "token_via_high_level": "g1.Bering%20box.EAMBAQSg4BTwnAbAuAIAAJBOv7gCAA"
+    }
+  ]
+}

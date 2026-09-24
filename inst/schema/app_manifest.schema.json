@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://marinesensitivity.org/schema/app_manifest.schema.json",
+  "title": "the `app` block manifest.json gains",
+  "description": "Every capability is derived from an anonymous HTTPS HEAD of a sample object, NEVER copied from manifest$capabilities: v7 and v7b advertise cell_species_list because the SERVER can read cell_model, while S3 holds only tables/ for them.",
+  "type": "object",
+  "required": ["schema", "base", "boot", "built_at", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "schema":   { "type": "integer", "minimum": 1 },
+    "base":     { "type": "string", "pattern": "^https://" },
+    "boot":     { "type": "string", "pattern": "^https://" },
+    "built_at": { "type": "string" },
+    "capabilities": {
+      "type": "object",
+      "required": ["cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"],
+      "additionalProperties": { "type": "boolean" },
+      "properties": {
+        "cell":       { "type": "boolean" },
+        "cell_model": { "type": "boolean" },
+        "taxonomy":   { "type": "boolean" },
+        "alias":      { "type": "boolean" },
+        "pmtiles_s3": { "type": "boolean" }
+      }
+    },
+    "probed": {
+      "type": ["object", "null"],
+      "description": "the URL and HTTP status behind each capability, so a FALSE can be explained",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["url", "status"],
+        "properties": {
+          "url":    { "type": "string" },
+          "status": { "type": ["integer", "null"] }
+        }
+      }
+    }
+  }
+}

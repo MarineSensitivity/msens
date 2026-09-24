@@ -7,7 +7,7 @@
 hex_ocean(r, con, res = HEX_RES, mask_layer = names(r)[1], out_tbl = "hex")
 }
 \arguments{
-\item{r}{a \link[terra:SpatRaster-class]{terra::SpatRaster} in EPSG:4326}
+\item{r}{a \link[terra:SpatRaster]{terra::SpatRaster} in EPSG:4326}
 
 \item{con}{a DuckDB connection}
 

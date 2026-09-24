@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://marinesensitivity.org/schema/app_boot.schema.json",
+  "title": "app/boot.json — everything the atlas app needs for first paint, no WASM",
+  "type": "object",
+  "required": ["schema", "ver", "built_at", "msens", "id_field", "release", "grid",
+               "study_areas", "units", "layers", "zones", "flower_default",
+               "datasets", "palettes", "tables"],
+  "additionalProperties": false,
+  "properties": {
+    "schema":   { "type": "integer", "minimum": 1 },
+    "ver":      { "type": "string", "pattern": "^v[0-9]+[a-z]?$" },
+    "built_at": { "type": "string" },
+    "msens":    { "type": "string" },
+    "id_field": {
+      "type": "string", "enum": ["mdl_seq", "mdl_key"],
+      "description": "The ONE generation fact the browser is allowed to need: which column the cell_model join keys on. v8+ store a compact integer mdl_id and join `model` back to the stable mdl_key; v1-v7 store mdl_seq, which `taxon` already carries."
+    },
+    "release": {
+      "type": "object",
+      "required": ["title", "status", "access"],
+      "properties": {
+        "title":    { "type": ["string", "null"] },
+        "status":   { "type": "string", "enum": ["released", "prerelease", "retired"] },
+        "access":   { "type": "string", "enum": ["public", "restricted"] },
+        "released": { "type": ["string", "null"] }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "required": ["grid_id", "nc", "nr", "xmin", "ymax", "resx", "resy", "lon360", "tile"],
+      "additionalProperties": false,
+      "properties": {
+        "grid_id": {
+          "type": "string",
+          "description": "Kept although the contract's table does not list it: it names WHICH grid these numbers describe, so a client that caches by grid (the cell-id COG, a tile store shared between releases on the same grid) keys on the grid rather than on the version. It is a label for nc/nr/xmin/ymax, never a substitute for them, and nothing branches on it."
+        },
+        "nc":      { "type": "integer", "minimum": 1 },
+        "nr":      { "type": "integer", "minimum": 1 },
+        "xmin":    { "type": "number" },
+        "ymax":    { "type": "number" },
+        "resx":    { "type": "number", "exclusiveMinimum": 0 },
+        "resy":    { "type": "number", "exclusiveMinimum": 0 },
+        "lon360":  { "type": "boolean" },
+        "tile": {
+          "type": "object",
+          "required": ["size"],
+          "properties": { "size": { "type": "integer", "minimum": 1 } }
+        }
+      }
+    },
+    "study_areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "lon", "lat", "zoom"],
+        "properties": {
+          "key":   { "type": "string" },
+          "label": { "type": "string" },
+          "lon":   { "type": "number", "minimum": -180, "maximum": 180 },
+          "lat":   { "type": "number", "minimum": -90,  "maximum": 90 },
+          "zoom":  { "type": "number" },
+          "ecoregions": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["zone_type", "fld", "label", "pmtiles", "source_layer", "keys"],
+        "properties": {
+          "zone_type":    { "type": "string" },
+          "zone_set_key": { "type": ["string", "null"] },
+          "zone_tbl": {
+            "type": ["string", "null"],
+            "description": "The ONE zone.tbl this unit publishes. A release may carry more than one table for a field (v2 has two for subregion_key); the bundle picks one and drops the other's rows, and names it here so a geometry check can assert its GeoPackage holds the same keys."
+          },
+          "fld":          { "type": "string", "pattern": "_key$" },
+          "label":        { "type": "string" },
+          "pmtiles":      { "type": "string" },
+          "source_layer": { "type": "string" },
+          "keys":         { "type": "array", "minItems": 2, "items": { "type": "string" } }
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric_key", "label", "category", "order", "by_subregion"],
+        "properties": {
+          "metric_key":   { "type": "string" },
+          "label":        { "type": "string" },
+          "category":     { "type": "string" },
+          "order":        { "type": "integer" },
+          "colormap":     { "type": ["string", "null"] },
+          "by_subregion": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["cog", "rescale"],
+              "properties": {
+                "cog":     { "type": "string" },
+                "rescale": {
+                  "type": "array", "minItems": 2, "maxItems": 2,
+                  "items": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "zones": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["key", "n_cells", "area_km2", "n_taxa", "metrics"],
+          "properties": {
+            "key":      { "type": "string" },
+            "name":     { "type": ["string", "null"] },
+            "label_pt": {
+              "type": ["array", "null"], "minItems": 2, "maxItems": 2,
+              "items": { "type": "number" }
+            },
+            "bbox": {
+              "type": ["array", "null"], "minItems": 4, "maxItems": 4,
+              "items": { "type": "number" }
+            },
+            "n_cells":  { "type": "integer", "minimum": 0 },
+            "n_taxa": {
+              "type": "integer", "minimum": 0,
+              "description": "Rows this zone has in zone_taxon. 0 is a real answer, not a placeholder: v8 scores subregion AT and gives it 52,674 cells but publishes no zone_taxon rows for it. Nothing is invented and the unit is not dropped (the score is real); the app shows 'no species table published for this zone' where this is 0."
+            },
+            "area_km2": { "type": "number", "minimum": 0 },
+            "metrics":  { "type": "object", "additionalProperties": { "type": "number" } },
+            "coverage": { "type": ["object", "null"],
+                          "additionalProperties": { "type": "number" } }
+          }
+        }
+      }
+    },
+    "flower_default": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["component", "score"],
+          "properties": {
+            "component": { "type": "string" },
+            "score":     { "type": "number" }
+          }
+        }
+      }
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ds_key", "name_display"],
+        "properties": {
+          "ds_key":       { "type": "string" },
+          "name_display": { "type": ["string", "null"] },
+          "value_info":   { "type": ["string", "null"] },
+          "is_mask":      { "type": ["boolean", "null"] },
+          "on_grid":      { "type": ["boolean", "null"] },
+          "sort_order":   { "type": ["integer", "null"] },
+          "citation":     { "type": ["string", "null"] },
+          "link_info":    { "type": ["string", "null"] }
+        }
+      }
+    },
+    "palettes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array", "minItems": 11, "maxItems": 11,
+        "items": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+      }
+    },
+    "tables": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["href", "bytes", "digest"],
+        "properties": {
+          "href":   { "type": "string", "pattern": "^https://" },
+          "bytes":  { "type": "integer", "minimum": 0 },
+          "digest": { "type": "string", "minLength": 8 }
+        }
+      }
+    },
+    "methods": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["method_key", "val"],
+        "properties": {
+          "method_key":  { "type": "string" },
+          "val":         { "type": ["string", "number", "null"] },
+          "description": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

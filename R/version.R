@@ -309,6 +309,10 @@ atlas_manifest <- function(ver = NULL, base = atlas_base_url(), refresh = FALSE)
 #' Split from [atlas_manifest()] so the publishing notebook asserts the same
 #' contract it writes, and the unit tests can exercise it without network.
 #'
+#' An `app` block is **optional by presence** (like v7.1's `methods`): a manifest
+#' without one validates, and one with it is checked against
+#' `inst/schema/app_manifest.schema.json`.
+#'
 #' @param m parsed manifest (list)
 #' @param ver expected version, or `NULL` to skip the cross-check
 #' @return `m`, invisibly-but-returned (with `$ver` guaranteed)
@@ -329,6 +333,9 @@ validate_manifest <- function(m, ver = NULL) {
          call. = FALSE)
   if (!is.null(ver) && !identical(m$ver, ver))
     stop(sprintf("manifest declares ver '%s' but was fetched as '%s'", m$ver, ver), call. = FALSE)
+  # `app` is optional by presence, like v7.1's `methods`: every release published
+  # before the browser contract existed has no such key and must still validate.
+  if (!is.null(m$app)) validate_manifest_app(m$app)
   m
 }
 
@@ -369,6 +376,18 @@ validate_manifest <- function(m, ver = NULL) {
 #'   out with no `zone_set_key` and therefore no `pmtiles` — the app then cannot
 #'   draw a single zone outline on any version but the newest.
 #' @param extra named list merged into the manifest (e.g. `zone_sets`)
+#' @param app the `app` block, or `NULL` (default) for a manifest with **no `app`
+#'   key at all**. Give it `capabilities` (a named list of single logicals: `cell`,
+#'   `cell_model`, `taxonomy`, `alias`, `pmtiles_s3`) and optionally `built_at` and
+#'   `probed`; `schema`, `base` and `boot` are filled in from `ver` and `base`.
+#'
+#'   **The capabilities are INPUTS.** msens never derives them and never copies them
+#'   from `capabilities` above: what a static browser can fetch is a question about
+#'   the BUCKET, and only an anonymous HTTPS HEAD answers it. v7 and v7b both
+#'   advertise `cell_species_list` because the *server* can read a `cell_model` that
+#'   never left the server. The notebook probes with [app_capabilities()] and passes
+#'   the result here; see [app_manifest_block()], which builds the same block
+#'   standalone.
 #' @return a validated manifest list
 #' @importFrom DBI dbListTables dbListFields dbGetQuery
 #' @importFrom utils modifyList
@@ -379,7 +398,7 @@ manifest_build <- function(con, ver, status = "released",
                            grid_id = grid_for_ver(ver), base = atlas_base_url(),
                            metrics = NULL, capabilities = list(),
                            zone_tiles = list(), zone_sets = NULL,
-                           extra = list()) {
+                           extra = list(), app = NULL) {
   tbls <- DBI::dbListTables(con)
   has  <- function(x) x %in% tbls
   http <- sprintf("%s/%s", base, ver)
@@ -406,13 +425,27 @@ manifest_build <- function(con, ver, status = "released",
   if (!is.null(metrics) && nrow(met))
     met <- merge(met, metrics, by = "metric_key", all.x = TRUE)
 
+  # short label, backfilled -- NEVER overwritten. `metrics$label` (a curated
+  # layers_{ver}.csv's `layer` column, when the caller supplies one) is the app's
+  # SHORT legend/picker text; a release with none, or one whose curation left a
+  # cell-scored key unlabelled, gets `.metric_short_label()`'s canonical wording
+  # instead of the bare metric_key fragment ("score" for the composite before this).
+  # ONE implementation (`.metrics_backfill_labels()`, app_bundle.R), shared with the
+  # exported manifest_labels_backfill() so a release-side patch of an ALREADY
+  # PUBLISHED manifest.json applies the identical rule.
+  met <- .metrics_backfill_labels(met)
+
   # zone_set_key when the release carries it, so the app can resolve each spatial
   # unit's PMTiles by vintage rather than a hardcoded, unversioned filename
   has_zsk <- has("zone") && "zone_set_key" %in% DBI::dbListFields(con, "zone")
+  # ORDER BY fld, tbl -- fully deterministic. `ORDER BY 3` (fld alone) left the row
+  # order of two tables under one fld to the engine, and it really does vary:
+  # load_all() on the source tree and the installed package, same commit, gave
+  # v2's subregion rows in opposite orders.
   zones <- if (has("zone"))
     DBI::dbGetQuery(con, if (has_zsk)
-      "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY 3"
-      else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY 2") else data.frame()
+      "SELECT zone_set_key, tbl, fld, count(*) n FROM zone GROUP BY 1,2,3 ORDER BY fld, tbl"
+      else "SELECT tbl, fld, count(*) n FROM zone GROUP BY 1,2 ORDER BY fld, tbl") else data.frame()
   # A release that predates the column gets its zone_set_key from the registry,
   # matched on (zone_type, this version). Without this only v8 -- the one release
   # that stamps the column into its own `zone` table -- ever carried zone tiles.
@@ -422,15 +455,43 @@ manifest_build <- function(con, ver, status = "released",
   # One row per SPATIAL UNIT, not per source table. v2 and v3 each carry two
   # subregion tables under one `fld` (a legacy of synthesising subregions per
   # release), which both resolve to the same canonical vintage -- so the manifest
-  # listed subregion twice and an app keying its picker on the manifest would
-  # offer the same choice twice. Collapse on zone_set_key, keeping the largest
-  # `n` so the count still describes the unit rather than whichever table sorted
-  # first.
+  # listed subregion twice and an app keying its picker on the manifest would offer
+  # the same choice twice.
+  #
+  # Collapse on zone_set_key keeping the largest `n` -- and STOP on a tie. v2's two
+  # subregion tables both have n = 4, so `!duplicated()` broke the tie by whichever
+  # row the engine returned first: the source tree and the installed package, at the
+  # same commit, produced DIFFERENT manifests, and the bundle built from the loser
+  # published `USA` with 9,792 taxa where the published manifest's table has 17,307.
+  # A silent, nondeterministic tie-break is worse than an error, and round 6's "two
+  # rows for one field" stop never fired because this had already collapsed them.
   if (nrow(zones) && "zone_set_key" %in% names(zones)) {
-    ord <- order(zones$zone_set_key, -as.numeric(zones$n))
-    zones <- zones[ord, , drop = FALSE]
-    zones <- zones[!duplicated(zones$zone_set_key) | is.na(zones$zone_set_key), , drop = FALSE]
-    zones <- zones[order(zones$fld), , drop = FALSE]
+    zones <- zones[order(zones$fld, zones$tbl), , drop = FALSE]
+    keep <- rep(TRUE, nrow(zones))
+    for (zk in unique(zones$zone_set_key[!is.na(zones$zone_set_key)])) {
+      i <- which(zones$zone_set_key == zk)
+      if (length(i) < 2L) next
+      n <- as.numeric(zones$n[i])
+      best <- i[n == max(n)]
+      if (length(best) > 1L) {
+        # the registry may still decide it: a `source` basename matching exactly one
+        src <- if (!is.null(zone_sets) && "source" %in% names(zone_sets))
+          sub("[.][^.]*$", "", basename(as.character(zone_sets$source))) else character()
+        hit <- best[zones$tbl[best] %in% src]
+        if (length(hit) == 1L) best <- hit else
+          stop(sprintf(paste0(
+            "zone set `%s` (%s) is served by %d tables with the same %d zones: %s.\n",
+            "  Nothing here can choose between them, and picking one silently made ",
+            "the manifest depend on engine row order -- the same commit gave ",
+            "different answers from the source tree and the installed package.\n",
+            "  Pass `zone_sets` (a `source` naming one of them), or fix the release."),
+            zk, zones$fld[i][1], length(best), max(n),
+            paste(zones$tbl[best], collapse = ", ")), call. = FALSE)
+      }
+      keep[setdiff(i, best[1])] <- FALSE
+    }
+    zones <- zones[keep, , drop = FALSE]
+    zones <- zones[order(zones$fld, zones$tbl), , drop = FALSE]
     rownames(zones) <- NULL
   }
 
@@ -460,7 +521,63 @@ manifest_build <- function(con, ver, status = "released",
               grid_id = grid_id, id_field = id_field,
               capabilities = caps, tables = tables,
               metrics = met, zones = zones), extra)
+  # `app` is OPTIONAL: v9's manifest comes from build_version_manifest.qmd and
+  # v1-v7b's from backfill_versions.qmd through `extra =`, and a release whose
+  # bundle has not been published yet must carry no `app` key rather than an empty
+  # one that an app would read as "nothing is available".
+  if (!is.null(app)) m$app <- .manifest_app_block(app, ver, base)
   validate_manifest(m, ver = ver)
+}
+
+# Normalise and check the `app` block. Kept beside manifest_build() rather than in
+# app_bundle.R so a manifest can be built on a machine that never runs a bundle.
+.manifest_app_block <- function(app, ver, base) {
+  if (!is.list(app))
+    stop("`app` must be a list with a `capabilities` element", call. = FALSE)
+  caps <- app$capabilities
+  if (!is.list(caps) || !length(caps) || is.null(names(caps)) || !all(nzchar(names(caps))))
+    stop("`app$capabilities` must be a NON-EMPTY NAMED list of single logicals; ",
+         "they are PROBED by the notebook (anonymous HTTPS HEAD), never derived here",
+         call. = FALSE)
+  if (!all(vapply(caps, function(x) is.logical(x) && length(x) == 1L && !is.na(x),
+                  logical(1))))
+    stop("`app$capabilities` values must be single non-NA logicals; ",
+         "an unknown capability is FALSE, never absent and never NA", call. = FALSE)
+  want <- c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3")
+  if (length(miss <- setdiff(want, names(caps))))
+    stop(sprintf("`app$capabilities` is missing: %s", paste(miss, collapse = ", ")),
+         call. = FALSE)
+  if (length(extra <- setdiff(names(caps), want)))
+    stop(sprintf("`app$capabilities` has unknown key(s): %s (known: %s)",
+                 paste(extra, collapse = ", "), paste(want, collapse = ", ")),
+         call. = FALSE)
+  out <- list(
+    schema   = if (is.null(app$schema)) 1L else as.integer(app$schema),
+    base     = sprintf("%s/%s/app", base, ver),
+    boot     = sprintf("%s/%s/app/boot.json", base, ver),
+    built_at = app$built_at %||%
+      format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    capabilities = caps)
+  if (!is.null(app$probed)) out$probed <- app$probed
+  out
+}
+
+#' Validate a manifest's `app` block against `inst/schema/app_manifest.schema.json`
+#'
+#' Split out so [validate_manifest()] can call it only when the key is present: most
+#' releases have no `app` block, and their manifests must keep validating.
+#'
+#' @param app the `app` block
+#' @return `app`, invisibly; errors with the failing JSON pointers
+#' @export
+#' @concept version
+validate_manifest_app <- function(app) {
+  if (!requireNamespace("jsonvalidate", quietly = TRUE)) {
+    # a machine without the validator still gets the structural checks
+    .manifest_app_block(app, "v0", "https://example.invalid")
+    return(invisible(app))
+  }
+  app_validate(app, "manifest", "manifest$app")
 }
 
 #' Does this version support a named capability?

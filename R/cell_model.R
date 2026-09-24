@@ -33,7 +33,9 @@
 #' silently, since a wrong tile id is still a valid tile id.
 #'
 #' Resolution order: the `cell_grid` table written alongside `cell_model`, then
-#' the default. Every v8 database predates that table and correctly falls back.
+#' the grid the connection itself implies ([grid_for_con()]), then the compiled
+#' default. v8/v9 resolve to 7200 either way; v1-v7 resolve to 3103 instead of
+#' silently taking the global width.
 #'
 #' @param con a DBI connection, or `NULL` for the default
 #' @return integer number of grid columns
@@ -46,7 +48,21 @@ cell_grid_ncol <- function(con = NULL) {
     if (!"cell_grid" %in% DBI::dbListTables(con)) NULL else
       DBI::dbGetQuery(con, "SELECT ncol FROM cell_grid LIMIT 1")$ncol[1]
   }, error = function(e) NULL)
-  if (is.null(n) || is.na(n)) .CELL_GRID_NCOL else as.integer(n)
+  if (!is.null(n) && !is.na(n)) return(as.integer(n))
+  # No release ever wrote `cell_grid`, so the blind 7200 fallback was ALWAYS taken:
+  # right for global05 by coincidence, wrong for every usa05 release, and silently
+  # so (a wrong tile id is a valid tile id, so `tile IN (...)` just returns nothing —
+  # a v7 cell with 477 models came back with 0 species). Derive the width from the
+  # same evidence cells_in_polygon() uses, so a reader and a writer cannot disagree
+  # even on a database that predates the table.
+  # ...and only when there IS a `cell` table to read it from. A database holding a
+  # `cell_model` and nothing else (which is what a serving DB looks like mid-build)
+  # carries no evidence at all, and inventing usa05 from the absence of `lon`/`lat`
+  # would be the same guess in the other direction.
+  has_cell <- tryCatch("cell" %in% DBI::dbListTables(con), error = function(e) FALSE)
+  n <- if (!has_cell) NULL else
+    tryCatch(as.integer(grid_for_con(con)$nc), error = function(e) NULL)
+  if (is.null(n) || is.na(n)) .CELL_GRID_NCOL else n
 }
 
 #' SQL expression for a cell's spatial tile id

@@ -1,0 +1,51 @@
+{
+  "id": "half_cell_even_up",
+  "source": "msens (hand-derived)",
+  "note": "percent is round-half-to-EVEN in both directions: 3.5 -> 4 (up, to even)",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -90,
+          27
+        ],
+        [
+          -89.99825,
+          27
+        ],
+        [
+          -89.99825,
+          27.05
+        ],
+        [
+          -90,
+          27.05
+        ],
+        [
+          -90,
+          27
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      9066601,
+      4
+    ]
+  ]
+}

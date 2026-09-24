@@ -1,0 +1,42 @@
+{
+  "id": "overlap-cap-global05",
+  "source": "atlas (hand-derived)",
+  "note": "two OVERLAPPING parts over one cell (1.0 + 0.5 of it). the fractions are summed then capped at 1, exactly as msens sums per-feature fractions and takes pmin(.,1) — without the cap this would report 150.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [-90, 27.5],
+          [-89.95, 27.5],
+          [-89.95, 27.55],
+          [-90, 27.55],
+          [-90, 27.5]
+        ]
+      ],
+      [
+        [
+          [-90, 27.5],
+          [-89.975, 27.5],
+          [-89.975, 27.55],
+          [-90, 27.55],
+          [-90, 27.5]
+        ]
+      ]
+    ]
+  },
+  "expected": [[8994601, 100]]
+}

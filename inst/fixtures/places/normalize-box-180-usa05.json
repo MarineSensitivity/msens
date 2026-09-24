@@ -1,0 +1,91 @@
+{
+  "id": "normalize-box-180-usa05",
+  "source": "msens (hand-derived)",
+  "note": "the same wrapped box on usa05. NOTE its frame is cut at 141.10 E, not at 180, so the per-vertex frame shift already places it contiguously - unwrapping changes nothing here, and that is the point of having the rule stated separately from the grid",
+  "grid_id": "usa05",
+  "grid": {
+    "nc": 3103,
+    "nr": 2006,
+    "xmin": 141.1,
+    "ymax": 82.6,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": true,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          179.9,
+          50
+        ],
+        [
+          -179.9,
+          50
+        ],
+        [
+          -179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50
+        ]
+      ]
+    ]
+  },
+  "unwrapped": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          179.9,
+          50
+        ],
+        [
+          180.1,
+          50
+        ],
+        [
+          180.1,
+          50.05
+        ],
+        [
+          179.9,
+          50.05
+        ],
+        [
+          179.9,
+          50
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      2020830,
+      100
+    ],
+    [
+      2020831,
+      100
+    ],
+    [
+      2020832,
+      100
+    ],
+    [
+      2020833,
+      100
+    ]
+  ],
+  "cells_if_read_literally": 4
+}

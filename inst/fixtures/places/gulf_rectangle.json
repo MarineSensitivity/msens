@@ -1,0 +1,71 @@
+{
+  "id": "gulf_rectangle",
+  "source": "msens (hand-derived)",
+  "note": "a rectangle from a cell corner: whole cells 100, half columns/rows multiply",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -90,
+          27
+        ],
+        [
+          -89.875,
+          27
+        ],
+        [
+          -89.875,
+          27.075
+        ],
+        [
+          -90,
+          27.075
+        ],
+        [
+          -90,
+          27
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      9059401,
+      50
+    ],
+    [
+      9059402,
+      50
+    ],
+    [
+      9059403,
+      25
+    ],
+    [
+      9066601,
+      100
+    ],
+    [
+      9066602,
+      100
+    ],
+    [
+      9066603,
+      50
+    ]
+  ]
+}

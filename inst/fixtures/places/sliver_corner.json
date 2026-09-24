@@ -1,0 +1,51 @@
+{
+  "id": "sliver_corner",
+  "source": "msens (hand-derived)",
+  "note": "a sliver over a cell corner: cells whose percent rounds to 0 are dropped",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -89.954,
+          27.04
+        ],
+        [
+          -89.9499,
+          27.04
+        ],
+        [
+          -89.9499,
+          27.0503
+        ],
+        [
+          -89.954,
+          27.0503
+        ],
+        [
+          -89.954,
+          27.04
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      9066601,
+      2
+    ]
+  ]
+}

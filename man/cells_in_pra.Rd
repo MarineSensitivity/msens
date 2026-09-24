@@ -12,14 +12,24 @@ cells_in_pra(con, pra_key)
 \item{pra_key}{Program Area key (e.g. "CGM")}
 }
 \value{
-tibble(cell_id integer, pct_covered integer = 100L)
+tibble(cell_id integer, pct_covered numeric 1-100)
 }
 \description{
-Fast lookup of the cells making up a Program Area by reading
-directly from the \code{zone} / \code{zone_cell} tables, avoiding the
-\code{terra::rasterize()} cost paid by \code{\link[=cells_in_polygon]{cells_in_polygon()}}. Returns
-the same shape (\code{cell_id}, \code{pct_covered}) so downstream helpers
-can consume it interchangeably; \code{pct_covered} is always 100
-because \code{zone_cell} membership is binary.
+Fast lookup of the cells making up a Program Area by reading directly from the
+\code{zone} / \code{zone_cell} tables. Returns the same shape (\code{cell_id}, \code{pct_covered})
+as \code{\link[=cells_in_polygon]{cells_in_polygon()}} so downstream helpers consume the two interchangeably.
+}
+\details{
+\strong{\code{pct_covered} is the stored coverage, not 100.} \code{zone_cell} membership is
+\emph{not} binary: it holds the \code{exactextractr} coverage fraction x 100, and 74,938
+of 2,241,876 rows are partial. This function used to overwrite all of them with
+\code{100L}, so a single report weighted its Program-Area \emph{scores} by coverage (via
+the precomputed \code{zone_metric}) while weighting the \emph{species table} of the same
+area uniformly — the edge cells of every coastal area counted for more species
+than they contributed area. \code{test-calc.R} keeps that as a named regression.
+
+The zone key column is resolved with \code{\link[=sdm_val_col]{sdm_val_col()}}: v1-v7 spell it \code{value},
+v8+ \code{val}, and a served v8 view carries both. Hardcoding \code{value} made this
+function work on every \emph{served} release and fail on a v8/v9 \emph{source} database.
 }
 \concept{calc}

@@ -15,7 +15,8 @@ manifest_build(
   capabilities = list(),
   zone_tiles = list(),
   zone_sets = NULL,
-  extra = list()
+  extra = list(),
+  app = NULL
 )
 }
 \arguments{
@@ -56,6 +57,19 @@ out with no \code{zone_set_key} and therefore no \code{pmtiles} — the app then
 draw a single zone outline on any version but the newest.}
 
 \item{extra}{named list merged into the manifest (e.g. \code{zone_sets})}
+
+\item{app}{the \code{app} block, or \code{NULL} (default) for a manifest with \strong{no \code{app}
+key at all}. Give it \code{capabilities} (a named list of single logicals: \code{cell},
+\code{cell_model}, \code{taxonomy}, \code{alias}, \code{pmtiles_s3}) and optionally \code{built_at} and
+\code{probed}; \code{schema}, \code{base} and \code{boot} are filled in from \code{ver} and \code{base}.
+
+\strong{The capabilities are INPUTS.} msens never derives them and never copies them
+from \code{capabilities} above: what a static browser can fetch is a question about
+the BUCKET, and only an anonymous HTTPS HEAD answers it. v7 and v7b both
+advertise \code{cell_species_list} because the \emph{server} can read a \code{cell_model} that
+never left the server. The notebook probes with \code{\link[=app_capabilities]{app_capabilities()}} and passes
+the result here; see \code{\link[=app_manifest_block]{app_manifest_block()}}, which builds the same block
+standalone.}
 }
 \value{
 a validated manifest list

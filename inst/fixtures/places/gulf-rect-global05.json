@@ -1,0 +1,36 @@
+{
+  "id": "gulf-rect-global05",
+  "source": "atlas (hand-derived)",
+  "note": "a Gulf rectangle snapped to cell edges: 2 columns x 2 rows, every cell fully covered. cols 1801-1802 (lon -90.00..-89.90), rows 1249-1250 (lat 27.50..27.60).",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90, 27.5],
+        [-89.9, 27.5],
+        [-89.9, 27.6],
+        [-90, 27.6],
+        [-90, 27.5]
+      ]
+    ]
+  },
+  "expected": [
+    [8987401, 100],
+    [8987402, 100],
+    [8994601, 100],
+    [8994602, 100]
+  ]
+}

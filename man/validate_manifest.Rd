@@ -18,4 +18,9 @@ validate_manifest(m, ver = NULL)
 Split from \code{\link[=atlas_manifest]{atlas_manifest()}} so the publishing notebook asserts the same
 contract it writes, and the unit tests can exercise it without network.
 }
+\details{
+An \code{app} block is \strong{optional by presence} (like v7.1's \code{methods}): a manifest
+without one validates, and one with it is checked against
+\code{inst/schema/app_manifest.schema.json}.
+}
 \concept{version}

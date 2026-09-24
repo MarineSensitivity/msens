@@ -1,0 +1,31 @@
+{
+  "id": "sliver-corner-half-global05",
+  "source": "atlas (hand-derived)",
+  "note": "0.0025 x 0.005 deg in the corner of cell 8994600: frac 0.005 -> pct exactly 0.5. R's round() is half-even, so this is 0 and the cell is DROPPED; Math.round would keep it as 1.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-90.0025, 27.5],
+        [-90, 27.5],
+        [-90, 27.505],
+        [-90.0025, 27.505],
+        [-90.0025, 27.5]
+      ]
+    ]
+  },
+  "expected": []
+}

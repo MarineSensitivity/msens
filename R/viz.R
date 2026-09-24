@@ -711,7 +711,7 @@ map_pmtiles <- function(
 #' @importFrom ggiraph geom_rect_interactive
 #' @importFrom dplyr arrange mutate summarize pull across lag lead
 #'   where
-#' @importFrom rlang ensym `:=`
+#' @importFrom rlang ensym ":="
 #' @importFrom scales hue_pal
 #' @importFrom glue glue
 #' @export

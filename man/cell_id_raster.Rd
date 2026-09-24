@@ -7,7 +7,7 @@
 cell_id_raster()
 }
 \value{
-a \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} with a \code{cell_id} layer
+a \code{\link[terra:SpatRaster]{terra::SpatRaster}} with a \code{cell_id} layer
 }
 \description{
 \code{derived/r_bio-oracle_planarea.tif} — a \strong{regional} raster on \strong{0-360}

@@ -1,7 +1,7 @@
 Package: msens
 Type: Package
 Title: R library of functions for mapping marine sensitivities, sponsored by BOEM
-Version: 0.42.1
+Version: 0.44.0
 URL: https://github.com/MarineSensitivity/msens, http://marinesensitivity.org/msens
 BugReports: https://github.com/MarineSensitivity/msens/issues
 Authors@R: 
@@ -27,6 +27,7 @@ Imports:
     DT,
     FNN,
     duckdb (>= 1.5.0),
+    fs,
     ggiraph,
     ggplot2,
     glue,
@@ -59,12 +60,14 @@ Suggests:
     exactextractr,
     furrr,
     future,
+    jsonvalidate,
     knitr,
     pkgload,
     quarto,
     rstac,
     targets,
     testthat (>= 3.0.0),
+    viridisLite,
     withr
 Remotes:
     bbest/mapgl@484e869f93af01bf396cbba7f074f0a3c53eba6d

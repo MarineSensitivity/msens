@@ -10,9 +10,10 @@ cells_in_polygon(poly, src, res = 0.05)
 \item{poly}{an sf polygon (assumed or transformable to EPSG:4326)}
 
 \item{src}{a DBI connection (\strong{preferred}), or a single-layer
-\code{\link[terra:SpatRaster-class]{terra::SpatRaster}} of integer cell ids}
+\code{\link[terra:SpatRaster]{terra::SpatRaster}} of integer cell ids}
 
-\item{res}{grid resolution in degrees, SQL path only (default \code{0.05})}
+\item{res}{ignored, kept for back-compatibility; the resolution now comes from
+the grid registry, which is the only place it was ever right}
 }
 \value{
 a tibble with columns \code{cell_id} (integer) and \code{pct_covered} (0-100)
@@ -25,19 +26,22 @@ partially covered edge cells count proportionally.
 }
 \details{
 \strong{Pass a DB connection.} Then the grid is read from the database being
-queried and cannot disagree with it. Two paths, chosen automatically:
-\itemize{
-\item \strong{v8} (\code{cell} carries \code{lon}/\code{lat}) — a SQL bbox select on \code{cell} picks the
-candidates and \code{sf} computes exact coverage on just those. No raster is
-touched. For a 2x1.5-degree area this is \strong{~0.02 s} against ~35 s to read
-the whole cell-id raster, and it joins \code{cell_model}, which is already
-cell-oriented.
-\item \strong{v7} (no \code{lon}/\code{lat}) — falls back to \code{\link[=cell_id_raster]{cell_id_raster()}}, the 0-360
-regional raster that IS v7's grid.
-}
+queried (\code{\link[=grid_for_con]{grid_for_con()}}) and cannot disagree with it. Both generations take
+the SAME path: \code{\link[=cells_in_polygon_grid]{cells_in_polygon_grid()}} computes the cells from the grid
+definition alone, and the result is restricted to the \code{cell_id}s the release
+actually holds. No raster is opened on any version — the v7 branch used to read
+the 0-360 cell-id raster and returned \code{terra}'s coverage fractions, which
+differed from the v8 path by a mean 0.66 pp on edge cells for no reason anyone
+could act on.
 
-Passing a \code{\link[terra:SpatRaster-class]{terra::SpatRaster}} directly still works, but nothing can then
-verify it matches the database — see \code{\link[=cell_id_raster]{cell_id_raster()}} for how that failed
-silently on v8.
+Longitudes are \strong{unwrapped on the way in} with \code{\link[=unwrap_polygon]{unwrap_polygon()}}, because an
+\code{sf} polygon is the one place a wrapped antimeridian ring can still arrive. The
+grid function it delegates to reads coordinates literally and guesses nothing.
+
+Passing a \code{\link[terra:SpatRaster]{terra::SpatRaster}} directly still works and still uses
+\code{terra::extract()}: a cell-id COG is a lookup IMAGE whose pixel values are ids
+from a frame that may not be the grid's, so arithmetic cannot be applied to it.
+Nothing can verify such a raster matches the database — see \code{\link[=cell_id_raster]{cell_id_raster()}}
+for how that failed silently on v8.
 }
 \concept{calc}

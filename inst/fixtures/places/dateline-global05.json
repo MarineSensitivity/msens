@@ -1,0 +1,34 @@
+{
+  "id": "dateline-global05",
+  "source": "atlas (hand-derived)",
+  "note": "lon 179.95..180.05 UNWRAPPED (the codec stores it that way) on row 764: column 7200 and column 7201, which wraps modulo nc to column 1 -> cells 5500800 and 5493601.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [179.95, 51.8],
+        [180.05, 51.8],
+        [180.05, 51.85],
+        [179.95, 51.85],
+        [179.95, 51.8]
+      ]
+    ]
+  },
+  "expected": [
+    [5493601, 100],
+    [5500800, 100]
+  ]
+}

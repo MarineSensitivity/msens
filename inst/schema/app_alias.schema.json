@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://marinesensitivity.org/schema/app_alias.schema.json",
+  "title": "app/alias/{xx}.json — every raw input key and legacy mdl_seq → [merged_key, ds_key]",
+  "description": "So a published ?mdl_seq= / ?mdl_key= link resolves without DuckDB.",
+  "type": "object",
+  "required": ["schema", "ver", "shard", "alias"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "integer", "minimum": 1 },
+    "ver":    { "type": "string", "pattern": "^v[0-9]+[a-z]?$" },
+    "shard":  { "type": "string", "pattern": "^[0-9a-f]{2}$" },
+    "alias": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array", "minItems": 2, "maxItems": 2,
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

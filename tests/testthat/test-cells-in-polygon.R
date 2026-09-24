@@ -109,22 +109,36 @@ test_that("the raster path reports partial coverage and drops non-overlaps", {
   expect_named(d0, c("cell_id", "pct_covered"))
 })
 
-test_that(".lon_ranges splits an antimeridian-crossing span", {
-  expect_equal(.lon_ranges(-121, -119), list(c(-121, -119)))
-  expect_equal(.lon_ranges(170, 190),   list(c(170, 180), c(-180, -170)))
-  expect_equal(.lon_ranges(-190, -170), list(c(170, 180), c(-180, -170)))
-  expect_equal(.lon_ranges(-180, 180),  list(c(-180, 180)))
-})
-
-test_that("cells_in_polygon falls back to the raster when `cell` has no lon/lat", {
-  # v7's `cell` table has no lon/lat, so a connection must NOT take the SQL path
+test_that("REGRESSION: a v7 connection resolves usa05 without opening any raster", {
+  # Was: `cell` with no lon/lat fell back to cell_id_raster(), a 6.2M-cell file on a
+  # Google Drive path, whose frame nothing verified. Now both generations run the
+  # same arithmetic, so a machine without that file still answers — and answers the
+  # same as the browser will.
   con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
-  DBI::dbWriteTable(con, "cell", data.frame(cell_id = 1:3, area_km2 = 1))
+  g   <- grid_spec_for("usa05")
+  # a 2x1-degree box in the Gulf, expressed in [-180,180] as callers give it
+  want <- cells_in_polygon_grid(sq(-91, -89, 27, 28), g)
+  DBI::dbWriteTable(con, "cell", data.frame(cell_id = want$cell_id, area_km2 = 1))
   expect_false(.cell_has_lonlat(con))
+  expect_identical(grid_for_con(con)$grid_id, "usa05")
 
-  # prove the RASTER leg is the one taken (not the SQL leg silently returning
-  # nothing), by stubbing cell_id_raster() with a sentinel
   testthat::local_mocked_bindings(
     cell_id_raster = function() stop("raster-path-taken"))
-  expect_error(cells_in_polygon(sq(-121, -119, 34, 35), con), "raster-path-taken")
+  d <- cells_in_polygon(sq(-91, -89, 27, 28), con)
+
+  expect_equal(nrow(d), 800)                      # 40 cols x 20 rows
+  expect_true(all(d$pct_covered == 100))
+  # ids decode back into the Gulf in the 0-360 frame, not onto the east coast
+  ll <- cell_lonlat(d$cell_id, g)
+  expect_true(all(ll$lon > -91 & ll$lon < -89 & ll$lat > 27 & ll$lat < 28))
+})
+
+test_that("cells_in_polygon keeps only cell ids the release actually holds", {
+  # grid arithmetic answers for land too; the `cell` join is what removes it
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  want <- cells_in_polygon_grid(sq(-91, -89, 27, 28), "usa05")
+  keep <- want$cell_id[seq_len(10)]
+  DBI::dbWriteTable(con, "cell", data.frame(cell_id = keep, area_km2 = 1))
+  d <- cells_in_polygon(sq(-91, -89, 27, 28), con)
+  expect_setequal(d$cell_id, keep)
 })

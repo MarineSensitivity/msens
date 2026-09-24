@@ -1,3 +1,432 @@
+# msens 0.44.0
+
+**Three `app/` bundle release-side gaps the Atlas app had been working around (parity audit
+2026-09-24, item M1 and its siblings).**
+
+* **Fixed: every v1-v7 input model's asset is now published, not just the merged one.**
+  `.app_assets()` used to INNER JOIN `model_asset` to `taxon` on the taxon's MERGED key, which
+  only ever matched the `ds_key = 'ms_merge'` row — on the real, published v7 tables that INNER
+  JOIN left **0 of 12,120 input edges** with an asset (every input pill in the species app
+  rendered struck through); the fix resolves **10,247 of 12,120** (measured against the real
+  `taxon`/`taxon_model`/`model_asset` parquet, row for row identical to what `apps/species/app.R`
+  itself resolves). The remaining 1,873 are `rng_iucn` models with no `model_asset` row at all — a
+  data gap struck through in BOTH apps, not a join bug (19,811 is `model_asset`'s total non-merged
+  row count across the whole release, not the input-edge count — the wrong denominator). Now a LEFT
+  JOIN, and `app_taxon_shards()`'s `card()` resolves an input's asset by `mdl_key` ALONE — exactly
+  the join `apps/species/app.R`'s working v1-v7 branch makes (`native_asset |> left_join(d_edges,
+  by = "mdl_key")`) — rather than requiring `ds_key` equality too: `model_asset.ds_key` is
+  normalised by `backfill_versions.qmd` (`normalize_ds_key()`, "am_0.05" -> "am") while
+  `taxon_model.ds_key` (and `dataset.ds_key`) are the release's own native, unnormalised spelling,
+  so the SAME v7 database carries two different spellings for the same model and a `ds_key`-keyed
+  join silently found nothing. `ds_key` is deliberately left UNNORMALISED everywhere in this path
+  (mirroring the species app exactly), since `mdl_key` already uniquely names one model and
+  normalising would only swap that mismatch for a new one against `dataset.ds_key`/
+  `app_datasets()`. `.app_edges()`'s `key` column is cast through `.app_id_cast()` (HUGEINT-safe)
+  instead of a naive `CAST(... AS VARCHAR)`, matching `app_taxon_table()`'s cast so the two never
+  disagree on a DOUBLE-typed `mdl_seq`. Verified against the real v7 registry rows for the walrus
+  (WoRMS 137077 / mdl_seq 54383): both inputs now resolve to their live, published S3 objects.
+* **New: `zones.<unit>[i].name` and `app_zone_names()`.** `zone`/`zone_metric` never carry a human
+  name, only the key a report picks from ("ALA") — `score_zones.qmd`'s `zone` table has no name
+  column on any generation. The name ("Aleutian Arc") lives on the zone-set's own GeoPackage
+  (`{type}_key`/`{type}_name` columns, verified on the real v1-v8 sources). `app_zone_names(path,
+  type)` reads it; `app_zones()`, `app_boot()` and `app_bundle_build()` all gain an optional
+  `zone_names` parameter (a `data.frame(fld, key, name)`) that fills `name` — purely additive,
+  `NULL` (the default) publishes exactly as before.
+* **New: canonical short metric labels, `.metric_short_label()` and `manifest_build()` backfill.**
+  The Atlas's `metricLabelsFromManifest()` reads `manifest$metrics[].label` for the legend title
+  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description).
+  `manifest_build()` now backfills any BLANK `metrics$label` with a canonical, version-independent
+  label ("Overall score" for the composite; "Primary productivity" / "Primary productivity
+  (ecoregion-rescaled)" for `primprod`; "{docs category name}: extinction risk[ (ecoregion-
+  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) — but
+  it NEVER overwrites a label the caller already supplied. On the published manifests
+  (2026-09-24): **v3-v8, including v7 (the public default), already carry a curated `label` from
+  `layers_{ver}.csv` and keep showing it unchanged** — v7's composite is still "score" until Ben
+  re-curates it or the manifest is rebuilt without that CSV; only **v1, v2 and v9**, which publish
+  NO `label` column at all today, gain the canonical wording once their manifests are republished.
+  Every release keeps `boot.layers[].label` (the long description) unchanged either way.
+* **`fs` added to `Imports`.** `R/publish.R`'s `fs::dir_create()`/`fs::path()`/`fs::file_exists()`/
+  `fs::file_size()` calls (pre-dating this release) were never declared, which made
+  `R CMD check`/`devtools::check()` fail immediately on "Namespace dependency missing from
+  DESCRIPTION Imports/Depends entries: 'fs'" before it could check anything else.
+* **`app_zones()` validates `zone_names`, loudly.** A malformed `zone_names` (missing `fld`/`key`/
+  `name` columns) now `stopifnot()`s immediately, and a `zone_names` that matches ZERO of a
+  field's real zones now `warning()`s by name — a typo'd `type` (`"programarea"` instead of
+  `"programarea_key"`) or the wrong GeoPackage (a Planning Area file also carries
+  `region_key`/`region_name`, so `app_zone_names(pa_gpkg, "planarea")` "succeeds" against the wrong
+  keys) used to publish `name = NULL` on every zone with no signal at all.
+* **`app_taxon_shards()` asserts the invariant the `mdl_key`-only asset join depends on.** It now
+  stops on a duplicated `(mdl_key, representation)` pair in the asset table, and — for a legacy
+  `model_asset` table that carries a `ver` column — stops if it spans more than one release's `ver`.
+  Neither happens on any real v1-v9 release today; this makes the join's silent-failure mode loud
+  if it ever does.
+* **`extrisk_all`/`extrisk_reptile` get short labels.** v1's two `sp_cat` values `.SP_CAT_LABEL`
+  didn't cover: "All: extinction risk" and "Reptile: extinction risk".
+* **New, exported: `manifest_labels_backfill(m)`.** The SAME backfill rule `manifest_build()`
+  applies while building a manifest from scratch, exposed so a release-side patch can apply it to
+  an ALREADY-PUBLISHED `manifest.json` (read it back, backfill, [validate_manifest()], `PUT`)
+  without reaching into an internal `:::` function. `manifest_build()` now calls this (via the
+  shared internal `.metrics_backfill_labels()`) rather than duplicating the logic, so the two can
+  never drift.
+
+# msens 0.43.0
+
+**The `{ver}/app/` data contract, and one scoring method.** Two changes an app or a
+report can see: the release now publishes a version-independent bundle the browser
+reads directly, and a drawn polygon and a picked Program Area finally report the same
+numbers for the same ground.
+
+## The `app/` bundle (new, `R/app_bundle.R`, `@concept app`)
+
+* **`app_bundle_build(con, ver, dir_out)`** writes `{ver}/app/` — `boot.json`,
+  `taxa.json`, 256-way `taxon/{xx}.json` and `alias/{xx}.json` shards,
+  `taxon.parquet`, `zone_taxon.parquet` and wide `cell/tile={t}/` Parquet — with ONE
+  schema for v1…v9. The per-version quirks (two grids, `mdl_seq` vs `mdl_key`,
+  `value` vs `val`, `is_ok` vs `is_valid_usa`, unsuffixed v1/v2 zone tables, the
+  `taxon_model` `ms_merge` self-edge, `model_asset` vs `native_asset`, v1/v2's absent
+  extinction-risk columns) are resolved here, where their tests already live.
+* Composed from **`app_boot()`**, **`app_taxa()`**, **`app_taxon_shards()`**,
+  **`app_alias_shards()`**, **`app_taxon_table()`**, **`app_zone_taxon()`**,
+  **`app_cell_tiles()`**, **`app_units()`**, **`app_zones()`**,
+  **`app_flower_default()`**, **`app_datasets()`** and **`app_palettes()`**, each
+  callable and each tested on its own.
+* **Every builder validates its own output** against `inst/schema/app_*.schema.json`
+  (`app_validate()`, `app_schema_path()`, `app_json()`), so a shape change fails in
+  the notebook that made it rather than in a browser three steps later.
+* **`manifest_build()` gains `app = NULL`** and **`validate_manifest_app()`** is new.
+  Only v9's manifest comes from `build_version_manifest.qmd`; v1-v7b are written by
+  `backfill_versions.qmd` through `manifest_build(..., extra = ...)`, so the `app`
+  block has to be an argument of `manifest_build()` itself. `NULL` emits **no `app`
+  key at all** — a release whose bundle is not published must not carry an empty one
+  an app would read as "nothing is available". `validate_manifest()` tolerates its
+  absence and checks its shape when present, against
+  `inst/schema/app_manifest.schema.json`. **The capabilities are INPUTS**: the
+  notebook probes them and passes them in, and msens never derives them.
+* **`app_capabilities()` / `app_manifest_block()`** decide what the app may offer by
+  **anonymous HTTPS HEAD of a sample object**, never by copying
+  `manifest$capabilities`. v7 and v7b advertise `cell_species_list` because the
+  *server* can read a `cell_model` that never left the server; S3 holds only
+  `tables/` for them. The probed URL and status are returned beside each capability.
+* **`app_cell_tiles()`** writes one DOUBLE column per scored `metric_key`, so nothing
+  joins on `metric_seq` (dropped and recreated every run), over every `cell` row of
+  any tile holding a `cell_metric` or `cell_model` row. **`app_cell_tile_check()`**
+  asserts the tile key at a given grid width and **`app_cell_tile_digests()`**
+  compares each metric's multiset digest with `cell_metric`'s.
+* **`zone_tbl_for()`** (new, exported) reads the zone table name from `zone` instead
+  of guessing `ply_subregions_2026_{ver}` — v1/v2 zone tables are unsuffixed, and the
+  guess produced an empty cache that never healed.
+* The v7.1 additions ride along **optional by presence**: a `methods` table becomes
+  `boot$methods`, and `{component}_coverage` zone metrics become each zone's
+  `coverage` block, kept out of `metrics`. A component with no row is **absent, not
+  zero** — reportability is the ABSENCE of the `_ecoregion_rescaled` row, never the
+  `_prepctareaweighting` row, which stays behind even for a dropped pair.
+* `flower_default` is **versioned**, retiring the shared, unversioned
+  `scores/cache/flower_default_subregions.csv` that the first release to run wrote
+  and every other release then read.
+
+## One scoring method (D7 / D7b)
+
+* **`scores_for_cells()` gains `blend` and `denominator`** and now returns `coverage`
+  and `mean_where_present` beside `score`. `blend = TRUE` (default) computes the
+  published zone method, `Σ(coalesce(val,0)·pct)/Σ(pct)` over the supplied cells; the
+  old present-cells-only mean was the `_prepctareaweighting` intermediate and read
+  **high wherever a component covered only part of an area** — up to 49.1 points on
+  turtle, 20.3 on primary producer, 9.6 on coral, 6.28 on the composite.
+  `blend = FALSE` reproduces the old reports and is kept only for that.
+  **Drawn-polygon scores change**, deliberately.
+* `denominator = "study_area"` (default) clips a custom place to the cells present in
+  `cell` with `coalesce(in_usa, TRUE)`, so land and foreign waters never enter as
+  zeros; `denominator = "all"` is exact zone parity. A component with no covered cell
+  yields **no row**, never a zero.
+* **`cells_in_study_area()`** (new) is that clip, exported so ONE cell set drives
+  scores, species, area and N cells.
+* **`cells_in_pra()` returns the real `pct_covered`** instead of overwriting every row
+  with `100L` (74,938 of 2,241,876 `zone_cell` rows are partial), and it and
+  `scores_for_pra()` resolve the zone key column with `sdm_val_col()` rather than
+  hardcoding `value` — which made both work on every served release and fail on a
+  v8/v9 source database.
+
+## The `g1` place codec (D8)
+
+* **`place_encode()` / `place_decode()`** (new, `R/place.R`, `@concept app`) — the R
+  twin of the app's URL place codec. A link is an analysis input, so R must be able
+  to read one: `#pl = place ("~" place)*`, each place `g1.name.b64url(bytes)`,
+  `z.set.key,key` or `u.name.sha256_8`. The TypeScript side owns the spec;
+  `inst/fixtures/place_codec.json` is **the same file** as the atlas repo's
+  `tests/fixtures/place_codec.json`, byte for byte, and R reproduces all 8 geometry
+  vectors, both zone forms, the upload form and the `~`-joined hash exactly, and
+  rejects the same **20** malformed tokens, each with the shared `code`
+  (`b64 degenerate digest empty magic name precision scheme set shape trailing
+  truncated`) on a `msens_place_reject` condition.
+* **`b64url_encode()` / `b64url_decode()`** (new, exported) — RFC 4648 section 5, no
+  padding, alphabet checked on the way in, so `+`, `/` and `=` are a named rejection
+  rather than a stray byte. Base R, not `base64enc`: the three-character fixup after
+  standard base64 is exactly the step that survives a round trip in one language and
+  not the other.
+* The varint and zigzag work is done in **doubles**. A delta at precision 4 near 180
+  degrees is 1.8e6 and zigzag doubles it, so `bitwAnd()` / `bitwShiftR()` (32-bit,
+  signed) would be right on every test vector and wrong on a real Pacific place.
+* **`place_encode_strict()`** (new, exported) is the BYTE-LEVEL encoder, the twin of
+  the app's `encodeGeometry()`: it **refuses** a ring that still has a
+  consecutive-vertex step of more than 180 degrees, with code `wrapped`, because such
+  a ring is ambiguous and a codec that quietly repaired it would make the byte stream
+  depend on which language wrote it. `place_encode()` is the high-level entry and
+  runs [unwrap_polygon()] first, exactly as a TypeScript caller goes
+  `normalizeForAnalysis()` then `encodeGeometry()` — so the same high-level call
+  yields the same token on both sides and the same low-level call yields the same
+  error (master-plan D8 addendum, ruling 2). `place_encode(unwrap = FALSE)` is the
+  strict path for a whole hash.
+* **`sfc_geojson()`** (new, exported) is the twin of `geojson_sfc()`, so a place can
+  be compared with the shared fixtures in the shape they store.
+* Precision is chosen, not passed: 3, or 4 when the bounding box is under 0.5
+  degrees, so the deviation is at most `0.5 * 10^-precision`. The delta cursor starts
+  at (0,0) and **runs across rings and polygons** — resetting it per ring still
+  decodes, into a different place. Longitudes are stored **unwrapped**, and
+  `place_encode()` applies [unwrap_ring()] so the codec only ever sees them that way.
+
+## Fixed: a fresh install was broken on R 4.6.1
+
+* `@importFrom rlang ensym \`:=\`` grouped a STRING with a BACKQUOTED SYMBOL in one
+  directive, which makes `parseNamespaceFile()` deparse every element, so
+  `R CMD INSTALL` looked for an export literally named `` `:=` `` and refused:
+  *object '`:=`' is not exported by 'namespace:rlang'*. Quoted (`":="`) in the
+  roxygen source. **`devtools::load_all()` never builds a NAMESPACE**, which is why
+  2,392 passing tests never saw it.
+* **`inst/gates/fresh_install.R`** (new) is the check that would have: `R CMD INSTALL`
+  into a throwaway library under `tempdir()` — never the user's own — then
+  `library(msens)` from that library alone. Exit 0 / 1. `test-install.R` runs it
+  locally and also asserts, cheaply and everywhere, that no backquote survives into
+  NAMESPACE.
+
+## Fixed: what the first queries against REAL v7 and v9 found
+
+* **`app_cell_tiles()` wrote one part PER THREAD.** `cell/tile=1014/` held
+  `data_0..data_5.parquet` — 422 tile directories but 1,687 files on v9, 290 of them
+  multi-part. Anonymous LIST is denied on the bucket, so a static client can only
+  construct `data_0.parquet` and would have read about a sixth of a busy tile,
+  silently. Both gates globbed `**/*.parquet` and saw nothing wrong. Now exactly one
+  `data_0.parquet` per tile (written per tile from one materialised pivot, so the
+  surface is still read once), **`app_one_file_per_partition()`** asserts it on every
+  build, `tiles` counts tiles rather than files, and the tile-width and digest gates
+  **read the way the browser does** — `tile={t}/data_0.parquet`, never a glob — so a
+  split tile fails the digest gate too.
+* **A NA key injected all-NA edge rows.** v7 has taxa with no merged model, so
+  `CAST(mdl_seq AS VARCHAR)` is NA and `d[d$mdl_key != d$key, ]` *injects* a row
+  instead of dropping it: 2,354 of 14,501 edges, which `card()` then matched into
+  **every** taxon (38 M phantom inputs; the shard step died there). Every logical
+  subset in `app_bundle.R` now guards with `!is.na()` and `which()`.
+* **`taxon_id` was published as `"22725044.0"`** on all 16,153 v7 rows: the column is
+  a DOUBLE there and `CAST(… AS VARCHAR)` keeps the decimal point, so every WoRMS
+  link 404s and a join against any integer-typed id matches nothing. Ids now cast
+  through `HUGEINT` when the source is DOUBLE/DECIMAL.
+* The synthetic legacy fixtures now type `taxon.taxon_id` as **DOUBLE** and include a
+  taxon with **`mdl_seq IS NULL` that still has `taxon_model` rows** — v7's real
+  shape, and the reason 2,392 green tests missed both defects.
+* **`inst/gates/app_bundle_smoke.R`** (new) builds the whole bundle from a local
+  release and runs every gate: exit 0 / 1 / 77.
+* `boot.json` gains **`id_field`** — the one generation fact the browser is allowed
+  to need (the `cell_model` join) — and its `methods` rows now say **`val`**, not
+  `value`, which no published object may contain.
+* `app_bundle_build()` gains **per-stage isolation**: a failing stage names itself
+  and the completed stages' outputs survive, so nobody needs a parallel composition
+  to get at the parts. `strict = FALSE` runs them all and reports `$failed`.
+* The Program-Area tracing gate's assertion (c) is **release-aware**: the GAA outline
+  is a v9 artifact (v7's vintage has 14,256 zone cells for GAA, v9's 14,238), so it
+  runs only when the release's `zone.tbl` matches and skips with the reason
+  otherwise. (d)'s floor is now recorded **per release** (v9: 49.1447 over 12 of 20;
+  v7: 58.9533 over 4 of 20) rather than v9's number applied to everything.
+
+## Fixed in the confirmation pass
+
+* **`.app_id_cast()` ROUNDED a fractional id**: `CAST(12.7 AS HUGEINT)` is 13, so a
+  non-integral `taxon_id` would have been published as a different and possibly
+  EXISTING id — a WoRMS link that resolves, to the wrong animal. The integer cast now
+  applies only where `x = floor(x)`; anything else keeps its own text, and
+  `app_taxon_table()` **counts non-integral ids and stops the build**, naming the row.
+  A fractional id is a data error the release has to hear about. Whole doubles,
+  negatives and NULL are unchanged.
+* **The methods block was read from the wrong table.** v7b's `sdm.duckdb` holds
+  **`release_method`** (`methods` is the *manifest's* key for it), so looking only
+  for `methods` found nothing on the real release and emitted no block at all,
+  silently — and v7b is the only release that has one. Both names are now accepted
+  and the synthetic fixture uses the real one. On real v7b: 4 rows,
+  `method_key / val / description`.
+
+## Round 3: every registered release, and two objects the contract had lost
+
+* **`app_id_chr()`** (new, exported) is the R-side twin of the SQL id cast, applied
+  to **every** published id on every object. `.app_id_cast()` had reached
+  `app_taxon_table()` and stopped there, so v7's `zone_taxon.parquet` — read with
+  `SELECT *` from a precomputed table — still published `"22725044.0"` beside
+  `taxon.parquet`'s `"22725044"`: one contract, two spellings, and every join
+  between them empty. The `model_asset` and `taxon_model` joins were casting the
+  same way and matching nothing. The smoke gate now asserts no id column is floating
+  point in any published Parquet and no id string ends in `.0` in any JSON.
+* **`app_taxonomy()`** and **`app_model()`** (new) bring into `app/` the two objects
+  the browser needs and `boot$tables` did not describe: the WoRMS hierarchy
+  (previously written by the notebook, outside the bundle) and the
+  `mdl_id -> mdl_key` mapping the `cell_model` join needs (previously only
+  `{ver}/tables/model.parquet`, outside `app/`). Neither had a digest, so **OPFS
+  could never invalidate them**. `app_model()` is v8+ only: a release without
+  `mdl_id` joins on `mdl_seq` directly, writes nothing and advertises nothing.
+  **`app_tables_match()`** asserts `boot$tables` names exactly the Parquet objects
+  written — no object without a digest, no digest without an object.
+* **A release whose `dataset` has no `is_mask`** (v1) no longer takes the whole shard
+  stage down with a Binder Error; the flag comes back NULL rather than invented.
+* **`cell_metric` rows for cells absent from `cell`** (703 on v3) no longer make the
+  digest gate report every metric as a mismatch: both sides are now restricted to the
+  universe the contract publishes, which is what the browser's `JOIN cell` keeps.
+* The smoke gate **asserts the `methods` block** rather than tolerating its absence,
+  and the shared codec vectors are re-adopted (sha256 `50ad541a…`) with
+  `place_encode_strict()` reproducing the new `reject_wrapped_ring` vector.
+
+## Fixed: v2's subregions were published twice
+
+* **A release may carry more than one `zone.tbl` for one `fld`, and v2 does**:
+  `ply_subregions_2025` (AK, AKL48, L48, USA) and `ply_subregions_2026`
+  (AK, GA, PA, USA), two keys in common. `app_zone_taxon()` dropped `zone_tbl`, so
+  `zone_taxon.parquet` carried **13,077 duplicated `(zone_fld, zone_value, key)`
+  groups** over 282,808 rows — the same taxon in the same subregion with two
+  different `area_km2` — and `boot$zones$subregion` had 6 rows for 4 subregions,
+  with the shared keys resolved arbitrarily. The app would have listed every taxon
+  twice.
+* **`app_zone_tbl()`** (new, exported): **the release's own `manifest.json` names
+  the table.** Its `zones[]` rows carry `fld` *and* `tbl`, and v2's says
+  `subregion_key -> ply_subregions_2025` (`zone_set_key: subregion_2025-06`). That
+  is the first and normally the only evidence, and it is already an input of
+  `app_bundle_build()`. Everything else is a **check**: `geom_keys` must AGREE with
+  it or the build **stops** (a key the named table lacks means the wrong GeoPackage
+  was handed in — a defect, not a tie to break; keys the geometry lacks are fine,
+  since the `USA`/`FULL` rollups are scored and have no polygon), and `zone_sets` is
+  a cross-check recorded in `why`. **There is no fallback guess**: a field with two
+  tables and no manifest row is an error naming the field and the tables. An earlier
+  "most recent `date_created`" rule looked reasonable and picked
+  `ply_subregions_2026` for v2, whose keys match no published geometry — two
+  defensible answers depending on the caller, which is the ambiguity the rule exists
+  to remove. The loser's rows are **dropped, never merged**, from
+  `zone_taxon.parquet`, `boot$zones` and `boot$units`, and the winner is recorded in
+  **`boot$units[].zone_tbl`**.
+* **`app_zones_unique()`** (new, exported) is a builder-level **hard stop**:
+  `(zone_fld, zone_value, key)` unique in `zone_taxon`, and each key once per
+  `boot$zones` unit.
+* `app_units()` now emits **one unit per field**: `manifest$zones` has a row per
+  (zone_set_key, tbl, fld), so a field with two tables offered the same picker entry
+  twice with different key sets.
+
+## The geometry check asks about UNITS, not about every field (D16)
+
+* **`app_zone_tbl()`'s geometry check now compares the geometry's keys against the
+  release's SCORED keys** — the same `score_%`-metric set `app_units()` gates a
+  drawable unit on — **and only where that set has at least 2 keys**. A field with
+  fewer than 2 scored zones publishes no unit, so its geometry is IGNORED rather
+  than being an error, and `why` records it
+  (`"no unit: 1 of 5 zones scored; geometry not checked"`).
+  The subregion zones carry a score only on v8 and v9 (5 of 5); v6 has 0 of 4,
+  v7/v7b only the `FULL` rollup. Checking the full zone table stopped v1 (*"in the
+  geometry but NOT in that table: AT, GA, PA"*) and v4–v7b (*"AT"*) over fields that
+  would never be a unit. The stop's purpose — catch the wrong GeoPackage — was
+  right; its universe was wrong. **Where a unit IS published the subset rule is
+  unchanged**, and a key scored but not drawn (`USA`, `FULL`) is still fine.
+* **`boot$zones[unit][].n_taxa`** (new, required by the schema) is the count of that
+  zone's `zone_taxon` rows. v8 scores subregion `AT` and gives it 52,674 cells but
+  publishes no `zone_taxon` rows for it (v9 has 7,562). That is a gap in the
+  release's table: nothing is invented and the unit is not dropped, because the
+  score is real — the count is published and the app says "no species table
+  published for this zone" where it is 0. The smoke gate prints a WARNING line per
+  such key.
+
+## Fixed: a rebuilt manifest was nondeterministic
+
+* **`manifest_build()` no longer breaks a tie silently.** It collapsed `zones` to one
+  row per `zone_set_key` with `order(zone_set_key, -n)` + `!duplicated()`; v2's two
+  subregion tables both have **n = 4**, so the winner was whichever row the engine
+  returned first — `load_all()` on the source tree and the installed package, **at
+  the same commit**, produced different manifests, and a bundle built from the loser
+  published subregion `USA` with 9,792 taxa where the published manifest's table has
+  17,307. A tie is now an **error** naming both tables and the field, unless
+  `zone_sets` decides it (a `source` basename matching exactly one), and the zone
+  query is `ORDER BY fld, tbl` so even the non-tie path cannot depend on engine row
+  order. Round 6's "two rows for one field" stop never fired here, because this had
+  already collapsed them.
+* **`app_zone_tbl()` refuses a manifest rebuilt from the database**: a published
+  manifest carries `zone_set_key` on every `zones` row and a rebuilt one may not, and
+  a rebuilt one has already collapsed the rows the app path is asking about.
+  `app_bundle_build()` and the smoke gate consume the **published** `manifest.json`.
+
+## D17: a release publishes at most ONE drawable unit
+
+* **`APP_UNIT_TYPES`** (new, exported) is the whole rule, first match wins:
+  `c("programarea", "planarea")`. `app_units()` publishes **`programarea`** if it
+  qualifies (>= 2 scored zones + PMTiles), else **`planarea`** (which is v1, having
+  no Program Areas), else none — **never subregion, never ecoregion**, however much
+  the data supports. v9 scores all four types and publishes only `programarea`.
+  Their scores stay in `boot$zones` untouched: they are camera presets and scoring
+  context, not places a user draws a report for. A later decision is one line here.
+* The geometry check runs for the **chosen unit's type only**. A caller may pass a
+  geometry per zone type (the notebook does); the extras belong to types that can
+  never be a unit, so checking them would stop a build over a GeoPackage the app
+  never opens. Ignoring one is recorded in `why`
+  (`"not a drawable unit type: geometry ignored"`).
+
+## Gates you can run
+
+* **`inst/gates/pa_tracing.R`** (new) — `Rscript inst/gates/pa_tracing.R [db] [ver]`,
+  opens the release READ-ONLY, runs all 20 Program Areas and exits **0** when every
+  assertion holds, **1** on any failure, **77** when the database is not on the
+  machine (a CI step that forgets to mount the data cannot report a pass it never
+  ran). It asserts that `blend = TRUE` reproduces every published `zone_metric` to
+  <= 1e-9, that `denominator = "study_area"` stays within 0.5 per component, that the
+  GAA outline traced through `cells_in_polygon_grid()` gives exactly the published
+  `zone_cell` count — and, **deliberately red**, that the OLD formula still fails on
+  >= 12 areas and by >= 49.1447 on GEO. A gate that only checked the good path would
+  pass if the blend quietly stopped being a blend.
+
+## Places: one rule, shared with the browser
+
+* **`cells_in_polygon_grid(poly, grid)`** (new, `R/place.R`, `@concept place`) answers
+  "which cells does this polygon cover" from the grid definition alone — no `cell`
+  table, no raster, no GDAL extension — planar in degrees, percent snapped to 9
+  decimals then rounded **half-to-even**, cells rounding to 0 dropped, overlapping
+  parts of one place counted once.
+* **Coordinates are read LITERALLY** (master-plan D8 addendum, 2026-09-21, from a
+  measured R-vs-TypeScript disagreement). Coverage guesses nothing about the
+  antimeridian: a ring written wrapped (`179.9` then `-179.9`) means the 359.8-degree
+  complement and now returns it — 7,196 cells on `global05`, exactly what the
+  TypeScript twin returns, where the old buried heuristic quietly answered 4 and the
+  two languages disagreed by three orders of magnitude on the same file.
+* **`unwrap_ring()` / `unwrap_polygon()`** (new, exported, `@concept app`) are that
+  heuristic pulled out into ONE explicit rule with a TypeScript twin (`unwrapRing()`):
+  walking a ring, a step of more than 180 degrees of longitude carries -/+360 onward.
+  It runs at the input boundary — [cells_in_polygon()], `place_encode()`, uploads and
+  drawn places — and **never inside coverage**. The first vertex is never moved, each
+  ring is unwrapped independently, and the limit is documented: a ring that genuinely
+  spans more than 180 degrees cannot be expressed wrapped.
+* **`cells_in_polygon()` delegates to it for every connection.** The v1–v7 branch no
+  longer opens `cell_id_raster()`, so the two generations stop disagreeing by ~0.66 pp
+  on edge cells, and the result is still restricted to the ids the release holds.
+* **`grid_for_con()`**, **`place_fixture()`**, **`place_fixture_ids()`** and
+  **`geojson_sfc()`** are new and exported.
+* **`cell_grid_ncol()` now falls back to the connection's own grid** before the
+  compiled 7200. No release ever wrote `cell_grid`, so the blind fallback was always
+  taken: right for `global05` by coincidence, wrong for every `usa05` release, and
+  silently so — a v7 cell with 477 models returned 0 species.
+* The 180-degree threshold in `unwrap_ring()` is now pinned from **both** sides by
+  fixtures the TypeScript side authored: a genuine 120-degree segment that must NOT
+  unwrap, and a raw 200-degree jump that MUST. Moving the threshold to 90 or to 270
+  used to leave every place test green. `normalize-seam-141-usa05` pins the
+  per-vertex `usa05` frame shift, which nothing tested either.
+* `inst/fixtures/places.sha256.json` is adopted from the atlas repo and asserted per
+  file, so a fixture edited on one side alone turns the other side red.
+* `inst/fixtures/places/*.json` carries 33 fixtures — polygon, grid spec and expected
+  `(cell_id, pct)` — shared byte-identically with the atlas app's TypeScript twin.
+  The coverage fixtures are written **unwrapped**; the seven new `normalize-*` files
+  are the shared vectors for the unwrap rule, each carrying the ring as written, the
+  ring `unwrap_ring()` must produce, the resulting cells, and
+  `cells_if_read_literally` — so what the rule is FOR is in the file rather than in a
+  commit message.
+* Fixed the `lon_span()` roxygen example, which claimed `170 205` where the code
+  returns `170 200`.
+
 # msens 0.42.1
 
 * **`stac_build()` works on a legacy release** (`model` keyed by `mdl_seq`: v1–v7b). It selected

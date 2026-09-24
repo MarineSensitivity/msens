@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://marinesensitivity.org/schema/app_taxa.schema.json",
+  "title": "app/taxa.json — the species picker index, one shape for v1…v9",
+  "description": "Column-oriented on purpose: the picker reads ~22k taxa and the parallel arrays gzip to a fraction of an array of objects.",
+  "type": "object",
+  "required": ["schema", "ver", "n", "key", "sci", "common", "cat", "cat_idx", "flags"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "integer", "minimum": 1 },
+    "ver":    { "type": "string", "pattern": "^v[0-9]+[a-z]?$" },
+    "n":      { "type": "integer", "minimum": 0 },
+    "cat":    { "type": "array", "items": { "type": "string" } },
+    "key":    { "type": "array", "items": { "type": "string" } },
+    "sci":    { "type": "array", "items": { "type": "string" } },
+    "common": { "type": "array", "items": { "type": ["string", "null"] } },
+    "cat_idx":{ "type": "array", "items": { "type": "integer", "minimum": 0 } },
+    "flags":  {
+      "type": "array",
+      "description": "bit 1 = valid_usa, bit 2 = valid_global",
+      "items": { "type": "integer", "minimum": 0, "maximum": 3 }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "id": "knife-edge-3p5-global05",
+  "source": "atlas (found by the sweep in tests/geo/knifeEdge.test.ts)",
+  "note": "0.005 x 0.0175 deg = exactly 3.5 %, which half-even rounds UP to 4 — and unsnapped the raw sits just BELOW the half and rounds to 3. The error runs both ways, so the snap is not a one-sided fudge.",
+  "grid_id": "global05",
+  "grid": {
+    "nc": 7200,
+    "nr": 3600,
+    "xmin": -180,
+    "ymax": 90,
+    "resx": 0.05,
+    "resy": 0.05,
+    "lon360": false,
+    "tile": {
+      "size": 50
+    }
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -89.955,
+          27.05
+        ],
+        [
+          -89.95,
+          27.05
+        ],
+        [
+          -89.95,
+          27.0675
+        ],
+        [
+          -89.955,
+          27.0675
+        ],
+        [
+          -89.955,
+          27.05
+        ]
+      ]
+    ]
+  },
+  "expected": [
+    [
+      9059401,
+      4
+    ]
+  ],
+  "knife_edge": {
+    "cell_id": 9059401,
+    "exact_pct": 3.5,
+    "raw_pct_unsnapped": "3.4999999999959077",
+    "raw_pct_unsnapped_msens": "3.5000000000004827",
+    "pct_without_snap": 3,
+    "pct_without_snap_msens": 4,
+    "pct_with_snap": 4,
+    "rule": "pct = round_half_even(round(frac * 100, 9)); R: round(round(x, 9))",
+    "note": "the two clippers land on OPPOSITE sides of the same half (atlas raw_pct_unsnapped vs msens raw_pct_unsnapped_msens), so pct_without_snap disagrees between the repos and pct_with_snap does not. pct_with_snap is the published number and the only one either side must reproduce."
+  }
+}
