@@ -473,6 +473,39 @@ app_units <- function(con, manifest, geom_keys = list(), chosen = NULL) {
   if (is.na(pick)) list() else out[ty == pick]
 }
 
+#' Zone names from a release's spatial-unit geometry
+#'
+#' `zone`/`zone_metric` never carry a human name — only the key a report picks from
+#' (`"ALA"`), because that is all `score_zones.qmd` writes (`CREATE TABLE zone (...,
+#' val VARCHAR, ...)`, no name column, on every generation v1–v9). The name ("Aleutian
+#' Arc") lives on the GEOMETRY instead: every zone-set GeoPackage carries a
+#' `{type}_key`/`{type}_name` column pair (verified on the real v1–v8 sources —
+#' `programarea_key`/`programarea_name`, `planarea_key`/`planarea_name`,
+#' `ecoregion_key`/`ecoregion_name`, `subregion_key`/`subregion_name`).
+#'
+#' A release-side caller reads it here and hands the lookup to [app_zones()] /
+#' [app_boot()] / [app_bundle_build()] as `zone_names` — msens's own boot/manifest
+#' builders stay `con`-only introspection and never open a GIS file mid-build.
+#'
+#' @param path a GeoPackage (or any `sf::st_read()`-able file) carrying
+#'   `{type}_key`/`{type}_name` columns, e.g. `data/zone_sets.csv`'s `source`
+#' @param type the zone type (`"programarea"`, `"planarea"`, `"ecoregion"`,
+#'   `"subregion"`), i.e. the `{type}_key`/`{type}_name` column prefix
+#' @return `data.frame(fld, key, name)`, one row per distinct key
+#' @importFrom sf st_read st_drop_geometry
+#' @export
+#' @concept app
+app_zone_names <- function(path, type) {
+  kcol <- paste0(type, "_key"); ncol <- paste0(type, "_name")
+  d <- sf::st_drop_geometry(sf::st_read(path, quiet = TRUE))
+  if (!all(c(kcol, ncol) %in% names(d)))
+    stop(sprintf("geometry has no %s/%s columns (has: %s)",
+                 kcol, ncol, paste(names(d), collapse = ", ")), call. = FALSE)
+  out <- data.frame(fld = paste0(type, "_key"), key = as.character(d[[kcol]]),
+                    name = as.character(d[[ncol]]), stringsAsFactors = FALSE)
+  out[!duplicated(out$key), , drop = FALSE]
+}
+
 #' Per-zone summaries, so a report on a Program Area never loads a cell
 #'
 #' `n_cells` and the coverage-weighted `area_km2` come from `zone_cell` joined to
@@ -486,11 +519,14 @@ app_units <- function(con, manifest, geom_keys = list(), chosen = NULL) {
 #'
 #' @param con a DBI connection
 #' @param flds zone fields to summarise (default: every `fld` in `zone`)
+#' @param zone_names optional `data.frame(fld, key, name)` from [app_zone_names()];
+#'   `NULL` (default) publishes every zone with `name = NULL`, exactly as before —
+#'   this parameter is purely additive
 #' @return a named list `zone_type -> list of zone objects`
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
-app_zones <- function(con, flds = NULL, chosen = NULL) {
+app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
   vz <- sdm_val_col(con, "zone")
   vm <- sdm_val_col(con, "zone_metric")
   if (is.null(chosen)) chosen <- app_zone_tbl(con)
@@ -530,7 +566,12 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
       sc <- mi[!grepl("_coverage$", mi$metric_key), , drop = FALSE]
       cv <- mi[ grepl("_coverage$", mi$metric_key), , drop = FALSE]
       ni <- nt$n_taxa[nt$fld == fld & nt$zkey == k]
+      nm <- if (!is.null(zone_names))
+        zone_names$name[which(!is.na(zone_names$fld) & !is.na(zone_names$key) &
+                              zone_names$fld == fld & zone_names$key == k)] else
+          character()
       list(key      = k,
+           name     = if (length(nm) && !is.na(nm[1]) && nzchar(nm[1])) nm[1] else NULL,
            n_cells  = as.integer(rows$n_cells[i]),
            area_km2 = as.numeric(rows$area_km2[i]),
            n_taxa   = if (length(ni)) as.integer(ni[1]) else 0L,
@@ -566,6 +607,10 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
 #'   table per field when a release carries more than one
 #' @param chosen a precomputed [app_zone_tbl()] result, so every builder in one
 #'   bundle agrees on the same table
+#' @param zone_names optional `data.frame(fld, key, name)` from [app_zone_names()],
+#'   rbound across every zone type the release publishes — human names for
+#'   `zones.<unit>[i].name` (e.g. "Aleutian Arc" for `ALA`). `NULL` (default)
+#'   publishes every zone with `name = NULL`, exactly as before.
 #' @param built_at ISO timestamp to stamp (default: now, UTC, second precision)
 #' @return a validated `boot.json` object
 #' @importFrom DBI dbGetQuery dbListTables
@@ -573,7 +618,7 @@ app_zones <- function(con, flds = NULL, chosen = NULL) {
 #' @export
 #' @concept app
 app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
-                     zone_sets = NULL, chosen = NULL,
+                     zone_sets = NULL, chosen = NULL, zone_names = NULL,
                      built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   if (is.null(chosen)) chosen <- app_zone_tbl(con, manifest, geom_keys, zone_sets)
   g   <- grid_spec_for(manifest$grid_id %||% grid_for_ver(ver))
@@ -631,7 +676,7 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
            zoom = sa$zoom[i], ecoregions = sa$ecoregions[i])),
     units          = app_units(con, manifest, geom_keys, chosen),
     layers         = layers,
-    zones          = .obj(app_zones(con, chosen = chosen)),
+    zones          = .obj(app_zones(con, chosen = chosen, zone_names = zone_names)),
     flower_default = .obj(app_flower_default(con)),
     datasets       = app_datasets(con),
     palettes       = app_palettes(.app_colormaps(con, manifest)),
@@ -672,6 +717,58 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   if (grepl("^score_", key)) return("composite")
   if (grepl("_ecoregion_rescaled$", key)) return("component")
   "raw"
+}
+
+# sp_cat -> the docs' own heading text (docs repo receptors.qmd: "Corals",
+# "Invertebrates", "Fish", "Marine Mammals", "Seabirds", "Sea Turtles"). `other`
+# (v1-v7's pre-taxonomy-rewrite bucket) and `primary_producer` (v8+'s species
+# category -- a SPECIES category, distinct from the `primprod` ENVIRONMENTAL metric
+# below) have no docs heading of their own and get one coined in the same style.
+.SP_CAT_LABEL <- c(
+  bird             = "Seabirds",
+  coral            = "Corals",
+  fish             = "Fish",
+  invertebrate     = "Invertebrates",
+  mammal           = "Marine Mammals",
+  turtle           = "Sea Turtles",
+  other            = "Other Species",
+  primary_producer = "Primary Producers")
+
+#' A human short label for a metric key
+#'
+#' Parity audit 2026-09-24 (item M1's sibling: zone names + short labels): the
+#' manifest's `metrics[].label` is the field the Atlas app's
+#' `metricLabelsFromManifest()` (`src/lens/scores/boot.ts`) reads for the legend
+#' title and layer picker (`boot.layers[].label` is deliberately the LONG
+#' description — see [app_boot()]'s `layers` construction). Left to a
+#' hand-curated `layers_{ver}.csv`, that field has published the bare metric-key
+#' fragment `"score"` for the composite and `"prim prod, ecorgn"` for
+#' `primprod_ecoregion_rescaled` — this is the canonical, version-independent
+#' fallback [manifest_build()] backfills with whenever a release's own curation
+#' leaves a cell-scored metric unlabelled.
+#'
+#' @param key one or more `metric_key` values
+#' @return a character vector of the same length, one short label per key (the key
+#'   itself for a shape this function does not recognise — the same fallback the
+#'   long-label helper `.metric_label()` already uses)
+#' @keywords internal
+.metric_short_label <- function(key) {
+  vapply(key, function(k) {
+    if (is.na(k)) return(NA_character_)
+    if (grepl("^score_", k)) return("Overall score")
+    if (identical(k, "primprod")) return("Primary productivity")
+    if (identical(k, "primprod_ecoregion_rescaled"))
+      return("Primary productivity (ecoregion-rescaled)")
+    m <- regmatches(k, regexec("^extrisk_([a-z_]+?)(_ecoregion_rescaled)?$", k))[[1]]
+    if (length(m) == 3 && nzchar(m[2])) {
+      lab <- unname(.SP_CAT_LABEL[m[2]])
+      if (is.na(lab))    # an sp_cat this table does not (yet) know: coin one rather
+        lab <- sub("_", " ", paste0(toupper(substring(m[2], 1, 1)), substring(m[2], 2)))
+      return(if (nzchar(m[3])) paste0(lab, ": extinction risk (ecoregion-rescaled)")
+             else paste0(lab, ": extinction risk"))
+    }
+    k
+  }, character(1), USE.NAMES = FALSE)
 }
 
 #' Versioned flower-plot defaults, per subregion
@@ -947,7 +1044,7 @@ isTRUE_v <- function(x) !is.na(x) & x
   else {
     k <- .app_taxon_cols(con)
     DBI::dbGetQuery(con, glue::glue(
-      "SELECT CAST(t.{k$key} AS VARCHAR) AS key,
+      "SELECT {.app_id_cast(con, 'taxon', k$key, paste0('t.', k$key))} AS key,
               {.app_id_cast(con, 'taxon_model', 'mdl_seq', 'tm.mdl_seq')} AS mdl_key,
               tm.ds_key
          FROM taxon_model tm JOIN taxon t
@@ -960,6 +1057,14 @@ isTRUE_v <- function(x) !is.na(x) & x
   # than dropping it. Measured on the real release: 2,354 of 14,501 edges came back
   # all-NA, and card()'s own `e[e$key == key, ]` then matched every one of them into
   # EVERY taxon (38 M phantom inputs; the shard step died there).
+  #
+  # `ds_key` is left EXACTLY as `taxon_model` spells it (v1-v7: "am_0.05", never
+  # normalised) -- deliberately, mirroring apps/species/app.R's v1-v7 branch, which
+  # also carries it through unchanged. `dataset.ds_key` (read by card()'s `is_mask`
+  # lookup below) and app_datasets()'s published rows are ALSO unnormalised, so a
+  # normalised edge here would match NEITHER of them. Asset resolution does not
+  # need it to match anyway -- see .app_assets() and card(), which join on
+  # `mdl_key` alone.
   keep <- which(!is.na(d$key) & !is.na(d$mdl_key) & !is.na(d$ds_key) &
                 d$ds_key != "ms_merge" & d$mdl_key != d$key)
   d <- d[keep, , drop = FALSE]
@@ -969,6 +1074,29 @@ isTRUE_v <- function(x) !is.na(x) & x
 # the asset registry, normalised to the v8 shape. v1-v7 publish `model_asset`
 # (mdl_seq, cog_url) and nothing else, so the constants the species app already
 # substitutes are substituted here instead: cog / 1-100 / spectral_r / no bbox.
+#
+# M1 (parity audit 2026-09-24, corrected against apps/species/app.R's WORKING v1-v7
+# resolution): this used to INNER JOIN `model_asset` to `taxon` on the taxon's
+# MERGED key (`t.{key} = ma.mdl_seq`), which only ever matches the `ds_key =
+# 'ms_merge'` row -- every raw per-dataset asset (am/bl/rng_iucn/...) has its OWN
+# mdl_seq, never equal to any taxon's merged key, so the join silently dropped all
+# 19,811 v7 input COGs and every input pill in the species app rendered struck
+# through. Fixed by LEFT JOIN: `key` (used only by .app_merged()'s "is this the
+# taxon's own merged surface" test) comes back NA for a raw input row instead of
+# dropping the row outright; app_taxon_shards()' card() never reads `key` for an
+# input asset -- it matches on `mdl_key` ALONE (see card(), below), exactly the
+# join the species app makes (`native_asset |> left_join(d_edges, by = "mdl_key")`,
+# apps/species/app.R ~line 404).
+#
+# `ds_key` is left EXACTLY as `model_asset` spells it -- `backfill_versions.qmd`
+# happens to normalise it there ("am_0.05" -> "am"), which is precisely why a
+# ds_key-keyed join (this function's old sibling in .app_edges(), and the old
+# card()) silently found nothing: `taxon_model.ds_key` is the release's own native,
+# UNnormalised spelling. Normalising it here too would only trade that mismatch for
+# a new one against `dataset.ds_key` (card()'s `is_mask` lookup) and
+# app_datasets()'s published rows, neither of which the species app normalises
+# either. `mdl_key` already uniquely names one model on every generation, so no
+# lookup here needs `ds_key` to agree at all.
 .app_assets <- function(con) {
   tb <- DBI::dbListTables(con)
   none <- data.frame(key = character(), mdl_key = character(), ds_key = character(),
@@ -994,7 +1122,7 @@ isTRUE_v <- function(x) !is.na(x) & x
            CAST(NULL AS VARCHAR) AS source_layer,
            CAST(NULL AS DOUBLE) AS xmin, CAST(NULL AS DOUBLE) AS xmax,
            CAST(NULL AS DOUBLE) AS ymin, CAST(NULL AS DOUBLE) AS ymax
-      FROM model_asset ma JOIN taxon t
+      FROM model_asset ma LEFT JOIN taxon t
         ON {.app_id_cast(con, 'taxon', k$key, paste0('t.', k$key))}
          = {.app_id_cast(con, 'model_asset', 'mdl_seq', 'ma.mdl_seq')}"))
 }
@@ -1063,9 +1191,19 @@ app_taxon_shards <- function(con, ver) {
     m   <- mg[which(!is.na(mg$key) & mg$key == key), , drop = FALSE]
     ei  <- e[which(!is.na(e$key) & e$key == key), , drop = FALSE]
     inputs <- lapply(seq_len(nrow(ei)), function(j) {
-      ai <- a[which(!is.na(a$mdl_key) & !is.na(a$ds_key) &
-                    a$mdl_key == ei$mdl_key[j] & a$ds_key == ei$ds_key[j]),
-              , drop = FALSE]
+      # `mdl_key` ALONE, exactly the join `apps/species/app.R`'s v1-v7 branch makes
+      # (`native_asset |> left_join(d_edges ..., by = "mdl_key")`, never `ds_key`).
+      # On every generation `mdl_key` already uniquely names one model -- v1-v7 it
+      # IS the model's own `mdl_seq` (an autoincrement primary key), v8+ it is
+      # `{ds_key}|{sp_id}[|interval]`, which already has ds_key baked in -- so
+      # requiring `ds_key` equality too adds no selectivity and one more way for the
+      # two tables' independently-sourced spellings to disagree (M1: `model_asset`
+      # is rebuilt by `backfill_versions.qmd` with `ds_key` normalised through
+      # `normalize_ds_key()`, `taxon_model` is the release's own native table and
+      # is not touched, so the SAME v7 database carries "am" on one side and
+      # "am_0.05" on the other). The working, production species app never hits
+      # this because it never joins on `ds_key` in the first place.
+      ai <- a[which(!is.na(a$mdl_key) & a$mdl_key == ei$mdl_key[j]), , drop = FALSE]
       list(ds_key  = ei$ds_key[j],
            mdl_key = ei$mdl_key[j],
            is_mask = {v <- ds$is_mask[match(ei$ds_key[j], ds$ds_key)]
@@ -1661,6 +1799,9 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @param zone_sets the zone-set registry (`data/zone_sets.csv`), passed to
 #'   [app_zone_tbl()] so a release with two tables for one field publishes the one
 #'   the geometry actually corresponds to
+#' @param zone_names optional `data.frame(fld, key, name)` (rbind of
+#'   [app_zone_names()] across the release's zone types), passed to [app_boot()] for
+#'   `zones.<unit>[i].name`. `NULL` (default) publishes no names, exactly as before.
 #' @param strict stop at the first failing stage (`TRUE`, the default), so a
 #'   half-written bundle is never published by accident. `FALSE` runs every stage,
 #'   records what failed in `$failed`, and leaves the stages that worked on disk —
@@ -1675,7 +1816,7 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                              base = atlas_base_url(), geom_keys = list(),
                              cell_tiles = TRUE, strict = TRUE,
-                             taxonomy_csv = NULL, zone_sets = NULL,
+                             taxonomy_csv = NULL, zone_sets = NULL, zone_names = NULL,
                              built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
@@ -1778,7 +1919,7 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
     b <- app_boot(con, ver, manifest,
                   tables = app_table_manifest(unname(descr), ver, base),
                   geom_keys = geom_keys, zone_sets = zone_sets, chosen = chosen,
-                  built_at = built_at)
+                  zone_names = zone_names, built_at = built_at)
     put("boot.json", b)
     # a hard stop: one zone, one row, in every object keyed by zone
     app_zones_unique(zt, b)

@@ -15,6 +15,7 @@ app_bundle_build(
   strict = TRUE,
   taxonomy_csv = NULL,
   zone_sets = NULL,
+  zone_names = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -46,6 +47,10 @@ get at the parts.}
 \item{zone_sets}{the zone-set registry (\code{data/zone_sets.csv}), passed to
 \code{\link[=app_zone_tbl]{app_zone_tbl()}} so a release with two tables for one field publishes the one
 the geometry actually corresponds to}
+
+\item{zone_names}{optional \code{data.frame(fld, key, name)} (rbind of
+\code{\link[=app_zone_names]{app_zone_names()}} across the release's zone types), passed to \code{\link[=app_boot]{app_boot()}} for
+\verb{zones.<unit>[i].name}. \code{NULL} (default) publishes no names, exactly as before.}
 
 \item{built_at}{ISO timestamp}
 }

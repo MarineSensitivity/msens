@@ -12,6 +12,7 @@ app_boot(
   geom_keys = list(),
   zone_sets = NULL,
   chosen = NULL,
+  zone_names = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -33,6 +34,11 @@ table per field when a release carries more than one}
 
 \item{chosen}{a precomputed \code{\link[=app_zone_tbl]{app_zone_tbl()}} result, so every builder in one
 bundle agrees on the same table}
+
+\item{zone_names}{optional \code{data.frame(fld, key, name)} from \code{\link[=app_zone_names]{app_zone_names()}},
+rbound across every zone type the release publishes — human names for
+\verb{zones.<unit>[i].name} (e.g. "Aleutian Arc" for \code{ALA}). \code{NULL} (default)
+publishes every zone with \code{name = NULL}, exactly as before.}
 
 \item{built_at}{ISO timestamp to stamp (default: now, UTC, second precision)}
 }

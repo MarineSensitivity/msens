@@ -4,12 +4,16 @@
 \alias{app_zones}
 \title{Per-zone summaries, so a report on a Program Area never loads a cell}
 \usage{
-app_zones(con, flds = NULL, chosen = NULL)
+app_zones(con, flds = NULL, chosen = NULL, zone_names = NULL)
 }
 \arguments{
 \item{con}{a DBI connection}
 
 \item{flds}{zone fields to summarise (default: every \code{fld} in \code{zone})}
+
+\item{zone_names}{optional \code{data.frame(fld, key, name)} from \code{\link[=app_zone_names]{app_zone_names()}};
+\code{NULL} (default) publishes every zone with \code{name = NULL}, exactly as before —
+this parameter is purely additive}
 }
 \value{
 a named list \verb{zone_type -> list of zone objects}

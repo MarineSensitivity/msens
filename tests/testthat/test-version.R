@@ -227,6 +227,29 @@ test_that("only cell-level metrics are declared, and score_cogs waits for real C
   expect_match(withcog$metrics$cog, "abc\\.tif")
 })
 
+test_that("manifest_build backfills a human short label, never overwriting a curated one", {
+  # M2 (parity audit 2026-09-24): the Atlas's metricLabelsFromManifest() reads
+  # manifest$metrics[].label for the legend/picker SHORT text -- a release with no
+  # curated layers_{ver}.csv (or one that left a key unlabelled) used to publish
+  # NOTHING there, and app_boot()'s `layers[].label` is deliberately the LONG
+  # description, so the app fell back to the bare metric_key.
+  bare <- manifest_build(mk_rel(), "v8")
+  expect_equal(bare$metrics$label, "Seabirds: extinction risk")
+
+  # a curated label -- however terse -- is NEVER overwritten by the default
+  curated <- manifest_build(mk_rel(), "v8", metrics = data.frame(
+    metric_key = "extrisk_bird", subregion_key = "FULL", label = "bird: ext. risk, ecorgn"))
+  expect_equal(curated$metrics$label, "bird: ext. risk, ecorgn")
+
+  # a curated row that supplies OTHER columns (cog, rescale) but no label at all
+  # still gets the default -- the backfill keys on the COLUMN being absent, not on
+  # `metrics` being NULL
+  uncurated <- manifest_build(mk_rel(), "v8", metrics = data.frame(
+    metric_key = "extrisk_bird", subregion_key = "FULL",
+    cog = "https://x/cog/global05/abc.tif"))
+  expect_equal(uncurated$metrics$label, "Seabirds: extinction risk")
+})
+
 test_that("manifest_build declares only tables the release actually has", {
   m <- manifest_build(mk_rel(v8 = FALSE, extras = "zone_taxon"), "v6",
                       base = "https://x/marine-atlas")

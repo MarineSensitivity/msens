@@ -425,6 +425,17 @@ manifest_build <- function(con, ver, status = "released",
   if (!is.null(metrics) && nrow(met))
     met <- merge(met, metrics, by = "metric_key", all.x = TRUE)
 
+  # short label, backfilled -- NEVER overwritten. `metrics$label` (a curated
+  # layers_{ver}.csv's `layer` column, when the caller supplies one) is the app's
+  # SHORT legend/picker text; a release with none, or one whose curation left a
+  # cell-scored key unlabelled, gets `.metric_short_label()`'s canonical wording
+  # instead of the bare metric_key fragment ("score" for the composite before this).
+  if (nrow(met)) {
+    if (!"label" %in% names(met)) met$label <- NA_character_
+    blank <- is.na(met$label) | !nzchar(trimws(met$label))
+    if (any(blank)) met$label[blank] <- .metric_short_label(met$metric_key[blank])
+  }
+
   # zone_set_key when the release carries it, so the app can resolve each spatial
   # unit's PMTiles by vintage rather than a hardcoded, unversioned filename
   has_zsk <- has("zone") && "zone_set_key" %in% DBI::dbListFields(con, "zone")

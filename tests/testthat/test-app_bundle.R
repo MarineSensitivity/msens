@@ -220,6 +220,45 @@ test_that("zone summaries carry n_cells and the coverage-weighted area", {
   })
 })
 
+test_that("zone name is NULL by default and populated when zone_names is supplied", {
+  with_synth("v9", function(con) {
+    bare <- Filter(function(x) x$key == "AAA", app_zones(con)$programarea)[[1]]
+    expect_null(bare$name)               # purely additive: unset by default
+
+    nm <- data.frame(fld = "programarea_key", key = c("AAA", "BBB"),
+                     name = c("Aleutian Arc", NA_character_), stringsAsFactors = FALSE)
+    z <- app_zones(con, zone_names = nm)$programarea
+    a <- Filter(function(x) x$key == "AAA", z)[[1]]
+    b <- Filter(function(x) x$key == "BBB", z)[[1]]
+    expect_equal(a$name, "Aleutian Arc")
+    expect_null(b$name)                  # an NA/blank name publishes NULL, not "NA"
+  })
+})
+
+test_that("app_zone_names() reads {type}_key/{type}_name off a GeoPackage", {
+  skip_if_not_installed("sf")
+  pts <- sf::st_sfc(sf::st_point(c(-170, 52)), sf::st_point(c(-165, 53)), crs = 4326)
+  d <- sf::st_sf(programarea_key = c("ALA", "GEO"),
+                 programarea_name = c("Aleutian Arc", "St. George Basin"), geometry = pts)
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+
+  nm <- app_zone_names(f, "programarea")
+  expect_equal(nrow(nm), 2L)
+  expect_equal(unique(nm$fld), "programarea_key")
+  expect_setequal(nm$key, c("ALA", "GEO"))
+  expect_equal(nm$name[nm$key == "ALA"], "Aleutian Arc")
+})
+
+test_that("app_zone_names() errors clearly when the expected columns are missing", {
+  skip_if_not_installed("sf")
+  pts <- sf::st_sfc(sf::st_point(c(0, 0)), crs = 4326)
+  d <- sf::st_sf(some_other_key = "X", geometry = pts)
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+  expect_error(app_zone_names(f, "programarea"), "programarea_key")
+})
+
 test_that("the v7.1 _coverage metrics ride along as `coverage`, optional by presence", {
   with_synth("v7b", function(con) {
     a <- Filter(function(x) x$key == "AAA", app_zones(con)$programarea)[[1]]
@@ -1008,6 +1047,192 @@ test_that("REGRESSION: model joins match on a DOUBLE mdl_seq", {
     cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
     expect_gt(sum(vapply(cards, function(cd) length(cd$inputs), 0L)), 0L)
   })
+})
+
+test_that("REGRESSION (M1): every v1-v7 input asset is published, not just the merged one", {
+  # Parity audit 2026-09-24, item M1: `.app_assets()` used to INNER JOIN model_asset
+  # to taxon on the taxon's MERGED key, so only the ds_key='ms_merge' row ever
+  # survived -- a real v7 release lost all 19,811 input COGs (am/bl/rng_iucn/...)
+  # and every input pill in the species app rendered struck through.
+  #
+  # Ben's correction (2026-09-24): the fix must resolve an input's asset EXACTLY the
+  # way the WORKING production species app does (`apps/species/app.R`'s v1-v7
+  # branch, ~line 397-413), not merely patch the join. That app reads `model_asset`
+  # from the SAME `sdm.duckdb` `.app_assets()` reads -- a table `backfill_versions.qmd`
+  # writes with `ds_key` run through `normalize_ds_key()` ("am_0.05" -> "am") -- and
+  # attaches it to `taxon_model`'s edges (raw "am_0.05", untouched: backfill only
+  # reconstructs `taxon_model` when a release has NONE, v3-v7 keep their own native
+  # table verbatim) with `left_join(native_asset, d_edges, by = "mdl_key")` --
+  # `mdl_key` ALONE, never `ds_key`. It gets away with the spelling mismatch because
+  # `mdl_key` (== `mdl_seq` stringified on v1-v7) already uniquely names one model,
+  # so requiring `ds_key` too only adds a way for two independently-sourced spellings
+  # to disagree. `app_taxon_shards()`'s `card()` now joins the same way.
+  #
+  # A minimal, hand-built v7-shaped db (NOT synth_release(), so this test asserts the
+  # fix in isolation, with `app_taxon_shards()` run end to end -- not just the two
+  # helpers): one taxon, its merged model, and two inputs -- `model_asset` carries
+  # the NORMALISED "am"/"bl", `taxon_model` carries the RAW, UNNORMALISED "am_0.05"/
+  # "bl", exactly as the real v7 `sdm.duckdb` does.
+  con <- DBI::dbConnect(duckdb::duckdb(dbdir = tempfile("m1_", fileext = ".duckdb")))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  # taxon_id DOUBLE, mdl_seq INTEGER, on BOTH tables -- exactly the real v7 schema
+  # (`DESCRIBE` on the published `taxon`/`taxon_model`/`model_asset` parquet)
+  DBI::dbWriteTable(con, "taxon", data.frame(
+    taxon_id = as.numeric(137162), taxon_authority = "worms",
+    scientific_name = "Sterna paradisaea", common_name = "Arctic Tern", sp_cat = "bird",
+    mdl_seq = 101L, is_ok = TRUE, stringsAsFactors = FALSE))
+  DBI::dbWriteTable(con, "taxon_model", data.frame(     # RAW, as taxon_model natively is
+    taxon_id = as.numeric(137162), ds_key = c("ms_merge", "am_0.05", "bl"),
+    mdl_seq  = c(101L, 201L, 301L), stringsAsFactors = FALSE))
+  DBI::dbWriteTable(con, "model_asset", data.frame(     # NORMALISED, as backfill writes it
+    mdl_key = c("ms_merge|WORMS:137162", "am|Fis-137162", "bl|22725044"),
+    mdl_seq = c(101L, 201L, 301L), ds_key = c("ms_merge", "am", "bl"),
+    cog_url = c("https://example.invalid/cog/usa05/merged.tif",
+                "https://example.invalid/cog/usa05/am.tif",
+                "https://example.invalid/cog/usa05/bl.tif"),
+    grid_id = "usa05", ver = "v7", stringsAsFactors = FALSE))
+
+  a <- .app_assets(con)
+  expect_equal(nrow(a), 3L)                          # merged + BOTH inputs, not 1
+  expect_setequal(a$mdl_key, c("101", "201", "301"))
+  expect_setequal(a$ds_key, c("ms_merge", "am", "bl"))
+
+  e <- .app_edges(con)
+  expect_equal(nrow(e), 2L)                          # the ms_merge self-edge dropped
+  # e$ds_key is left RAW ("am_0.05", not "am") -- .app_edges() does not normalise it
+  # (see its own comment for why); the asset lookup below does not depend on it
+  # matching `a$ds_key` at all, which is the point of this fixture
+  expect_setequal(e$ds_key, c("am_0.05", "bl"))
+
+  # the walrus/Arctic-tern scenario end to end: app_taxon_shards()' card() must
+  # attach BOTH inputs' real asset, not an empty list (a struck-through pill)
+  sh <- app_taxon_shards(con, "v7")
+  cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
+  expect_equal(length(cards), 1L)
+  cd <- cards[[1]]
+  expect_equal(length(cd$inputs), 2L)
+  for (inp in cd$inputs)
+    expect_equal(length(inp$assets), 1L, info = inp$ds_key)   # never struck through
+  urls <- vapply(cd$inputs, function(inp) inp$assets[[1]]$url, "")
+  expect_setequal(urls, c("https://example.invalid/cog/usa05/am.tif",
+                          "https://example.invalid/cog/usa05/bl.tif"))
+})
+
+test_that("REGRESSION (M1): card() resolves an input asset by mdl_key alone, not ds_key", {
+  # The species app's join key, isolated: even if `model_asset.ds_key` and
+  # `taxon_model.ds_key` spell the SAME model differently, the asset still resolves
+  # because both id it by the same `mdl_seq`.
+  con <- DBI::dbConnect(duckdb::duckdb(dbdir = tempfile("m1b_", fileext = ".duckdb")))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "taxon", data.frame(
+    taxon_id = as.numeric(137206), taxon_authority = "worms",
+    scientific_name = "Chelonia mydas", common_name = "Green Sea Turtle", sp_cat = "turtle",
+    mdl_seq = 102L, is_ok = TRUE, stringsAsFactors = FALSE))
+  DBI::dbWriteTable(con, "taxon_model", data.frame(
+    taxon_id = as.numeric(137206), ds_key = c("ms_merge", "am_0.05"),
+    mdl_seq = c(102L, 202L), stringsAsFactors = FALSE))
+  # deliberately a DIFFERENT ds_key spelling than taxon_model's "am_0.05" -- still
+  # matches, because the join is on mdl_key (mdl_seq) alone
+  DBI::dbWriteTable(con, "model_asset", data.frame(
+    mdl_key = c("ms_merge|WORMS:137206", "am|Fis-137206"), mdl_seq = c(102L, 202L),
+    ds_key = c("ms_merge", "am"),
+    cog_url = c("https://example.invalid/cog/usa05/turtle-merged.tif",
+                "https://example.invalid/cog/usa05/turtle-am.tif"),
+    grid_id = "usa05", ver = "v7", stringsAsFactors = FALSE))
+
+  sh <- app_taxon_shards(con, "v7")
+  cd <- sh[[names(sh)[1]]]$taxa[[1]]
+  expect_equal(length(cd$inputs), 1L)
+  expect_equal(length(cd$inputs[[1]]$assets), 1L)
+  expect_equal(cd$inputs[[1]]$assets[[1]]$url,
+              "https://example.invalid/cog/usa05/turtle-am.tif")
+})
+
+test_that("REGRESSION (M1): the walrus's REAL v7 registry rows resolve as the Shiny app resolves them", {
+  # Not a synthetic fixture: `taxon_model`/`model_asset` below are the ACTUAL rows
+  # for the walrus (WoRMS/taxon_id 137077, merged mdl_seq 54383) in v7's own
+  # published registry -- fetched read-only 2026-09-24 from the server
+  # (`/share/data/big/v7/tables/{taxon_model,model_asset}.parquet`, 30,061 and
+  # 31,690 rows respectively), the SAME parquet `apps/species/app.R`'s v1-v7 branch
+  # (`con_sdm <- dbConnect(duckdb(), dbdir = sdm_db)`, ~line 367-413) reads
+  # `taxon_model`/`model_asset` from. `taxon_model.ds_key` for the AquaMaps input is
+  # the raw "am_0.05"; `model_asset.ds_key` for the SAME model (mdl_seq 790) is the
+  # normalised "am" -- the real-world instance of the mismatch M1's fix (join on
+  # `mdl_key` alone) has to survive, confirming CLAUDE.md's "walrus am mdl_seq 790
+  # -> cog/usa05/3e1d4309c691974f.tif" note.
+  con <- DBI::dbConnect(duckdb::duckdb(dbdir = tempfile("m1_walrus_", fileext = ".duckdb")))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  # taxon_id DOUBLE, mdl_seq INTEGER -- the real v7 schema (DESCRIBE on the
+  # published parquet), not just this fixture's convenience
+  DBI::dbWriteTable(con, "taxon", data.frame(
+    taxon_id = as.numeric(137077), taxon_authority = "worms",
+    scientific_name = "Odobenus rosmarus", common_name = "Walrus", sp_cat = "mammal",
+    mdl_seq = 54383L, is_ok = TRUE, stringsAsFactors = FALSE))
+  # verbatim from /share/data/big/v7/tables/taxon_model.parquet WHERE taxon_id = 137077
+  DBI::dbWriteTable(con, "taxon_model", data.frame(
+    taxon_id = as.numeric(137077), ds_key = c("am_0.05", "ms_merge", "rng_iucn"),
+    mdl_seq  = c(790L, 54383L, 23495L), stringsAsFactors = FALSE))
+  # verbatim from /share/data/big/v7/tables/model_asset.parquet WHERE mdl_seq IN (...)
+  cog <- function(hash) sprintf(
+    "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/marine-atlas/cog/usa05/%s.tif", hash)
+  DBI::dbWriteTable(con, "model_asset", data.frame(
+    mdl_key = c("am|ITS-Mam-180639", "ms_merge|WORMS:137077",
+                "rng_iucn|rng_iucn:Odobenus rosmarus"),
+    mdl_seq = c(790L, 54383L, 23495L), ds_key = c("am", "ms_merge", "rng_iucn"),
+    cog_url = c(cog("3e1d4309c691974f"), cog("ffe72edb91a4f7ae"), cog("9f3a81fdac2583ed")),
+    grid_id = "usa05", ver = "v7", stringsAsFactors = FALSE))
+
+  sh <- app_taxon_shards(con, "v7")
+  cd <- sh[[names(sh)[1]]]$taxa[[1]]
+  expect_equal(cd$merged$url, cog("ffe72edb91a4f7ae"))
+  expect_equal(length(cd$inputs), 2L)          # am + rng_iucn; the ms_merge self-edge dropped
+  by_ds <- stats::setNames(
+    vapply(cd$inputs, function(i) if (length(i$assets)) i$assets[[1]]$url else NA_character_, ""),
+    vapply(cd$inputs, function(i) i$ds_key, ""))
+  expect_false(anyNA(by_ds))                   # neither input is a struck-through pill
+  # by_ds is keyed on `taxon_model`'s RAW spelling ("am_0.05", not "am" --
+  # .app_edges() does not normalise), which is exactly the real mismatch: the
+  # resolved asset still comes from the row `model_asset` spells "am"
+  expect_equal(unname(by_ds["am_0.05"]),  cog("3e1d4309c691974f"))
+  expect_equal(unname(by_ds["rng_iucn"]), cog("9f3a81fdac2583ed"))
+
+  # best-effort HEAD (same skip helper test-atlas.R already uses for S3 checks):
+  # confirms the resolved URLs are real published objects. Skipped when this
+  # machine has no route to S3; a resolved-but-missing object (non-2xx) is a real
+  # failure once online, not something to skip.
+  skip_if_offline("s3.us-east-1.amazonaws.com")
+  for (u in c(cd$merged$url, unname(by_ds))) {
+    r <- httr2::req_perform(httr2::req_method(httr2::request(u), "HEAD"))
+    expect_equal(httr2::resp_status(r), 200, info = u)
+  }
+})
+
+# ---- metric short labels ------------------------------------------------------
+
+test_that(".metric_short_label(): the composite and every species category get a human label", {
+  expect_equal(.metric_short_label("score_extriskspcat_primprod_ecoregionrescaled_equalweights"),
+              "Overall score")
+  expect_equal(.metric_short_label("primprod"), "Primary productivity")
+  expect_equal(.metric_short_label("primprod_ecoregion_rescaled"),
+              "Primary productivity (ecoregion-rescaled)")
+  # one row per docs (receptors.qmd) species-category heading, raw AND rescaled
+  expect_equal(
+    .metric_short_label(c("extrisk_bird", "extrisk_coral", "extrisk_fish",
+                          "extrisk_invertebrate", "extrisk_mammal", "extrisk_turtle",
+                          "extrisk_other", "extrisk_primary_producer")),
+    c("Seabirds: extinction risk", "Corals: extinction risk", "Fish: extinction risk",
+      "Invertebrates: extinction risk", "Marine Mammals: extinction risk",
+      "Sea Turtles: extinction risk", "Other Species: extinction risk",
+      "Primary Producers: extinction risk"))
+  expect_equal(.metric_short_label("extrisk_bird_ecoregion_rescaled"),
+              "Seabirds: extinction risk (ecoregion-rescaled)")
+  expect_equal(.metric_short_label("extrisk_primary_producer_ecoregion_rescaled"),
+              "Primary Producers: extinction risk (ecoregion-rescaled)")
+  # an unrecognised shape falls back to the key itself, same as .metric_label()
+  expect_equal(.metric_short_label("something_else"), "something_else")
+  expect_true(is.na(.metric_short_label(NA_character_)))
 })
 
 # ---- one zone table per field ------------------------------------------------

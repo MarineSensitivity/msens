@@ -1,4 +1,40 @@
-# msens 0.43.0
+# msens 0.44.0
+
+**Three `app/` bundle release-side gaps the Atlas app had been working around (parity audit
+2026-09-24, item M1 and its siblings).**
+
+* **Fixed: every v1-v7 input model's asset is now published, not just the merged one.**
+  `.app_assets()` used to INNER JOIN `model_asset` to `taxon` on the taxon's MERGED key, which
+  only ever matched the `ds_key = 'ms_merge'` row — a real v7 release lost all 19,811 input COGs
+  (am/bl/rng_iucn/…) and every input pill in the species app rendered struck through. Now a LEFT
+  JOIN, and `app_taxon_shards()`'s `card()` resolves an input's asset by `mdl_key` ALONE — exactly
+  the join `apps/species/app.R`'s working v1-v7 branch makes — rather than requiring `ds_key`
+  equality too: `model_asset.ds_key` is normalised by `backfill_versions.qmd`
+  (`normalize_ds_key()`, "am_0.05" -> "am") while `taxon_model.ds_key` is the release's own native,
+  unnormalised spelling, so the SAME v7 database carries two different spellings for the same
+  model and a `ds_key`-keyed join silently found nothing. `.app_assets()`/`.app_edges()` also
+  normalise `ds_key` themselves now, for display consistency. `.app_edges()`'s `key` column is
+  cast through `.app_id_cast()` (HUGEINT-safe) instead of a naive `CAST(... AS VARCHAR)`, matching
+  `app_taxon_table()`'s cast so the two never disagree on a DOUBLE-typed `mdl_seq`.
+* **New: `zones.<unit>[i].name` and `app_zone_names()`.** `zone`/`zone_metric` never carry a human
+  name, only the key a report picks from ("ALA") — `score_zones.qmd`'s `zone` table has no name
+  column on any generation. The name ("Aleutian Arc") lives on the zone-set's own GeoPackage
+  (`{type}_key`/`{type}_name` columns, verified on the real v1-v8 sources). `app_zone_names(path,
+  type)` reads it; `app_zones()`, `app_boot()` and `app_bundle_build()` all gain an optional
+  `zone_names` parameter (a `data.frame(fld, key, name)`) that fills `name` — purely additive,
+  `NULL` (the default) publishes exactly as before.
+* **New: canonical short metric labels, `.metric_short_label()` and `manifest_build()` backfill.**
+  The Atlas's `metricLabelsFromManifest()` reads `manifest$metrics[].label` for the legend title
+  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description) — a
+  release with no curated `layers_{ver}.csv`, or one that left a key unlabelled, published nothing
+  there, or the bare metric-key fragment ("score" for the composite, on the live v7 manifest).
+  `manifest_build()` now backfills any blank `metrics$label` with a canonical, version-independent
+  label ("Overall score" for the composite; "Primary productivity" / "Primary productivity
+  (ecoregion-rescaled)" for `primprod`; "{docs category name}: extinction risk[ (ecoregion-
+  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) —
+  never overwriting a label the caller already supplied.
+
+
 
 **The `{ver}/app/` data contract, and one scoring method.** Two changes an app or a
 report can see: the release now publishes a version-independent bundle the browser
