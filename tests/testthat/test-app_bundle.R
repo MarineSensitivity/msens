@@ -259,6 +259,75 @@ test_that("app_zone_names() errors clearly when the expected columns are missing
   expect_error(app_zone_names(f, "programarea"), "programarea_key")
 })
 
+test_that("REGRESSION (E3): a malformed zone_names is rejected, not silently ignored", {
+  with_synth("v9", function(con) {
+    expect_error(app_zones(con, zone_names = data.frame(x = 1)), "fld.*key.*name")
+    expect_error(app_zones(con, zone_names = list(fld = "a", key = "b", name = "c")),
+                "data.frame")
+  })
+})
+
+test_that("REGRESSION (E3): zone_names naming ZERO real zones of a field it lists warns", {
+  with_synth("v9", function(con) {
+    # a typo'd `type` ("programarea" instead of "programarea_key") -- a mistake
+    # that used to publish name = NULL everywhere with no signal at all. Matched
+    # against the WHOLE zone table (not just what this call's `flds` publishes), so
+    # this really is "no such field on this release", not merely "not this call".
+    wrong_fld <- data.frame(fld = "programarea", key = "AAA", name = "Aleutian Arc",
+                            stringsAsFactors = FALSE)
+    expect_warning(app_zones(con, zone_names = wrong_fld), "names 0 of")
+
+    # the wrong geometry's names -- right fld, keys from a different unit entirely
+    wrong_keys <- data.frame(fld = "programarea_key", key = c("ZZZ", "YYY"),
+                             name = c("Nowhere", "Nowhere Else"), stringsAsFactors = FALSE)
+    expect_warning(app_zones(con, zone_names = wrong_keys), "names 0 of")
+  })
+
+  # a zone_names that covers a field the RELEASE genuinely has (real keys, matched
+  # against the whole zone table) but THIS call's `flds` does not publish is not
+  # itself a mistake -- no warning. v2 is the one synth generation with a second
+  # real field (subregion_key: SR1/SR2/SR3) alongside programarea_key.
+  with_synth("v2", function(con) {
+    other_fld <- data.frame(fld = "subregion_key", key = c("SR1", "SR2"),
+                            name = c("Region One", "Region Two"), stringsAsFactors = FALSE)
+    ch <- app_zone_tbl(con, synth_manifest(con, "v2", BASE))
+    expect_no_warning(app_zones(con, flds = "programarea_key", chosen = ch,
+                                zone_names = other_fld))
+  })
+})
+
+test_that("REGRESSION (E5): a zone name reaches boot.json and passes schema validation", {
+  with_synth("v9", function(con) {
+    m  <- synth_manifest(con, "v9", BASE)
+    ch <- app_zone_tbl(con, m)
+    nm <- data.frame(fld = "programarea_key", key = "AAA", name = "Aleutian Arc",
+                     stringsAsFactors = FALSE)
+    b <- app_boot(con, "v9", m, tables = list(), chosen = ch, zone_names = nm)
+    a <- Filter(function(z) z$key == "AAA", b$zones$programarea)[[1]]
+    expect_equal(a$name, "Aleutian Arc")
+    # app_boot() already ran app_validate() internally (it would have thrown
+    # otherwise); re-validate explicitly so this test fails loudly if that ever
+    # stops being true
+    expect_silent(app_validate(b, "boot", "boot.json"))
+  })
+})
+
+test_that("REGRESSION (E5): a whitespace-only curated label falls back to the backfill", {
+  # self-contained (not mk_rel(), which lives in test-version.R and is only in
+  # scope once every test file has loaded together): the minimum manifest_build()
+  # needs to declare one cell-scored metric.
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE TABLE metric (metric_seq INTEGER, metric_key VARCHAR, description VARCHAR)")
+  DBI::dbExecute(con, "INSERT INTO metric VALUES (1, 'extrisk_bird', 'x')")
+  DBI::dbExecute(con, "CREATE TABLE cell_metric (cell_id BIGINT, metric_seq INTEGER, val DOUBLE)")
+  DBI::dbExecute(con, "INSERT INTO cell_metric VALUES (1, 1, 5)")
+
+  m <- manifest_build(con, "v8", metrics = data.frame(
+    metric_key = "extrisk_bird", subregion_key = "FULL", label = "   "))
+  expect_equal(m$metrics$label, "Seabirds: extinction risk")
+})
+
 test_that("the v7.1 _coverage metrics ride along as `coverage`, optional by presence", {
   with_synth("v7b", function(con) {
     a <- Filter(function(x) x$key == "AAA", app_zones(con)$programarea)[[1]]
@@ -1097,6 +1166,12 @@ test_that("REGRESSION (M1): every v1-v7 input asset is published, not just the m
   expect_equal(nrow(a), 3L)                          # merged + BOTH inputs, not 1
   expect_setequal(a$mdl_key, c("101", "201", "301"))
   expect_setequal(a$ds_key, c("ms_merge", "am", "bl"))
+  # E5 (parity review): an input row carries NO taxon key -- .app_merged()'s "is
+  # this the taxon's own merged surface" test relies on that NA, not on a dropped
+  # row (the old INNER JOIN's failure mode). Only the merged row (mdl_key "101")
+  # resolves a `key` at all.
+  expect_equal(a$key[a$mdl_key == "101"], "101")
+  expect_true(all(is.na(a$key[a$mdl_key %in% c("201", "301")])))
 
   e <- .app_edges(con)
   expect_equal(nrow(e), 2L)                          # the ms_merge self-edge dropped
@@ -1111,6 +1186,10 @@ test_that("REGRESSION (M1): every v1-v7 input asset is published, not just the m
   cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
   expect_equal(length(cards), 1L)
   cd <- cards[[1]]
+  # E5 (parity review): the tern's merged$url was asserted only indirectly before
+  # (via the walrus test) -- assert it directly here too, on the fixture that
+  # exercises the LEFT JOIN fix.
+  expect_equal(cd$merged$url, "https://example.invalid/cog/usa05/merged.tif")
   expect_equal(length(cd$inputs), 2L)
   for (inp in cd$inputs)
     expect_equal(length(inp$assets), 1L, info = inp$ds_key)   # never struck through
@@ -1230,6 +1309,13 @@ test_that(".metric_short_label(): the composite and every species category get a
               "Seabirds: extinction risk (ecoregion-rescaled)")
   expect_equal(.metric_short_label("extrisk_primary_producer_ecoregion_rescaled"),
               "Primary Producers: extinction risk (ecoregion-rescaled)")
+  # E6 (parity review 2026-09-24): v1's two sp_cat values the docs table does not
+  # cover -- `all` (its whole-taxon bucket) and `reptile` (its pre-v3-taxonomy
+  # turtle bucket) -- must not silently coin "All: extinction risk"/"Reptile:
+  # extinction risk" via the generic title-case fallback (which they would still
+  # spell the same way here, but only .SP_CAT_LABEL is the source of truth).
+  expect_equal(.metric_short_label("extrisk_all"), "All: extinction risk")
+  expect_equal(.metric_short_label("extrisk_reptile"), "Reptile: extinction risk")
   # an unrecognised shape falls back to the key itself, same as .metric_label()
   expect_equal(.metric_short_label("something_else"), "something_else")
   expect_true(is.na(.metric_short_label(NA_character_)))

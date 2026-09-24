@@ -430,11 +430,10 @@ manifest_build <- function(con, ver, status = "released",
   # SHORT legend/picker text; a release with none, or one whose curation left a
   # cell-scored key unlabelled, gets `.metric_short_label()`'s canonical wording
   # instead of the bare metric_key fragment ("score" for the composite before this).
-  if (nrow(met)) {
-    if (!"label" %in% names(met)) met$label <- NA_character_
-    blank <- is.na(met$label) | !nzchar(trimws(met$label))
-    if (any(blank)) met$label[blank] <- .metric_short_label(met$metric_key[blank])
-  }
+  # ONE implementation (`.metrics_backfill_labels()`, app_bundle.R), shared with the
+  # exported manifest_labels_backfill() so a release-side patch of an ALREADY
+  # PUBLISHED manifest.json applies the identical rule.
+  met <- .metrics_backfill_labels(met)
 
   # zone_set_key when the release carries it, so the app can resolve each spatial
   # unit's PMTiles by vintage rather than a hardcoded, unversioned filename

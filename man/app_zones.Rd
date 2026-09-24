@@ -13,7 +13,10 @@ app_zones(con, flds = NULL, chosen = NULL, zone_names = NULL)
 
 \item{zone_names}{optional \code{data.frame(fld, key, name)} from \code{\link[=app_zone_names]{app_zone_names()}};
 \code{NULL} (default) publishes every zone with \code{name = NULL}, exactly as before —
-this parameter is purely additive}
+this parameter is purely additive. A non-\code{NULL} value must carry \code{fld}/\code{key}/
+\code{name} columns (\code{stopifnot()}), and a \code{warning()} fires when it names ZERO of
+the real zones of a field it lists — the wrong \code{type} or the wrong geometry
+file otherwise fails silently (every zone published with \code{name = NULL}).}
 }
 \value{
 a named list \verb{zone_type -> list of zone objects}

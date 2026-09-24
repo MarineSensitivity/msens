@@ -521,12 +521,19 @@ app_zone_names <- function(path, type) {
 #' @param flds zone fields to summarise (default: every `fld` in `zone`)
 #' @param zone_names optional `data.frame(fld, key, name)` from [app_zone_names()];
 #'   `NULL` (default) publishes every zone with `name = NULL`, exactly as before —
-#'   this parameter is purely additive
+#'   this parameter is purely additive. A non-`NULL` value must carry `fld`/`key`/
+#'   `name` columns (`stopifnot()`), and a `warning()` fires when it names ZERO of
+#'   the real zones of a field it lists — the wrong `type` or the wrong geometry
+#'   file otherwise fails silently (every zone published with `name = NULL`).
 #' @return a named list `zone_type -> list of zone objects`
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
 app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
+  if (!is.null(zone_names))
+    stopifnot("`zone_names` must be a data.frame with `fld`, `key`, `name` columns" =
+                is.data.frame(zone_names) &&
+                all(c("fld", "key", "name") %in% names(zone_names)))
   vz <- sdm_val_col(con, "zone")
   vm <- sdm_val_col(con, "zone_metric")
   if (is.null(chosen)) chosen <- app_zone_tbl(con)
@@ -556,6 +563,33 @@ app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
                                  count(*) AS n_taxa FROM zone_taxon GROUP BY 1, 2") else
       data.frame(fld = character(), zkey = character(), n_taxa = integer())
   is_cov <- grepl("_coverage$", m$metric_key)
+
+  # E3: a `zone_names` that matches NOTHING is a check that cannot fail silently
+  # otherwise -- a typo'd `type` ("programarea" instead of "programarea_key" in a
+  # hand-built zone_names, or in app_zone_names()'s own call), or the wrong
+  # geometry's names (a Planning Area GeoPackage also carries
+  # region_key/region_name, so app_zone_names(gpkg, "planarea") on a Program-Area
+  # file "succeeds" and returns a partial, wrong list) both used to publish
+  # name = NULL for every zone with no error at all.
+  #
+  # Checked against the WHOLE `zone` table (one query, not `d`, and NOT restricted
+  # to `flds`): a `zone_names` that legitimately covers a field this specific call
+  # is not publishing but the RELEASE genuinely does (e.g. ecoregion names passed
+  # alongside a programarea-only `flds`) still finds its real keys there and stays
+  # silent; a typo or the wrong file finds nothing anywhere on the release and
+  # warns. Only warns (never stop()): the caller may still want the metrics/cells
+  # this call publishes even with broken names.
+  if (!is.null(zone_names) && nrow(zone_names)) {
+    zk_all <- DBI::dbGetQuery(con, glue::glue(
+      "SELECT DISTINCT z.fld, z.{vz} AS zkey FROM zone z WHERE {w}"))
+    for (zfld in unique(zone_names$fld[!is.na(zone_names$fld)])) {
+      real_keys <- unique(zk_all$zkey[which(!is.na(zk_all$fld) & zk_all$fld == zfld)])
+      if (!any(zone_names$key[which(zone_names$fld == zfld)] %in% real_keys))
+        warning(sprintf(
+          "zone_names names 0 of %d real '%s' zone(s) on this release -- wrong `type`, the wrong geometry file, or a field this release does not publish at all? every such zone will publish name = NULL",
+          length(real_keys), zfld), call. = FALSE)
+    }
+  }
 
   stats::setNames(lapply(flds, function(fld) {
     rows <- d[which(!is.na(d$fld) & d$fld == fld), , drop = FALSE]
@@ -721,9 +755,12 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 
 # sp_cat -> the docs' own heading text (docs repo receptors.qmd: "Corals",
 # "Invertebrates", "Fish", "Marine Mammals", "Seabirds", "Sea Turtles"). `other`
-# (v1-v7's pre-taxonomy-rewrite bucket) and `primary_producer` (v8+'s species
+# (v1-v7's pre-taxonomy-rewrite bucket), `primary_producer` (v8+'s species
 # category -- a SPECIES category, distinct from the `primprod` ENVIRONMENTAL metric
-# below) have no docs heading of their own and get one coined in the same style.
+# below), `all` (v1's whole-taxon composite-adjacent bucket) and `reptile` (v1's
+# turtle bucket, before the v3 taxonomy rewrite split turtles out on their own)
+# have no docs heading of their own and get one coined in the same style (parity
+# review 2026-09-24, edit E6).
 .SP_CAT_LABEL <- c(
   bird             = "Seabirds",
   coral            = "Corals",
@@ -732,7 +769,9 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   mammal           = "Marine Mammals",
   turtle           = "Sea Turtles",
   other            = "Other Species",
-  primary_producer = "Primary Producers")
+  primary_producer = "Primary Producers",
+  all              = "All",
+  reptile          = "Reptile")
 
 #' A human short label for a metric key
 #'
@@ -769,6 +808,50 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     }
     k
   }, character(1), USE.NAMES = FALSE)
+}
+
+# the actual backfill rule, on the metrics DATA FRAME alone: fill any BLANK
+# `label` (missing column, NA, or whitespace-only) with `.metric_short_label()`'s
+# canonical wording; never touch a label that is already there. `manifest_build()`
+# and the exported `manifest_labels_backfill()` both call this ONE implementation,
+# so a release built fresh and a published manifest patched later can never drift.
+.metrics_backfill_labels <- function(met) {
+  if (!NROW(met)) return(met)
+  if (!"label" %in% names(met)) met$label <- NA_character_
+  blank <- is.na(met$label) | !nzchar(trimws(met$label))
+  if (any(blank)) met$label[blank] <- .metric_short_label(met$metric_key[blank])
+  met
+}
+
+#' Backfill blank metric short labels on a manifest
+#'
+#' [manifest_build()] applies this rule to `$metrics$label` while building a
+#' manifest from scratch (E7, parity review 2026-09-24); exported here so a
+#' release-side patch can apply the SAME rule to an ALREADY-PUBLISHED
+#' `manifest.json` — read it back, backfill, [validate_manifest()], `PUT` — without
+#' reaching into an internal `:::` function. The two call one shared
+#' implementation, so they cannot drift apart.
+#'
+#' A label is "blank" when the `metrics$label` column is absent, `NA`, or
+#' whitespace-only — never when it already carries a curated value (e.g. a
+#' hand-written `layers_{ver}.csv` entry, even a terse one like `"score"`): this
+#' function **never overwrites** an existing label.
+#'
+#' @param m a manifest list (from [manifest_build()], or
+#'   `jsonlite::fromJSON(simplifyVector = TRUE)` of a published `manifest.json`)
+#'   whose `$metrics` is a data.frame with at least `metric_key`
+#' @return the same manifest, with `$metrics$label` backfilled. Returned unchanged
+#'   if `m` carries no `metrics`, or an empty one.
+#' @examples
+#' m <- list(metrics = data.frame(metric_key = c("extrisk_bird", "score_x"),
+#'                                label = c(NA, "score")))
+#' manifest_labels_backfill(m)$metrics$label
+#' @export
+#' @concept version
+manifest_labels_backfill <- function(m) {
+  if (is.null(m$metrics) || !NROW(m$metrics)) return(m)
+  m$metrics <- .metrics_backfill_labels(as.data.frame(m$metrics, stringsAsFactors = FALSE))
+  m
 }
 
 #' Versioned flower-plot defaults, per subregion
@@ -1171,6 +1254,32 @@ app_taxon_shards <- function(con, ver) {
   d <- app_taxon_table(con)
   if (!nrow(d)) return(list())
   a <- .app_assets(con)
+  # E4 (parity review, 2026-09-24): card()'s asset lookup joins on `mdl_key` ALONE
+  # (M1) -- correct because `mdl_key` uniquely names one model within a release,
+  # never checked. Make that invariant loud rather than a silent duplicate-row bug
+  # three joins downstream (a duplicate (mdl_key, representation) pair would pick
+  # one row of the two arbitrarily and drop the other).
+  if (nrow(a)) {
+    dk <- paste(a$mdl_key, a$representation, sep = "\r")
+    if (anyDuplicated(dk)) {
+      bad <- unique(a$mdl_key[duplicated(dk) | duplicated(dk, fromLast = TRUE)])
+      stop(sprintf(
+        "app_taxon_shards(): %d duplicated (mdl_key, representation) pair(s) in the asset table (e.g. mdl_key %s) -- the mdl_key-only asset join (card()) assumes uniqueness; a duplicate silently keeps one row and drops the other.",
+        length(bad), paste(utils::head(bad, 5), collapse = ", ")), call. = FALSE)
+    }
+  }
+  # v1-v7's `model_asset` has no per-row release scope beyond a `ver` column (when
+  # present); `mdl_key`-only uniqueness holds only WITHIN one release's registry, so
+  # a `con` whose `model_asset` accidentally spans several releases (the same
+  # `mdl_seq` minted by two different builds) would silently mix their assets.
+  if ("model_asset" %in% DBI::dbListTables(con) &&
+      "ver" %in% DBI::dbListFields(con, "model_asset")) {
+    vers <- DBI::dbGetQuery(con, "SELECT DISTINCT ver FROM model_asset WHERE ver IS NOT NULL")$ver
+    if (length(vers) > 1)
+      stop(sprintf(
+        "app_taxon_shards(): model_asset carries %d distinct `ver` values (%s) -- the mdl_key-only asset join assumes ONE release's registry.",
+        length(vers), paste(vers, collapse = ", ")), call. = FALSE)
+  }
   e <- .app_edges(con)
   mg <- .app_merged(a)
   # v1's `dataset` has no `is_mask` at all -- selecting it unconditionally made the

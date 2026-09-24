@@ -5,8 +5,13 @@
 
 * **Fixed: every v1-v7 input model's asset is now published, not just the merged one.**
   `.app_assets()` used to INNER JOIN `model_asset` to `taxon` on the taxon's MERGED key, which
-  only ever matched the `ds_key = 'ms_merge'` row — a real v7 release lost all 19,811 input COGs
-  (am/bl/rng_iucn/…) and every input pill in the species app rendered struck through. Now a LEFT
+  only ever matched the `ds_key = 'ms_merge'` row — on the real, published v7 tables that INNER
+  JOIN left **0 of 12,120 input edges** with an asset (every input pill in the species app
+  rendered struck through); the fix resolves **10,247 of 12,120** (measured against the real
+  `taxon`/`taxon_model`/`model_asset` parquet, row for row identical to what `apps/species/app.R`
+  itself resolves). The remaining 1,873 are `rng_iucn` models with no `model_asset` row at all — a
+  data gap struck through in BOTH apps, not a join bug (19,811 is `model_asset`'s total non-merged
+  row count across the whole release, not the input-edge count — the wrong denominator). Now a LEFT
   JOIN, and `app_taxon_shards()`'s `card()` resolves an input's asset by `mdl_key` ALONE — exactly
   the join `apps/species/app.R`'s working v1-v7 branch makes (`native_asset |> left_join(d_edges,
   by = "mdl_key")`) — rather than requiring `ds_key` equality too: `model_asset.ds_key` is
@@ -29,20 +34,42 @@
   `NULL` (the default) publishes exactly as before.
 * **New: canonical short metric labels, `.metric_short_label()` and `manifest_build()` backfill.**
   The Atlas's `metricLabelsFromManifest()` reads `manifest$metrics[].label` for the legend title
-  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description) — a
-  release with no curated `layers_{ver}.csv`, or one that left a key unlabelled, published nothing
-  there, or the bare metric-key fragment ("score" for the composite, on the live v7 manifest).
-  `manifest_build()` now backfills any blank `metrics$label` with a canonical, version-independent
+  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description).
+  `manifest_build()` now backfills any BLANK `metrics$label` with a canonical, version-independent
   label ("Overall score" for the composite; "Primary productivity" / "Primary productivity
   (ecoregion-rescaled)" for `primprod`; "{docs category name}: extinction risk[ (ecoregion-
-  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) —
-  never overwriting a label the caller already supplied.
+  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) — but
+  it NEVER overwrites a label the caller already supplied. On the published manifests
+  (2026-09-24): **v3-v8, including v7 (the public default), already carry a curated `label` from
+  `layers_{ver}.csv` and keep showing it unchanged** — v7's composite is still "score" until Ben
+  re-curates it or the manifest is rebuilt without that CSV; only **v1, v2 and v9**, which publish
+  NO `label` column at all today, gain the canonical wording once their manifests are republished.
+  Every release keeps `boot.layers[].label` (the long description) unchanged either way.
 * **`fs` added to `Imports`.** `R/publish.R`'s `fs::dir_create()`/`fs::path()`/`fs::file_exists()`/
   `fs::file_size()` calls (pre-dating this release) were never declared, which made
   `R CMD check`/`devtools::check()` fail immediately on "Namespace dependency missing from
   DESCRIPTION Imports/Depends entries: 'fs'" before it could check anything else.
+* **`app_zones()` validates `zone_names`, loudly.** A malformed `zone_names` (missing `fld`/`key`/
+  `name` columns) now `stopifnot()`s immediately, and a `zone_names` that matches ZERO of a
+  field's real zones now `warning()`s by name — a typo'd `type` (`"programarea"` instead of
+  `"programarea_key"`) or the wrong GeoPackage (a Planning Area file also carries
+  `region_key`/`region_name`, so `app_zone_names(pa_gpkg, "planarea")` "succeeds" against the wrong
+  keys) used to publish `name = NULL` on every zone with no signal at all.
+* **`app_taxon_shards()` asserts the invariant the `mdl_key`-only asset join depends on.** It now
+  stops on a duplicated `(mdl_key, representation)` pair in the asset table, and — for a legacy
+  `model_asset` table that carries a `ver` column — stops if it spans more than one release's `ver`.
+  Neither happens on any real v1-v9 release today; this makes the join's silent-failure mode loud
+  if it ever does.
+* **`extrisk_all`/`extrisk_reptile` get short labels.** v1's two `sp_cat` values `.SP_CAT_LABEL`
+  didn't cover: "All: extinction risk" and "Reptile: extinction risk".
+* **New, exported: `manifest_labels_backfill(m)`.** The SAME backfill rule `manifest_build()`
+  applies while building a manifest from scratch, exposed so a release-side patch can apply it to
+  an ALREADY-PUBLISHED `manifest.json` (read it back, backfill, [validate_manifest()], `PUT`)
+  without reaching into an internal `:::` function. `manifest_build()` now calls this (via the
+  shared internal `.metrics_backfill_labels()`) rather than duplicating the logic, so the two can
+  never drift.
 
-
+# msens 0.43.0
 
 **The `{ver}/app/` data contract, and one scoring method.** Two changes an app or a
 report can see: the release now publishes a version-independent bundle the browser
