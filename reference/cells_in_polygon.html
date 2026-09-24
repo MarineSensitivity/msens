@@ -18,7 +18,7 @@ partially covered edge cells count proportionally."><script async src="https://w
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -71,7 +71,8 @@ partially covered edge cells count proportionally.</p>
 
 
 <dt id="arg-res">res<a class="anchor" aria-label="anchor" href="#arg-res"></a></dt>
-<dd><p>grid resolution in degrees, SQL path only (default <code>0.05</code>)</p></dd>
+<dd><p>ignored, kept for back-compatibility; the resolution now comes from
+the grid registry, which is the only place it was ever right</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -81,16 +82,21 @@ partially covered edge cells count proportionally.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p><strong>Pass a DB connection.</strong> Then the grid is read from the database being
-queried and cannot disagree with it. Two paths, chosen automatically:</p><ul><li><p><strong>v8</strong> (<code>cell</code> carries <code>lon</code>/<code>lat</code>) — a SQL bbox select on <code>cell</code> picks the
-candidates and <code>sf</code> computes exact coverage on just those. No raster is
-touched. For a 2x1.5-degree area this is <strong>~0.02 s</strong> against ~35 s to read
-the whole cell-id raster, and it joins <code>cell_model</code>, which is already
-cell-oriented.</p></li>
-<li><p><strong>v7</strong> (no <code>lon</code>/<code>lat</code>) — falls back to <code><a href="cell_id_raster.html">cell_id_raster()</a></code>, the 0-360
-regional raster that IS v7's grid.</p></li>
-</ul><p>Passing a <code><a href="https://rspatial.github.io/terra/reference/SpatRaster-class.html" class="external-link">terra::SpatRaster</a></code> directly still works, but nothing can then
-verify it matches the database — see <code><a href="cell_id_raster.html">cell_id_raster()</a></code> for how that failed
-silently on v8.</p>
+queried (<code><a href="grid_for_con.html">grid_for_con()</a></code>) and cannot disagree with it. Both generations take
+the SAME path: <code><a href="cells_in_polygon_grid.html">cells_in_polygon_grid()</a></code> computes the cells from the grid
+definition alone, and the result is restricted to the <code>cell_id</code>s the release
+actually holds. No raster is opened on any version — the v7 branch used to read
+the 0-360 cell-id raster and returned <code>terra</code>'s coverage fractions, which
+differed from the v8 path by a mean 0.66 pp on edge cells for no reason anyone
+could act on.</p>
+<p>Longitudes are <strong>unwrapped on the way in</strong> with <code><a href="unwrap_ring.html">unwrap_polygon()</a></code>, because an
+<code>sf</code> polygon is the one place a wrapped antimeridian ring can still arrive. The
+grid function it delegates to reads coordinates literally and guesses nothing.</p>
+<p>Passing a <code><a href="https://rspatial.github.io/terra/reference/SpatRaster-class.html" class="external-link">terra::SpatRaster</a></code> directly still works and still uses
+<code><a href="https://rspatial.github.io/terra/reference/extract.html" class="external-link">terra::extract()</a></code>: a cell-id COG is a lookup IMAGE whose pixel values are ids
+from a frame that may not be the grid's, so arithmetic cannot be applied to it.
+Nothing can verify such a raster matches the database — see <code><a href="cell_id_raster.html">cell_id_raster()</a></code>
+for how that failed silently on v8.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

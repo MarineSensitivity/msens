@@ -18,7 +18,7 @@ silently, since a wrong tile id is still a valid tile id."><script async src="ht
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -72,7 +72,9 @@ silently, since a wrong tile id is still a valid tile id.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Resolution order: the <code>cell_grid</code> table written alongside <code>cell_model</code>, then
-the default. Every v8 database predates that table and correctly falls back.</p>
+the grid the connection itself implies (<code><a href="grid_for_con.html">grid_for_con()</a></code>), then the compiled
+default. v8/v9 resolve to 7200 either way; v1-v7 resolve to 3103 instead of
+silently taking the global width.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

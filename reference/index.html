@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -133,6 +133,13 @@
 
         <dt>
 
+          <code><a href="manifest_labels_backfill.html">manifest_labels_backfill()</a></code>
+
+        </dt>
+        <dd>Backfill blank metric short labels on a manifest</dd>
+
+        <dt>
+
           <code><a href="preview_app_url.html">preview_app_url()</a></code> <code><a href="preview_app_url.html">preview_docs_url()</a></code>
 
         </dt>
@@ -151,6 +158,13 @@
 
         </dt>
         <dd>Validate a version manifest</dd>
+
+        <dt>
+
+          <code><a href="validate_manifest_app.html">validate_manifest_app()</a></code>
+
+        </dt>
+        <dd>Validate a manifest's <code>app</code> block against <code>inst/schema/app_manifest.schema.json</code></dd>
 
         <dt>
 
@@ -1370,6 +1384,13 @@
 
       <dl><dt>
 
+          <code><a href="APP_UNIT_TYPES.html">APP_UNIT_TYPES</a></code>
+
+        </dt>
+        <dd>The zone types that may become a drawable unit, best first</dd>
+
+        <dt>
+
           <code><a href="HEX_RES.html">HEX_RES</a></code>
 
         </dt>
@@ -1384,10 +1405,248 @@
 
         <dt>
 
+          <code><a href="app_alias_shards.html">app_alias_shards()</a></code>
+
+        </dt>
+        <dd>Build the <code>app/alias/{xx}.json</code> shards</dd>
+
+        <dt>
+
+          <code><a href="app_boot.html">app_boot()</a></code>
+
+        </dt>
+        <dd>Build <code>app/boot.json</code></dd>
+
+        <dt>
+
+          <code><a href="app_bundle_build.html">app_bundle_build()</a></code>
+
+        </dt>
+        <dd>Build the whole <code>{ver}/app/</code> bundle into a directory</dd>
+
+        <dt>
+
+          <code><a href="app_capabilities.html">app_capabilities()</a></code>
+
+        </dt>
+        <dd>What a STATIC client can actually fetch, by anonymous HTTPS HEAD</dd>
+
+        <dt>
+
+          <code><a href="app_cell_tile_check.html">app_cell_tile_check()</a></code>
+
+        </dt>
+        <dd>Assert every tile's cell ids satisfy the tile key at a given grid width</dd>
+
+        <dt>
+
+          <code><a href="app_cell_tile_digests.html">app_cell_tile_digests()</a></code>
+
+        </dt>
+        <dd>Per-metric multiset digest of the wide tiles, and of <code>cell_metric</code></dd>
+
+        <dt>
+
+          <code><a href="app_cell_tiles.html">app_cell_tiles()</a></code>
+
+        </dt>
+        <dd>Write the wide <code>app/cell/tile={t}/</code> Parquet tiles</dd>
+
+        <dt>
+
+          <code><a href="app_datasets.html">app_datasets()</a></code>
+
+        </dt>
+        <dd>The release's datasets, normalised</dd>
+
+        <dt>
+
+          <code><a href="app_flower_default.html">app_flower_default()</a></code>
+
+        </dt>
+        <dd>Versioned flower-plot defaults, per subregion</dd>
+
+        <dt>
+
+          <code><a href="app_id_chr.html">app_id_chr()</a></code>
+
+        </dt>
+        <dd>Normalise an id column to the text every generation must publish</dd>
+
+        <dt>
+
+          <code><a href="app_json.html">app_json()</a></code>
+
+        </dt>
+        <dd>Serialize an <code>app/</code> object exactly as it is published</dd>
+
+        <dt>
+
+          <code><a href="app_manifest_block.html">app_manifest_block()</a></code>
+
+        </dt>
+        <dd>The <code>app</code> block for <code>manifest.json</code></dd>
+
+        <dt>
+
+          <code><a href="app_model.html">app_model()</a></code>
+
+        </dt>
+        <dd>The <code>mdl_id</code> -&gt; <code>mdl_key</code> mapping the <code>cell_model</code> join needs</dd>
+
+        <dt>
+
+          <code><a href="app_one_file_per_partition.html">app_one_file_per_partition()</a></code>
+
+        </dt>
+        <dd>Assert a partitioned bundle directory holds exactly one file per partition</dd>
+
+        <dt>
+
+          <code><a href="app_palettes.html">app_palettes()</a></code>
+
+        </dt>
+        <dd>The 11-stop palettes the app must draw with</dd>
+
+        <dt>
+
+          <code><a href="app_schema_path.html">app_schema_path()</a></code> <code><a href="app_schema_path.html">app_schema_names()</a></code>
+
+        </dt>
+        <dd>Path to a published <code>app/</code> JSON Schema</dd>
+
+        <dt>
+
+          <code><a href="app_table_descriptor.html">app_table_descriptor()</a></code> <code><a href="app_table_descriptor.html">app_table_manifest()</a></code>
+
+        </dt>
+        <dd>Describe a written <code>app/</code> Parquet file for <code>boot.json$tables</code></dd>
+
+        <dt>
+
+          <code><a href="app_tables_match.html">app_tables_match()</a></code>
+
+        </dt>
+        <dd>Assert <code>boot$tables</code> names exactly the Parquet objects under <code>app/</code></dd>
+
+        <dt>
+
+          <code><a href="app_taxa.html">app_taxa()</a></code>
+
+        </dt>
+        <dd>Build <code>app/taxa.json</code>, the picker index</dd>
+
+        <dt>
+
+          <code><a href="app_taxon_shards.html">app_taxon_shards()</a></code>
+
+        </dt>
+        <dd>Build the <code>app/taxon/{xx}.json</code> shards</dd>
+
+        <dt>
+
+          <code><a href="app_taxon_table.html">app_taxon_table()</a></code>
+
+        </dt>
+        <dd>The normalised scored-taxon table (<code>app/taxon.parquet</code> and the shard source)</dd>
+
+        <dt>
+
+          <code><a href="app_taxonomy.html">app_taxonomy()</a></code>
+
+        </dt>
+        <dd>The WoRMS hierarchy the Composition treemap joins, restricted to this release</dd>
+
+        <dt>
+
+          <code><a href="app_units.html">app_units()</a></code>
+
+        </dt>
+        <dd>The drawable scored spatial units of a release</dd>
+
+        <dt>
+
+          <code><a href="app_validate.html">app_validate()</a></code>
+
+        </dt>
+        <dd>Validate an object against its published <code>app/</code> schema</dd>
+
+        <dt>
+
+          <code><a href="app_zone_names.html">app_zone_names()</a></code>
+
+        </dt>
+        <dd>Zone names from a release's spatial-unit geometry</dd>
+
+        <dt>
+
+          <code><a href="app_zone_taxon.html">app_zone_taxon()</a></code>
+
+        </dt>
+        <dd>The normalised <code>app/zone_taxon.parquet</code></dd>
+
+        <dt>
+
+          <code><a href="app_zone_tbl.html">app_zone_tbl()</a></code>
+
+        </dt>
+        <dd>The ONE zone table each spatial unit publishes</dd>
+
+        <dt>
+
+          <code><a href="app_zones.html">app_zones()</a></code>
+
+        </dt>
+        <dd>Per-zone summaries, so a report on a Program Area never loads a cell</dd>
+
+        <dt>
+
+          <code><a href="app_zones_unique.html">app_zones_unique()</a></code>
+
+        </dt>
+        <dd>Assert every zone-keyed object holds each zone exactly once</dd>
+
+        <dt>
+
+          <code><a href="b64url_encode.html">b64url_encode()</a></code> <code><a href="b64url_encode.html">b64url_decode()</a></code>
+
+        </dt>
+        <dd>Base64url, RFC 4648 section 5, no padding</dd>
+
+        <dt>
+
           <code><a href="build_storage_index.html">build_storage_index()</a></code>
 
         </dt>
         <dd>Generate index pages for a bucket tree</dd>
+
+        <dt>
+
+          <code><a href="cells_in_polygon_grid.html">cells_in_polygon_grid()</a></code>
+
+        </dt>
+        <dd>Cells a polygon covers, from the grid definition alone</dd>
+
+        <dt>
+
+          <code><a href="cells_in_study_area.html">cells_in_study_area()</a></code>
+
+        </dt>
+        <dd>Restrict a cell set to the release's study area</dd>
+
+        <dt>
+
+          <code><a href="geojson_sfc.html">geojson_sfc()</a></code>
+
+        </dt>
+        <dd>Build an <code>sfc</code> from parsed GeoJSON coordinate arrays</dd>
+
+        <dt>
+
+          <code><a href="grid_for_con.html">grid_for_con()</a></code>
+
+        </dt>
+        <dd>The grid a release's <code>cell_id</code> values index, read from the connection</dd>
 
         <dt>
 
@@ -1461,10 +1720,45 @@
 
         <dt>
 
+          <code><a href="place_codec_fixture.html">place_codec_fixture()</a></code>
+
+        </dt>
+        <dd>The shared <code>g1</code> codec vectors</dd>
+
+        <dt>
+
+          <code><a href="place_encode.html">place_encode()</a></code> <code><a href="place_encode.html">place_encode_strict()</a></code> <code><a href="place_encode.html">place_decode()</a></code>
+
+        </dt>
+        <dd>Encode places into a URL hash, and decode them back (<code>g1</code>)</dd>
+
+        <dt>
+
+          <code><a href="place_fixture.html">place_fixture()</a></code>
+
+        </dt>
+        <dd>Read a place fixture</dd>
+
+        <dt>
+
+          <code><a href="place_fixture_ids.html">place_fixture_ids()</a></code>
+
+        </dt>
+        <dd>Every place fixture id</dd>
+
+        <dt>
+
           <code><a href="s3_list_all.html">s3_list_all()</a></code>
 
         </dt>
         <dd>List every object under a prefix</dd>
+
+        <dt>
+
+          <code><a href="sfc_geojson.html">sfc_geojson()</a></code>
+
+        </dt>
+        <dd>An <code>sfc</code> as parsed GeoJSON coordinate arrays</dd>
 
         <dt>
 
@@ -1496,10 +1790,24 @@
 
         <dt>
 
+          <code><a href="unwrap_ring.html">unwrap_ring()</a></code> <code><a href="unwrap_ring.html">unwrap_polygon()</a></code>
+
+        </dt>
+        <dd>Unwrap a ring's longitudes, so no edge spans more than 180 degrees</dd>
+
+        <dt>
+
           <code><a href="view_zoom.html">view_zoom()</a></code>
 
         </dt>
         <dd>Zoom that frames a given angular radius</dd>
+
+        <dt>
+
+          <code><a href="zone_tbl_for.html">zone_tbl_for()</a></code>
+
+        </dt>
+        <dd>Zone table name for a spatial unit</dd>
       </dl></div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>

@@ -18,7 +18,7 @@ which spatial units were scored — is read, not assumed."><script async src="ht
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -65,7 +65,8 @@ which spatial units were scored — is <em>read</em>, not assumed.</p>
 <span>  capabilities <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  zone_tiles <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  zone_sets <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  app <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -131,6 +132,20 @@ draw a single zone outline on any version but the newest.</p></dd>
 
 <dt id="arg-extra">extra<a class="anchor" aria-label="anchor" href="#arg-extra"></a></dt>
 <dd><p>named list merged into the manifest (e.g. <code>zone_sets</code>)</p></dd>
+
+
+<dt id="arg-app">app<a class="anchor" aria-label="anchor" href="#arg-app"></a></dt>
+<dd><p>the <code>app</code> block, or <code>NULL</code> (default) for a manifest with <strong>no <code>app</code>
+key at all</strong>. Give it <code>capabilities</code> (a named list of single logicals: <code>cell</code>,
+<code>cell_model</code>, <code>taxonomy</code>, <code>alias</code>, <code>pmtiles_s3</code>) and optionally <code>built_at</code> and
+<code>probed</code>; <code>schema</code>, <code>base</code> and <code>boot</code> are filled in from <code>ver</code> and <code>base</code>.</p>
+<p><strong>The capabilities are INPUTS.</strong> msens never derives them and never copies them
+from <code>capabilities</code> above: what a static browser can fetch is a question about
+the BUCKET, and only an anonymous HTTPS HEAD answers it. v7 and v7b both
+advertise <code>cell_species_list</code> because the <em>server</em> can read a <code>cell_model</code> that
+never left the server. The notebook probes with <code><a href="app_capabilities.html">app_capabilities()</a></code> and passes
+the result here; see <code><a href="app_manifest_block.html">app_manifest_block()</a></code>, which builds the same block
+standalone.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -18,7 +18,7 @@ score / flower-plot pipeline when the area is a Program Area."><script async src
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.42.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -77,6 +77,16 @@ score / flower-plot pipeline when the area is a Program Area.</p>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>tibble(metric_key, score, component, even)</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>A component with <strong>no <code>zone_metric</code> row is absent, not zero</strong>: v7.1 deletes the
+row of a (zone, component) pair that fails the coverage floor, and a Program
+Area whose component has no scored cell never had one. The inner joins here
+preserve that — the row simply does not come back, and <code><a href="mean_score.html">mean_score()</a></code> averages
+over what is present, which is how the published composite was computed.
+<strong>Reportability is the ABSENCE of the <code>_ecoregion_rescaled</code> row</strong>, never the
+<code>_prepctareaweighting</code> row, which stays behind even for a dropped pair.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
