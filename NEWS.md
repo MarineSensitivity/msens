@@ -8,14 +8,18 @@
   only ever matched the `ds_key = 'ms_merge'` row — a real v7 release lost all 19,811 input COGs
   (am/bl/rng_iucn/…) and every input pill in the species app rendered struck through. Now a LEFT
   JOIN, and `app_taxon_shards()`'s `card()` resolves an input's asset by `mdl_key` ALONE — exactly
-  the join `apps/species/app.R`'s working v1-v7 branch makes — rather than requiring `ds_key`
-  equality too: `model_asset.ds_key` is normalised by `backfill_versions.qmd`
-  (`normalize_ds_key()`, "am_0.05" -> "am") while `taxon_model.ds_key` is the release's own native,
-  unnormalised spelling, so the SAME v7 database carries two different spellings for the same
-  model and a `ds_key`-keyed join silently found nothing. `.app_assets()`/`.app_edges()` also
-  normalise `ds_key` themselves now, for display consistency. `.app_edges()`'s `key` column is
-  cast through `.app_id_cast()` (HUGEINT-safe) instead of a naive `CAST(... AS VARCHAR)`, matching
-  `app_taxon_table()`'s cast so the two never disagree on a DOUBLE-typed `mdl_seq`.
+  the join `apps/species/app.R`'s working v1-v7 branch makes (`native_asset |> left_join(d_edges,
+  by = "mdl_key")`) — rather than requiring `ds_key` equality too: `model_asset.ds_key` is
+  normalised by `backfill_versions.qmd` (`normalize_ds_key()`, "am_0.05" -> "am") while
+  `taxon_model.ds_key` (and `dataset.ds_key`) are the release's own native, unnormalised spelling,
+  so the SAME v7 database carries two different spellings for the same model and a `ds_key`-keyed
+  join silently found nothing. `ds_key` is deliberately left UNNORMALISED everywhere in this path
+  (mirroring the species app exactly), since `mdl_key` already uniquely names one model and
+  normalising would only swap that mismatch for a new one against `dataset.ds_key`/
+  `app_datasets()`. `.app_edges()`'s `key` column is cast through `.app_id_cast()` (HUGEINT-safe)
+  instead of a naive `CAST(... AS VARCHAR)`, matching `app_taxon_table()`'s cast so the two never
+  disagree on a DOUBLE-typed `mdl_seq`. Verified against the real v7 registry rows for the walrus
+  (WoRMS 137077 / mdl_seq 54383): both inputs now resolve to their live, published S3 objects.
 * **New: `zones.<unit>[i].name` and `app_zone_names()`.** `zone`/`zone_metric` never carry a human
   name, only the key a report picks from ("ALA") — `score_zones.qmd`'s `zone` table has no name
   column on any generation. The name ("Aleutian Arc") lives on the zone-set's own GeoPackage
@@ -33,6 +37,10 @@
   (ecoregion-rescaled)" for `primprod`; "{docs category name}: extinction risk[ (ecoregion-
   rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) —
   never overwriting a label the caller already supplied.
+* **`fs` added to `Imports`.** `R/publish.R`'s `fs::dir_create()`/`fs::path()`/`fs::file_exists()`/
+  `fs::file_size()` calls (pre-dating this release) were never declared, which made
+  `R CMD check`/`devtools::check()` fail immediately on "Namespace dependency missing from
+  DESCRIPTION Imports/Depends entries: 'fs'" before it could check anything else.
 
 
 

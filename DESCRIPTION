@@ -27,6 +27,7 @@ Imports:
     DT,
     FNN,
     duckdb (>= 1.5.0),
+    fs,
     ggiraph,
     ggplot2,
     glue,
