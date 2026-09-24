@@ -1,3 +1,17 @@
+# msens 0.44.1
+
+* **Fixed: `app_capabilities()`'s `cell`/`cell_model` probes no longer default to a
+  tile that no release ever publishes.** `tile=0` is not a real tile on any
+  generation (`usa05` releases, v1-v7b, start at `tile=19`; `global05`, v8+,
+  starts at `tile=436`), so an unhinted probe 403s on both every single time and
+  the staged `app{}` manifest block always said `cell: false, cell_model: false`
+  — a false published contract, even when the tiles genuinely existed on S3.
+  New optional `cell_tile`/`cell_model_tile` arguments let a caller pass the REAL
+  first tile a build actually wrote (there is no way for this function to
+  discover it itself: anonymous `ListObjectsV2` is denied on the bucket); the
+  default (`NULL`) still probes the old `tile=0` placeholder, so this is purely
+  additive and every existing caller's behavior is unchanged.
+
 # msens 0.44.0
 
 **Three `app/` bundle release-side gaps the Atlas app had been working around (parity audit

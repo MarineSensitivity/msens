@@ -1795,19 +1795,38 @@ app_cell_tile_digests <- function(con, dir) {
 #' a timeout — is FALSE, and the probed URL and status are returned beside it so a
 #' FALSE can be explained rather than guessed at.
 #'
+#' `cell` and `cell_model` default to `tile=0` — a placeholder that **no real
+#' release ever publishes** (`usa05` releases, v1-v7b, start at `tile=19`;
+#' `global05`, v8+, starts at `tile=436`), so an unhinted call 403s on both
+#' every time and under-reports them FALSE even when the tiles genuinely
+#' exist. Pass `cell_tile`/`cell_model_tile` — the REAL first tile number a
+#' build actually wrote (there is no way to discover this from the bucket
+#' alone: anonymous `ListObjectsV2` is denied, confirmed against the real
+#' bucket 2026-09-26) — whenever the caller has one, e.g. from
+#' [app_bundle_build()]'s own written `cell/tile=*/` directory or
+#' [app_bundle_cell_model_plan()]`$keys[1]`.
+#'
 #' @param ver version label
 #' @param base atlas base URL from [atlas_base_url()]
 #' @param sample named list of `capability -> key relative to {base}/{ver}/`,
-#'   overriding the defaults
+#'   overriding the defaults (including `cell`/`cell_model` directly, if a
+#'   caller needs a shape other than `tile={n}/data_0.parquet`)
 #' @param timeout seconds per probe
+#' @param cell_tile the real first `app/cell/tile={n}/` this release actually
+#'   wrote, or `NULL` (default) to probe the never-real `tile=0` placeholder
+#' @param cell_model_tile the real first `serve/cell_model/tile={n}/` this
+#'   release actually wrote, or `NULL` (default) for the `tile=0` placeholder
 #' @return a list with `capabilities` (named logicals) and `probed`
 #' @importFrom httr2 request req_method req_timeout req_error req_perform resp_status
 #' @export
 #' @concept app
-app_capabilities <- function(ver, base = atlas_base_url(), sample = list(), timeout = 20) {
+app_capabilities <- function(ver, base = atlas_base_url(), sample = list(), timeout = 20,
+                             cell_tile = NULL, cell_model_tile = NULL) {
   def <- list(
-    cell       = "app/cell/tile=0/data_0.parquet",
-    cell_model = "serve/cell_model/tile=0/data_0.parquet",
+    cell       = sprintf("app/cell/tile=%s/data_0.parquet",
+                         if (is.null(cell_tile)) "0" else cell_tile),
+    cell_model = sprintf("serve/cell_model/tile=%s/data_0.parquet",
+                         if (is.null(cell_model_tile)) "0" else cell_model_tile),
     taxonomy   = "app/taxonomy.parquet",
     alias      = "app/alias/00.json",
     pmtiles_s3 = "native/pmtiles/index.json")

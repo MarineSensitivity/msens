@@ -4,7 +4,14 @@
 \alias{app_capabilities}
 \title{What a STATIC client can actually fetch, by anonymous HTTPS HEAD}
 \usage{
-app_capabilities(ver, base = atlas_base_url(), sample = list(), timeout = 20)
+app_capabilities(
+  ver,
+  base = atlas_base_url(),
+  sample = list(),
+  timeout = 20,
+  cell_tile = NULL,
+  cell_model_tile = NULL
+)
 }
 \arguments{
 \item{ver}{version label}
@@ -12,9 +19,16 @@ app_capabilities(ver, base = atlas_base_url(), sample = list(), timeout = 20)
 \item{base}{atlas base URL from \code{\link[=atlas_base_url]{atlas_base_url()}}}
 
 \item{sample}{named list of \verb{capability -> key relative to \{base\}/\{ver\}/},
-overriding the defaults}
+overriding the defaults (including \code{cell}/\code{cell_model} directly, if a
+caller needs a shape other than \code{tile={n}/data_0.parquet})}
 
 \item{timeout}{seconds per probe}
+
+\item{cell_tile}{the real first \verb{app/cell/tile=\{n\}/} this release actually
+wrote, or \code{NULL} (default) to probe the never-real \code{tile=0} placeholder}
+
+\item{cell_model_tile}{the real first \verb{serve/cell_model/tile=\{n\}/} this
+release actually wrote, or \code{NULL} (default) for the \code{tile=0} placeholder}
 }
 \value{
 a list with \code{capabilities} (named logicals) and \code{probed}
@@ -30,5 +44,16 @@ describes the bucket.
 A capability is TRUE only on a 200 (or 206). Anything else — 403, 404, a redirect,
 a timeout — is FALSE, and the probed URL and status are returned beside it so a
 FALSE can be explained rather than guessed at.
+
+\code{cell} and \code{cell_model} default to \code{tile=0} — a placeholder that \strong{no real
+release ever publishes} (\code{usa05} releases, v1-v7b, start at \code{tile=19};
+\code{global05}, v8+, starts at \code{tile=436}), so an unhinted call 403s on both
+every time and under-reports them FALSE even when the tiles genuinely
+exist. Pass \code{cell_tile}/\code{cell_model_tile} — the REAL first tile number a
+build actually wrote (there is no way to discover this from the bucket
+alone: anonymous \code{ListObjectsV2} is denied, confirmed against the real
+bucket 2026-09-26) — whenever the caller has one, e.g. from
+\code{\link[=app_bundle_build]{app_bundle_build()}}'s own written \verb{cell/tile=*/} directory or
+\code{\link[=app_bundle_cell_model_plan]{app_bundle_cell_model_plan()}}\verb{$keys[1]}.
 }
 \concept{app}

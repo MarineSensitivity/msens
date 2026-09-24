@@ -608,6 +608,32 @@ test_that("app capabilities are PROBED, never copied from manifest$capabilities"
   })
 })
 
+test_that("cell_tile/cell_model_tile override the never-real tile=0 default", {
+  # unhinted: still probes the placeholder tile=0 (backward compatible)
+  p0 <- app_capabilities("v7", base = BASE, timeout = 2)
+  expect_identical(p0$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=0/data_0.parquet"))
+  expect_identical(p0$probed$cell_model$url,
+                   paste0(BASE, "/v7/serve/cell_model/tile=0/data_0.parquet"))
+
+  # hinted: probes the REAL first tile a build actually wrote (usa05 releases
+  # start at tile=19, global05 at tile=436 -- neither is ever 0)
+  p1 <- app_capabilities("v7", base = BASE, timeout = 2, cell_tile = 19, cell_model_tile = 19)
+  expect_identical(p1$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=19/data_0.parquet"))
+  expect_identical(p1$probed$cell_model$url,
+                   paste0(BASE, "/v7/serve/cell_model/tile=19/data_0.parquet"))
+  # against example.invalid every probe still answers nothing -- the point of
+  # this test is the URL constructed, not a live 200 (no bucket to hit here)
+  expect_false(any(unlist(p1$capabilities)))
+  expect_setequal(names(p1$capabilities),
+                  c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"))
+
+  # `sample=` still overrides a whole relative path directly, taking priority
+  # over cell_tile/cell_model_tile for that one capability
+  p2 <- app_capabilities("v7", base = BASE, timeout = 2, cell_tile = 19,
+                         sample = list(cell = "app/cell/tile=436/data_0.parquet"))
+  expect_identical(p2$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=436/data_0.parquet"))
+})
+
 test_that("boot.json tables carry an href, byte size and content digest", {
   with_synth("v9", function(con) {
     b <- build(con, "v9")
