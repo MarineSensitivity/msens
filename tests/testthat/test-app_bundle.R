@@ -235,6 +235,28 @@ test_that("zone name is NULL by default and populated when zone_names is supplie
   })
 })
 
+test_that("zone bbox is NULL by default and populated when zone_bbox is supplied (R3-C3)", {
+  with_synth("v9", function(con) {
+    bare <- Filter(function(x) x$key == "AAA", app_zones(con)$programarea)[[1]]
+    expect_null(bare$bbox)               # purely additive: unset by default
+
+    bb <- data.frame(fld = "programarea_key", key = c("AAA", "GEO"),
+                     w = c(-166, 179), s = c(52, 51), e = c(-164, -179), n = c(54, 53),
+                     stringsAsFactors = FALSE)
+    z <- app_zones(con, zone_bbox = bb)$programarea
+    a <- Filter(function(x) x$key == "AAA", z)[[1]]
+    b <- Filter(function(x) x$key == "BBB", z)[[1]]
+    expect_equal(a$bbox, c(-166, 52, -164, 54))
+    expect_null(b$bbox)                  # a key with no matching row publishes NULL
+  })
+})
+
+test_that("REGRESSION: a malformed zone_bbox is rejected, not silently ignored", {
+  with_synth("v9", function(con) {
+    expect_error(app_zones(con, zone_bbox = data.frame(x = 1)), "fld.*key.*w.*s.*e.*n")
+  })
+})
+
 test_that("app_zone_names() reads {type}_key/{type}_name off a GeoPackage", {
   skip_if_not_installed("sf")
   pts <- sf::st_sfc(sf::st_point(c(-170, 52)), sf::st_point(c(-165, 53)), crs = 4326)
@@ -257,6 +279,44 @@ test_that("app_zone_names() errors clearly when the expected columns are missing
   f <- withr::local_tempfile(fileext = ".gpkg")
   sf::st_write(d, f, quiet = TRUE)
   expect_error(app_zone_names(f, "programarea"), "programarea_key")
+})
+
+test_that("app_zone_bbox() computes a WGS84 extent per zone key, dateline-aware (R3-C3)", {
+  skip_if_not_installed("sf")
+  # ALA: an ordinary zone, nowhere near the antimeridian
+  ala <- sf::st_polygon(list(rbind(c(-166, 52), c(-164, 52), c(-165, 54), c(-166, 52))))
+  # GEO: a zone whose vertices straddle the antimeridian (a Bering-Sea-like sliver
+  # stored, as real zone-set geometry is, as raw -180..180 longitudes on both sides
+  # of the cut -- 179 on one edge, -179 on the other)
+  geo <- sf::st_polygon(list(rbind(c(179, 51), c(-179, 51), c(-179, 53), c(179, 53),
+                                   c(179, 51))))
+  d <- sf::st_sf(programarea_key = c("ALA", "GEO"),
+                 geometry = sf::st_sfc(ala, geo, crs = 4326))
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+
+  bb <- app_zone_bbox(f, "programarea")
+  expect_equal(nrow(bb), 2L)
+  expect_equal(unique(bb$fld), "programarea_key")
+
+  a <- bb[bb$key == "ALA", ]
+  expect_equal(a$w, -166); expect_equal(a$e, -164)
+  expect_true(a$w < a$e)               # ordinary zone: west < east
+  expect_equal(a$s, 52); expect_equal(a$n, 54)
+
+  g <- bb[bb$key == "GEO", ]
+  expect_equal(g$w, 179); expect_equal(g$e, -179)
+  expect_true(g$w > g$e)                # antimeridian-crossing signal, per lon_span()
+  expect_equal(g$s, 51); expect_equal(g$n, 53)
+})
+
+test_that("app_zone_bbox() errors clearly when the expected key column is missing", {
+  skip_if_not_installed("sf")
+  pts <- sf::st_sfc(sf::st_point(c(0, 0)), crs = 4326)
+  d <- sf::st_sf(some_other_key = "X", geometry = pts)
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+  expect_error(app_zone_bbox(f, "programarea"), "programarea_key")
 })
 
 test_that("REGRESSION (E3): a malformed zone_names is rejected, not silently ignored", {

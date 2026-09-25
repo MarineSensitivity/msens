@@ -506,6 +506,78 @@ app_zone_names <- function(path, type) {
   out[!duplicated(out$key), , drop = FALSE]
 }
 
+#' Per-zone WGS84 bounding boxes, for a search that zooms without a loaded tile
+#'
+#' V1's `zoneBoundsFromMap()` (the Atlas app) reads `querySourceFeatures()`, which
+#' only sees vector-tile features already IN VIEW -- a zone far outside the current
+#' camera has no bounds to zoom to and the search falls back to an announce-only
+#' path. Publishing each zone's bbox here (R3-C3, round 3 plan) makes that search
+#' independent of tile state: read the bounds from `boot.zones[].bbox`,
+#' never a queried source.
+#'
+#' Computed from the SAME zone-set GeoPackage [app_zone_names()] reads (one vertex
+#' extent per distinct `{type}_key`), never from a release's `zone`/`zone_cell`
+#' tables -- a Program Area's geometry does not change release to release (see
+#' `../CLAUDE.md`'s "`zone_cell` is shared, not per-release"), so one extraction
+#' serves every version on that zone-set.
+#'
+#' **Dateline-aware.** A naive `min`/`max` of longitude is the wrong extent for a
+#' zone that crosses the antimeridian (the Aleutian Arc has vertices near both
+#' +180 and -180; the naive box is ~358 degrees wide, essentially the whole
+#' globe). [lon_span()] picks the narrower of the `-180..180` and `0..360` frames
+#' per zone; when that narrower frame's `xmax` exceeds 180 (a real wraparound,
+#' e.g. `170..190`) it is folded back into `-180..180` (`190 - 360 = -170`) so the
+#' PUBLISHED box reads `w = 170 > e = -170` -- the west/east reversal IS the
+#' wraparound signal a consumer checks for, the same convention
+#' `msens:::.app_bbox()`'s callers already expect from `lon_span_agg()`, just
+#' folded back rather than left `> 180` (a zone bbox is drawn by a search zoom,
+#' not handed straight to `fitBounds()`, so it is published in the frame a
+#' human-readable `w`/`e` pair should be in).
+#'
+#' @param path a GeoPackage (or any `sf::st_read()`-able file) carrying a
+#'   `{type}_key` column, e.g. `data/zone_sets.csv`'s `source` (the same file
+#'   [app_zone_names()] reads)
+#' @param type the zone type (`"programarea"`, `"planarea"`, `"ecoregion"`,
+#'   `"subregion"`), i.e. the `{type}_key` column prefix
+#' @return `data.frame(fld, key, w, s, e, n)`, one row per distinct key with at
+#'   least one finite vertex. `w`/`e` are WGS84 longitude degrees; `w > e` marks a
+#'   zone that crosses the antimeridian (read it as wrapping, not as an empty
+#'   box). A key with only non-finite/empty geometry is dropped, not published
+#'   with `NA` bounds.
+#' @importFrom sf st_read st_geometry st_coordinates
+#' @export
+#' @concept app
+app_zone_bbox <- function(path, type) {
+  kcol <- paste0(type, "_key")
+  d <- sf::st_read(path, quiet = TRUE)
+  if (!kcol %in% names(d))
+    stop(sprintf("geometry has no %s column (has: %s)", kcol,
+                 paste(setdiff(names(d), attr(d, "sf_column")), collapse = ", ")),
+         call. = FALSE)
+  keys <- unique(as.character(d[[kcol]]))
+  rows <- lapply(keys, function(k) {
+    g  <- sf::st_geometry(d[which(as.character(d[[kcol]]) == k), ])
+    xy <- sf::st_coordinates(g)
+    if (!is.matrix(xy) || !nrow(xy)) return(NULL)
+    lon <- xy[, "X"]; lat <- xy[, "Y"]
+    ok  <- is.finite(lon) & is.finite(lat)
+    if (!any(ok)) return(NULL)
+    lon <- lon[ok]; lat <- lat[ok]
+    sp <- lon_span(lon)
+    if (!all(is.finite(sp))) return(NULL)
+    w <- sp[1]; e <- if (sp[2] > 180) sp[2] - 360 else sp[2]
+    data.frame(fld = kcol, key = k, w = w, s = min(lat), e = e, n = max(lat),
+              stringsAsFactors = FALSE)
+  })
+  rows <- rows[!vapply(rows, is.null, logical(1))]
+  if (!length(rows))
+    return(data.frame(fld = character(), key = character(), w = numeric(),
+                      s = numeric(), e = numeric(), n = numeric(),
+                      stringsAsFactors = FALSE))
+  out <- do.call(rbind, rows)
+  out[!duplicated(out$key), , drop = FALSE]
+}
+
 #' Per-zone summaries, so a report on a Program Area never loads a cell
 #'
 #' `n_cells` and the coverage-weighted `area_km2` come from `zone_cell` joined to
@@ -525,15 +597,25 @@ app_zone_names <- function(path, type) {
 #'   `name` columns (`stopifnot()`), and a `warning()` fires when it names ZERO of
 #'   the real zones of a field it lists — the wrong `type` or the wrong geometry
 #'   file otherwise fails silently (every zone published with `name = NULL`).
+#' @param zone_bbox optional `data.frame(fld, key, w, s, e, n)` from
+#'   [app_zone_bbox()]; `NULL` (default) publishes every zone with `bbox = NULL`,
+#'   exactly as before — this parameter is purely additive, same shape of
+#'   optionality as `zone_names`. A non-`NULL` value must carry `fld`/`key`/`w`/
+#'   `s`/`e`/`n` columns (`stopifnot()`).
 #' @return a named list `zone_type -> list of zone objects`
 #' @importFrom DBI dbGetQuery
 #' @export
 #' @concept app
-app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
+app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL,
+                      zone_bbox = NULL) {
   if (!is.null(zone_names))
     stopifnot("`zone_names` must be a data.frame with `fld`, `key`, `name` columns" =
                 is.data.frame(zone_names) &&
                 all(c("fld", "key", "name") %in% names(zone_names)))
+  if (!is.null(zone_bbox))
+    stopifnot("`zone_bbox` must be a data.frame with `fld`, `key`, `w`, `s`, `e`, `n` columns" =
+                is.data.frame(zone_bbox) &&
+                all(c("fld", "key", "w", "s", "e", "n") %in% names(zone_bbox)))
   vz <- sdm_val_col(con, "zone")
   vm <- sdm_val_col(con, "zone_metric")
   if (is.null(chosen)) chosen <- app_zone_tbl(con)
@@ -604,6 +686,10 @@ app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
         zone_names$name[which(!is.na(zone_names$fld) & !is.na(zone_names$key) &
                               zone_names$fld == fld & zone_names$key == k)] else
           character()
+      bx <- if (!is.null(zone_bbox))
+        zone_bbox[which(!is.na(zone_bbox$fld) & !is.na(zone_bbox$key) &
+                        zone_bbox$fld == fld & zone_bbox$key == k), , drop = FALSE] else
+          NULL
       list(key      = k,
            name     = if (length(nm) && !is.na(nm[1]) && nzchar(nm[1])) nm[1] else NULL,
            n_cells  = as.integer(rows$n_cells[i]),
@@ -612,7 +698,9 @@ app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
            metrics  = .obj(stats::setNames(as.list(as.numeric(sc$val)), sc$metric_key)),
            coverage = if (nrow(cv))
              stats::setNames(as.list(as.numeric(cv$val)),
-                             sub("_coverage$", "", cv$metric_key)) else NULL)
+                             sub("_coverage$", "", cv$metric_key)) else NULL,
+           bbox     = if (!is.null(bx) && nrow(bx))
+             as.numeric(c(bx$w[1], bx$s[1], bx$e[1], bx$n[1])) else NULL)
     })
   }), sub("_key$", "", flds))
 }
@@ -645,6 +733,11 @@ app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
 #'   rbound across every zone type the release publishes — human names for
 #'   `zones.<unit>[i].name` (e.g. "Aleutian Arc" for `ALA`). `NULL` (default)
 #'   publishes every zone with `name = NULL`, exactly as before.
+#' @param zone_bbox optional `data.frame(fld, key, w, s, e, n)` from
+#'   [app_zone_bbox()], rbound across every zone type the release publishes —
+#'   `zones.<unit>[i].bbox` (R3-C3), so the app's search can zoom to a zone
+#'   without a loaded vector tile. `NULL` (default) publishes every zone with
+#'   `bbox = NULL`, exactly as before.
 #' @param built_at ISO timestamp to stamp (default: now, UTC, second precision)
 #' @return a validated `boot.json` object
 #' @importFrom DBI dbGetQuery dbListTables
@@ -653,6 +746,7 @@ app_zones <- function(con, flds = NULL, chosen = NULL, zone_names = NULL) {
 #' @concept app
 app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
                      zone_sets = NULL, chosen = NULL, zone_names = NULL,
+                     zone_bbox = NULL,
                      built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   if (is.null(chosen)) chosen <- app_zone_tbl(con, manifest, geom_keys, zone_sets)
   g   <- grid_spec_for(manifest$grid_id %||% grid_for_ver(ver))
@@ -710,7 +804,8 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
            zoom = sa$zoom[i], ecoregions = sa$ecoregions[i])),
     units          = app_units(con, manifest, geom_keys, chosen),
     layers         = layers,
-    zones          = .obj(app_zones(con, chosen = chosen, zone_names = zone_names)),
+    zones          = .obj(app_zones(con, chosen = chosen, zone_names = zone_names,
+                                    zone_bbox = zone_bbox)),
     flower_default = .obj(app_flower_default(con)),
     datasets       = app_datasets(con),
     palettes       = app_palettes(.app_colormaps(con, manifest)),
@@ -1930,6 +2025,9 @@ app_table_manifest <- function(descriptors, ver, base = atlas_base_url())
 #' @param zone_names optional `data.frame(fld, key, name)` (rbind of
 #'   [app_zone_names()] across the release's zone types), passed to [app_boot()] for
 #'   `zones.<unit>[i].name`. `NULL` (default) publishes no names, exactly as before.
+#' @param zone_bbox optional `data.frame(fld, key, w, s, e, n)` (rbind of
+#'   [app_zone_bbox()] across the release's zone types), passed to [app_boot()] for
+#'   `zones.<unit>[i].bbox`. `NULL` (default) publishes no bboxes, exactly as before.
 #' @param strict stop at the first failing stage (`TRUE`, the default), so a
 #'   half-written bundle is never published by accident. `FALSE` runs every stage,
 #'   records what failed in `$failed`, and leaves the stages that worked on disk —
@@ -1945,6 +2043,7 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
                              base = atlas_base_url(), geom_keys = list(),
                              cell_tiles = TRUE, strict = TRUE,
                              taxonomy_csv = NULL, zone_sets = NULL, zone_names = NULL,
+                             zone_bbox = NULL,
                              built_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")) {
   dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
   if (is.null(manifest)) manifest <- manifest_build(con, ver, base = base)
@@ -2047,7 +2146,7 @@ app_bundle_build <- function(con, ver, dir_out, manifest = NULL,
     b <- app_boot(con, ver, manifest,
                   tables = app_table_manifest(unname(descr), ver, base),
                   geom_keys = geom_keys, zone_sets = zone_sets, chosen = chosen,
-                  zone_names = zone_names, built_at = built_at)
+                  zone_names = zone_names, zone_bbox = zone_bbox, built_at = built_at)
     put("boot.json", b)
     # a hard stop: one zone, one row, in every object keyed by zone
     app_zones_unique(zt, b)

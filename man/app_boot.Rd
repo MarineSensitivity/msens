@@ -13,6 +13,7 @@ app_boot(
   zone_sets = NULL,
   chosen = NULL,
   zone_names = NULL,
+  zone_bbox = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -39,6 +40,12 @@ bundle agrees on the same table}
 rbound across every zone type the release publishes — human names for
 \verb{zones.<unit>[i].name} (e.g. "Aleutian Arc" for \code{ALA}). \code{NULL} (default)
 publishes every zone with \code{name = NULL}, exactly as before.}
+
+\item{zone_bbox}{optional \code{data.frame(fld, key, w, s, e, n)} from
+\code{\link[=app_zone_bbox]{app_zone_bbox()}}, rbound across every zone type the release publishes —
+\verb{zones.<unit>[i].bbox} (R3-C3), so the app's search can zoom to a zone
+without a loaded vector tile. \code{NULL} (default) publishes every zone with
+\code{bbox = NULL}, exactly as before.}
 
 \item{built_at}{ISO timestamp to stamp (default: now, UTC, second precision)}
 }

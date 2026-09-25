@@ -1,3 +1,20 @@
+# msens 0.44.2
+
+* **Added: `app_zone_bbox()`, and `app_zones()`/`app_boot()`/`app_bundle_build()` now publish a
+  per-zone `bbox`** (round-3 plan item R3-C3 / app defect R3-B14). The Atlas app's scores search
+  zooms to a zone by reading `querySourceFeatures()`, which only sees vector-tile features already
+  in view — a zone far outside the current camera falls back to an announce-only path with no zoom.
+  `app_zone_bbox(path, type)` reads the SAME zone-set GeoPackage `app_zone_names()` already reads
+  and returns `data.frame(fld, key, w, s, e, n)`, one WGS84 extent per distinct `{type}_key`,
+  **dateline-aware**: it uses `lon_span()` to pick the narrower of the `-180..180`/`0..360` frames
+  per zone, then folds a wraparound frame's `xmax > 180` back into `-180..180` — a zone crossing the
+  antimeridian (e.g. the Aleutian Arc) is published with `w > e` (e.g. `w = 170, e = -170`), the
+  west/east reversal itself signalling the wraparound rather than a spurious ~358-degree box. New
+  `zone_bbox` argument on `app_zones()`, `app_boot()` and `app_bundle_build()` is purely additive
+  (`NULL` default publishes `bbox = NULL` for every zone, exactly as before) and threads through the
+  same way `zone_names` already does. `inst/schema/app_boot.schema.json`'s `zones[].bbox` field
+  already allowed this shape (optional, 4 numbers) — this release is the first to populate it.
+
 # msens 0.44.1
 
 * **Fixed: `app_capabilities()`'s `cell`/`cell_model` probes no longer default to a

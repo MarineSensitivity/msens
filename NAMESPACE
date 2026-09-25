@@ -34,6 +34,7 @@ export(app_taxon_table)
 export(app_taxonomy)
 export(app_units)
 export(app_validate)
+export(app_zone_bbox)
 export(app_zone_names)
 export(app_zone_taxon)
 export(app_zone_tbl)
@@ -369,6 +370,7 @@ importFrom(sf,
   st_as_sfc,
   st_bbox,
   st_cast,
+  st_coordinates,
   st_covered_by,
   st_crs,
   st_drop_geometry,

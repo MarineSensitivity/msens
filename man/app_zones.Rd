@@ -4,7 +4,7 @@
 \alias{app_zones}
 \title{Per-zone summaries, so a report on a Program Area never loads a cell}
 \usage{
-app_zones(con, flds = NULL, chosen = NULL, zone_names = NULL)
+app_zones(con, flds = NULL, chosen = NULL, zone_names = NULL, zone_bbox = NULL)
 }
 \arguments{
 \item{con}{a DBI connection}
@@ -17,6 +17,12 @@ this parameter is purely additive. A non-\code{NULL} value must carry \code{fld}
 \code{name} columns (\code{stopifnot()}), and a \code{warning()} fires when it names ZERO of
 the real zones of a field it lists — the wrong \code{type} or the wrong geometry
 file otherwise fails silently (every zone published with \code{name = NULL}).}
+
+\item{zone_bbox}{optional \code{data.frame(fld, key, w, s, e, n)} from
+\code{\link[=app_zone_bbox]{app_zone_bbox()}}; \code{NULL} (default) publishes every zone with \code{bbox = NULL},
+exactly as before — this parameter is purely additive, same shape of
+optionality as \code{zone_names}. A non-\code{NULL} value must carry \code{fld}/\code{key}/\code{w}/
+\code{s}/\code{e}/\code{n} columns (\code{stopifnot()}).}
 }
 \value{
 a named list \verb{zone_type -> list of zone objects}
