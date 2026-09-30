@@ -4,7 +4,14 @@
 \alias{native_asset_backfill}
 \title{Backfill a v8-shaped \code{native_asset} for a \code{model_asset}-only release}
 \usage{
-native_asset_backfill(model_asset, crosswalk, native_ref, taxon_key = NULL)
+native_asset_backfill(
+  model_asset,
+  crosswalk,
+  native_ref,
+  store,
+  taxon_key = NULL,
+  ...
+)
 }
 \arguments{
 \item{model_asset}{data frame with \code{mdl_seq}, \code{ds_key}, \code{cog_url} (the release's own)}
@@ -14,11 +21,17 @@ native_asset_backfill(model_asset, crosswalk, native_ref, taxon_key = NULL)
 \item{native_ref}{a later release's \code{native_asset} (v8 shape); only rows with
 \code{representation == 'native'} are used}
 
+\item{store}{data frame \code{asset_url} (the reference row's current URL), \code{hash}: where each
+original lives in the content-addressed store (\code{\link[=native_store_rewrite]{native_store_rewrite()}}). REQUIRED: a matched
+original with no mapping is an error, so a release never points at a versioned path.}
+
 \item{taxon_key}{the release's \code{taxon} key values (v1-v7: \code{taxon.mdl_seq}). A \code{model} row
 whose \code{mdl_seq} is one of them carries it as \code{ms_merge_key}, which is what
 \code{.app_merged()} reads to pick a taxon's own surface: v1-v7 do that for single-dataset
 taxa too, not only for \code{ms_merge} models, and dropping it loses \code{merged} on those cards
 (found in the R4-F dry run: 6,729 v7 taxa). \code{NULL} falls back to \code{ds_key == 'ms_merge'}.}
+
+\item{...}{passed to \code{\link[=native_url]{native_url()}} (\code{base}, \code{pmtiles_base})}
 }
 \value{
 a data frame with v8's \code{native_asset} columns
