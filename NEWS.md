@@ -1,3 +1,18 @@
+# msens 0.49.0
+
+**Re-pointing a release at the store (asset-store M3 support; code only).**
+
+* **`native_asset_backfill()` gains `key_map`** (`mdl_seq`, `ref_key`): a v1-v7 model whose original is not reachable
+  by the `native_key_v8()` spelling is matched explicitly. IUCN ranges are keyed by scientific NAME in v1-v7 and by
+  `id_no` in v8+, so the caller matches an exact, unambiguous name (and checks the v7 cells lie on the range) and
+  passes the v8 `mdl_key`. A duplicate model, two models claiming one original, an original `native_ref` does not hold,
+  or a model that is not an input of the release is an error.
+* **New: `native_asset_restore_model()`.** v9's `native_asset` lost every vector-range `model` row (the gridded
+  0.05 degree COG next to the PMTiles), so v9 showed no Interpolated view of any range although the COGs were published.
+  The function adds, for each PMTiles `native` row without a `model` row, one gridded row (same `ds_key`,
+  `ms_merge_key`, bbox; 1-100, `spectral_r`) from a `mdl_key -> asset_url` table; a range with no COG is an error;
+  idempotent.
+
 # msens 0.48.0
 
 **Density-response models (`gm`, `nc`): transforms for unscored density datasets.** These datasets

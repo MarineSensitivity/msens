@@ -204,3 +204,37 @@ test_that("native_store_index lists only {ds_key}/{hash}.ext objects, ignoring t
   empty <- tempfile(); writeLines(c("#!/bin/sh", "exit 1"), empty); Sys.chmod(empty, "0755")
   expect_equal(native_store_index(aws = empty), character())                # empty store is not an error
 })
+
+test_that("key_map matches a v1-v7 model whose original keys differently (IUCN: name in v7, id_no in v8)", {
+  ma <- fx_ma; xw <- fx_xw
+  ref <- rbind(fx_ref, ref_row("rng_iucn|132859", "pmtiles", layer = "rng_iucn"))
+  st  <- rbind(fx_store, data.frame(asset_url = "https://x.invalid/rng_iucn|132859", hash = H16b))
+  o0 <- native_asset_backfill(ma, xw, ref, st, base = B)
+  expect_equal(o0$representation[o0$mdl_key == "30"], "model")                       # no key join: one row
+  o1 <- native_asset_backfill(ma, xw, ref, st, base = B, key_map = data.frame(mdl_seq = 30L, ref_key = "rng_iucn|132859"))
+  expect_setequal(o1$representation[o1$mdl_key == "30"], c("model", "native"))      # now it has its original
+  expect_equal(o1$asset_url[o1$mdl_key == "30" & o1$representation == "native"], paste0(B, "/native/rng_iucn/", H16b, ".pmtiles"))
+  expect_equal(o1$content_hash[o1$mdl_key == "30" & o1$representation == "native"], H16b)
+  expect_equal(nrow(o1), nrow(o0) + 1L)                                              # nothing else moved
+  expect_error(native_asset_backfill(ma, xw, ref, st, base = B, key_map = data.frame(mdl_seq = 30L, ref_key = "rng_iucn|1")), "does not hold")
+  expect_error(native_asset_backfill(ma, xw, ref, st, base = B, key_map = data.frame(mdl_seq = c(30L, 30L), ref_key = c("rng_iucn|132859", "bl|777"))), "twice")
+  expect_error(native_asset_backfill(ma, xw, ref, st, base = B, key_map = data.frame(mdl_seq = c(30L, 20L), ref_key = c("rng_iucn|132859", "rng_iucn|132859"))), "one original")
+  expect_error(native_asset_backfill(ma, xw, ref, st, base = B, key_map = data.frame(mdl_seq = 999L, ref_key = "rng_iucn|132859")), "not an input")
+})
+
+test_that("native_asset_restore_model gives every vector range its gridded row back, and refuses a range with no COG", {
+  na <- rbind(ref_row("bl|777", "pmtiles", layer = "bl", bbox = c(1, 2, 3, 4)),
+              ref_row("am|Fis-1", "cog", "native"), ref_row("am|Fis-1", "cog", "model"))
+  na$content_hash <- c(H16, H16b, NA_character_)
+  mu <- data.frame(mdl_key = "bl|777", asset_url = paste0(B, "/cog/global05/", H16b, ".tif"), content_hash = H16b)
+  o <- native_asset_restore_model(na, mu)
+  expect_equal(nrow(o), 4L)
+  r <- o[o$mdl_key == "bl|777" & o$representation == "model", ]
+  expect_equal(nrow(r), 1L)
+  expect_equal(c(r$asset_type, r$ds_key, r$colormap, r$source_layer), c("cog", "bl", "spectral_r", NA))
+  expect_equal(c(r$rescale_min, r$rescale_max, r$xmin, r$xmax, r$ymin, r$ymax), c(1, 100, 1, 2, 3, 4))   # bbox follows the range
+  expect_equal(r$asset_url, mu$asset_url); expect_equal(r$content_hash, H16b)
+  expect_equal(o[o$mdl_key == "am|Fis-1", ], na[na$mdl_key == "am|Fis-1", ], ignore_attr = TRUE)           # nothing else touched
+  expect_equal(nrow(native_asset_restore_model(o, mu)), 4L)                                                  # idempotent
+  expect_error(native_asset_restore_model(na, mu[0, ]), "no gridded COG")
+})

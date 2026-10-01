@@ -10,6 +10,7 @@ native_asset_backfill(
   native_ref,
   store,
   taxon_key = NULL,
+  key_map = NULL,
   ...
 )
 }
@@ -30,6 +31,11 @@ whose \code{mdl_seq} is one of them carries it as \code{ms_merge_key}, which is 
 \code{.app_merged()} reads to pick a taxon's own surface: v1-v7 do that for single-dataset
 taxa too, not only for \code{ms_merge} models, and dropping it loses \code{merged} on those cards
 (found in the R4-F dry run: 6,729 v7 taxa). \code{NULL} falls back to \code{ds_key == 'ms_merge'}.}
+
+\item{key_map}{optional data frame \code{mdl_seq}, \code{ref_key}: v1-v7 models whose original is NOT reachable by
+\code{\link[=native_key_v8]{native_key_v8()}} spelling, matched some other way (IUCN ranges key by scientific NAME in v1-v7 and by
+\code{id_no} in v8+, so the caller matches them by an exact, unambiguous name and passes the v8 \code{mdl_key}
+here). Overrides the derived key for those models only; a \code{ref_key} absent from \code{native_ref} is an error.}
 
 \item{...}{passed to \code{\link[=native_url]{native_url()}} (\code{base}, \code{pmtiles_base})}
 }

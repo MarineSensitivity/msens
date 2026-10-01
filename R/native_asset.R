@@ -188,11 +188,15 @@ native_hash_file <- function(path)
 #'   `.app_merged()` reads to pick a taxon's own surface: v1-v7 do that for single-dataset
 #'   taxa too, not only for `ms_merge` models, and dropping it loses `merged` on those cards
 #'   (found in the R4-F dry run: 6,729 v7 taxa). `NULL` falls back to `ds_key == 'ms_merge'`.
+#' @param key_map optional data frame `mdl_seq`, `ref_key`: v1-v7 models whose original is NOT reachable by
+#'   [native_key_v8()] spelling, matched some other way (IUCN ranges key by scientific NAME in v1-v7 and by
+#'   `id_no` in v8+, so the caller matches them by an exact, unambiguous name and passes the v8 `mdl_key`
+#'   here). Overrides the derived key for those models only; a `ref_key` absent from `native_ref` is an error.
 #' @param ... passed to [native_url()] (`base`, `pmtiles_base`)
 #' @return a data frame with v8's `native_asset` columns
 #' @export
 #' @concept app
-native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, taxon_key = NULL, ...) {
+native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, taxon_key = NULL, key_map = NULL, ...) {
   stopifnot(is.data.frame(model_asset), is.data.frame(crosswalk), is.data.frame(native_ref),
             all(c("mdl_seq", "ds_key", "cog_url") %in% names(model_asset)),
             all(c("mdl_seq", "mdl_key") %in% names(crosswalk)),
@@ -230,6 +234,17 @@ native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, tax
 
   inp <- ma[ma$ds_key != "ms_merge", , drop = FALSE]
   inp$ref_key <- native_key_v8(xw$key[match(inp$mdl_seq, xw$mdl_seq)])
+  if (!is.null(key_map)) {
+    stopifnot(is.data.frame(key_map), all(c("mdl_seq", "ref_key") %in% names(key_map)))
+    km <- data.frame(mdl_seq = seq_chr(key_map$mdl_seq), ref_key = as.character(key_map$ref_key), stringsAsFactors = FALSE)
+    if (anyDuplicated(km$mdl_seq)) stop("native_asset_backfill(): key_map names a model twice", call. = FALSE)
+    if (anyDuplicated(km$ref_key)) stop("native_asset_backfill(): key_map points two models at one original", call. = FALSE)
+    if (!all(km$ref_key %in% nat$mdl_key))
+      stop("native_asset_backfill(): key_map names an original that native_ref does not hold (e.g. ",
+           paste(utils::head(setdiff(km$ref_key, nat$mdl_key), 2), collapse = ", "), ")", call. = FALSE)
+    if (!all(km$mdl_seq %in% inp$mdl_seq)) stop("native_asset_backfill(): key_map names a model that is not an input of this release", call. = FALSE)
+    inp$ref_key[match(km$mdl_seq, inp$mdl_seq)] <- km$ref_key
+  }
   j <- match(inp$ref_key, nat$mdl_key)
   hit <- which(!is.na(j))
   keep <- c("asset_type", "asset_url", "rescale_min", "rescale_max", "colormap",
@@ -273,4 +288,41 @@ native_vintage_check <- function(ds, ds_ref) {
   }, "")
   data.frame(ds_key = ds$ds_key, same = ifelse(is.na(differs), NA, differs == ""),
              differs = differs, stringsAsFactors = FALSE)
+}
+
+#' Restore the gridded (`model`) representation of vector ranges
+#'
+#' A vector range is published twice: the source polygons (`native`, PMTiles) and the same range gridded onto
+#' the 0.05 degree scoring grid (`model`, COG). v8 registers both; v9's `native_asset` lost every vector
+#' `model` row, so v9 shows no Interpolated view of any range although the gridded COGs were published (and are
+#' byte-identical to v8's). This adds, for every `native` PMTiles row that has no `model` row for the same
+#' `mdl_key`, one `model` COG row: same `ds_key`, `ms_merge_key`, bbox and `source_layer`, `rescale_min/max` 1-100,
+#' `colormap` `spectral_r`, and the URL (and `content_hash`) from `model_urls`. A PMTiles row with no URL in
+#' `model_urls` is an ERROR, never skipped: a release must not silently lose a representation twice.
+#'
+#' @param native_asset a v8-shaped `native_asset` (with `content_hash` once re-pointed to the store)
+#' @param model_urls data frame `mdl_key`, `asset_url` (+ optional `content_hash`): the gridded COG of each range
+#' @return `native_asset` with the missing `model` rows appended
+#' @export
+#' @concept app
+native_asset_restore_model <- function(native_asset, model_urls) {
+  stopifnot(is.data.frame(native_asset), is.data.frame(model_urls),
+            all(c("mdl_key", "asset_url") %in% names(model_urls)), !anyDuplicated(model_urls$mdl_key),
+            all(c("mdl_key", "ds_key", "asset_type", "representation") %in% names(native_asset)))
+  vec <- native_asset[native_asset$representation == "native" & native_asset$asset_type == "pmtiles", , drop = FALSE]
+  have <- native_asset$mdl_key[native_asset$representation == "model"]
+  need <- vec[!vec$mdl_key %in% have, , drop = FALSE]
+  if (!nrow(need)) return(native_asset)
+  u <- model_urls$asset_url[match(need$mdl_key, model_urls$mdl_key)]
+  if (anyNA(u))
+    stop(sprintf("native_asset_restore_model(): %d range(s) have no gridded COG in model_urls (e.g. %s)",
+                 sum(is.na(u)), paste(utils::head(need$mdl_key[is.na(u)], 2), collapse = ", ")), call. = FALSE)
+  add <- need
+  add$asset_type <- "cog"; add$representation <- "model"; add$asset_url <- u
+  add$rescale_min <- 1L; add$rescale_max <- 100L; add$colormap <- "spectral_r"; add$source_layer <- NA_character_
+  if ("content_hash" %in% names(native_asset))
+    add$content_hash <- if ("content_hash" %in% names(model_urls)) model_urls$content_hash[match(need$mdl_key, model_urls$mdl_key)] else NA_character_
+  out <- rbind(native_asset, add[, names(native_asset), drop = FALSE])
+  rownames(out) <- NULL
+  out
 }
