@@ -1,28 +1,117 @@
-# msens 0.45.0
+# msens 0.48.0
 
-**Density-response models (`gm`, `nc`) onto the merge's [0,100] scale — the transforms behind
-`workflows/compare_density_methods.qmd`, and the fault that broke the v8 `gm` ingest.**
+**Density-response models (`gm`, `nc`): transforms for unscored density datasets.** These datasets
+are displayed as RAW density for now (unscored); nothing here changes merge/scoring code.
 
-* **New: `density_to_suit(d, method, ...)`** (`R/density.R`, `@concept ingest`) — the four
-  candidate transforms from a density surface (individuals km^-2) onto the [0,100] scale the
-  per-taxon merge operates on: `"cap"` (linear to the p99.5 quantile, clamped — what the v8
-  ingests do), `"log"` (linear in log density between a floor and cap quantile), `"ud"` (the
-  population percentile of the cell, so `val >= 100 - p` is exactly the p % core — the
-  utilization-distribution isopleth convention) and `"qmap"` (quantile mapping of the density
-  distribution onto a reference suitability distribution, e.g. the taxon's own AquaMaps/AquaX
-  values over the same cells). Absent (`d <= 0`) is 0 under every method; `NA` passes through.
-  One fixture per rule in `test-density.R`.
-* **New: `density_annual(x, n_intervals)`** — the annual mean over ALL intervals of the year,
-  an absent interval counting as ZERO. The v8 `gm`/`nc` ingests averaged only the intervals in
-  which a cell was present, which biases every annual cell upward (a cell modelled in 2 of 12
-  months at density 1 is 0.17 animals km^-2 year-round, not 1). Asserted in `test-density.R`.
-* **`cells_from_raster()` gains `digits` (default 2, unchanged).** It always rounded `val` to two
-  decimals — right for a [0,100] surface, wrong for native units: the v8 `gm` ingest rasterized
-  RAW density (0.001–0.01 animals km^-2 for beaked, sperm and Rice's whales) through it before
-  rescaling, so every cell below 0.005 became 0 and the survivors were quantized to 0.01 — which
-  is why `gm|WORMS:137035` (beaked whales) and `gm|WORMS:1576133` (Rice's whale) are flat 100
-  over a fraction of their domain and the sperm whale sits at 90. Pass `digits = 6` (or `NULL`)
-  for native units, or rescale first. Regression fixture in `test-ingest.R`.
+* **New, exported: `density_to_suit(d, method, ...)`** — maps a density surface (individuals km^-2)
+  onto [0,100] by `"cap"` (linear to the p99.5 quantile, clamped), `"log"` (log density between a
+  floor and cap quantile), `"ud"` (population percentile of the cell; `val >= 100 - p` is the p %
+  core) or `"qmap"` (quantile mapping onto a reference suitability distribution). Absent
+  (`d <= 0`) is 0 under every method; `NA` passes through. Raw density needs no call: simply do
+  not rescale.
+* **New, exported: `density_annual(x, n_intervals)`** — annual mean over ALL intervals of the
+  year, an absent interval counting as zero (averaging only present intervals biases cells upward).
+* **`cells_from_raster()` gains `digits` (default 2, unchanged).** `val` was always rounded to two
+  decimals, which zeroed raw densities below 0.005; pass `digits = 6` (or `NULL`) for native units.
+* **Fixed: `density_to_suit(method = "ud")` with near-equal densities.** Ties were grouped via
+  `factor()`, whose `as.character()` collapsed near-equal doubles into duplicate levels and errored
+  on real surfaces; ties are now grouped on the numeric values. Regression tests added.
+
+# msens 0.47.0
+
+**One content-addressed store for every distribution file of every release (R4-F redesign; code
+only, nothing published).** Supersedes the "key = MD5 of the object's bytes" half of 0.46.0: a
+future `publish_native.qmd` computes a SOURCE-content hash, so a bytes key would make every
+re-publish look new and upload everything again. A release now owns pointers, never files.
+
+* **New: the store catalog** (`R/asset_store.R`). `assets.parquet` (bucket root, public) has one
+  row per stored object (`store, key, content_hash, enc, asset_type, grid_id, ds_key, bytes, md5,
+  created, first_ver`). `asset_catalog_check()` rejects a duplicated key, a key that is not
+  `{cog/<grid>|native/<ds>}/<16 hex>.<tif|pmtiles>`, a `store`/`grid_id`/`ds_key`/extension that
+  disagrees with the key, and any row whose key hash is not `content_hash_encoded(content_hash,
+  enc)`; `asset_catalog_add()` is idempotent and refuses a key that already names other content;
+  `asset_catalog_read()`/`asset_catalog_write()`; `store_unreferenced()` (catalog rows no
+  release's pointer table names - the only way anything is ever pruned); `asset_key_collisions()`
+  (one key, one content); `asset_key()`, `asset_key_from_url()` (a versioned path returns `NA`).
+* **New: the hash functions.** `asset_enc(family)` is the encoding tag of each file family
+  (`cog_model` = `int1u-trunc-nd0-ovr` - terra truncates doubles into INT1U, so that is part of the identity -, `native_am`, `native_ax`, `native_pmtiles` = `mvt-z0-10-simp10`,
+  ...). `native_vector_hash()` / `native_vector_hashes()` hash a model's features as
+  `publish_pmtiles()` tiles them (EPSG:4326, XY, empties dropped; sorted WKB + the `mdl_key`/`ds_key`
+  tile attributes), blind to feature order and to source columns that never reach the tile.
+  `native_raster_rows()` decodes a COG to the `(cell_id, val)` rows it was painted from, and
+  `content_hashes_df()` runs the same DuckDB reduction on a data frame, so a hash from decoded
+  pixels equals one from the Parquet.
+* **Changed: `native_key()` accepts only a 16-hex source-content hash** (a 32-hex bytes-MD5 is an
+  error; the MD5 is the catalog's integrity column and equals a single-part S3 ETag).
+  **`native_url()` defaults PMTiles to the S3 store** like COGs (`pmtiles_base` now defaults to
+  `base`); the file-host copy is no longer a default home. `native_store_index()` matches only 16-hex
+  objects.
+* **Changed: `native_asset` gains `content_hash`** (last column): the 16-hex store hash of the object
+  a row points at, `NA` for a legacy versioned pointer. `native_store_rewrite()` and
+  `native_asset_backfill()` set it (a v7 model row takes it from its `cog/{grid}/{hash}.tif` URL).
+* 0.45.0 (gm/nc density transforms) is uncommitted work in the `msens-density` worktree; this
+  release does not include it.
+
+# msens 0.46.0
+
+**Backfill v1-v7 with the ORIGINAL species surfaces, so the atlas can show Original | Interpolated
+on the public release (R4-F; dry run only, nothing published).** (0.45.0 is the uncommitted
+density-response work in the main checkout; this branch skips to 0.46.0 to leave it free.)
+
+* **New: an unversioned, content-addressed store for ORIGINAL surfaces** (twin of the model-COG store):
+  `native/{ds_key}/{hash}.tif|.pmtiles` on S3, PMTiles also at the file host
+  `pmtiles/native/{ds_key}/{hash}.pmtiles`. `native_key()` / `native_url()` (twins of `content_url()`),
+  `native_store_index()` (twin of `cog_store_index()`), `native_hash_file()` (MD5 of bytes) and
+  `native_store_rewrite()` (re-point a `native_asset`'s originals to the store; an unmapped row is an
+  error). A 16-hex hash is a SOURCE-content hash, a 32-hex hash is the MD5 of an existing object's
+  bytes; identical content re-published is the same key, so nothing is uploaded twice.
+* **New: `native_asset_backfill(model_asset, crosswalk, native_ref, store, taxon_key)`** builds a v8-shaped
+  `native_asset` for a `model_asset`-only release: one `representation = 'model'` COG row per model
+  (the gridded 0.05 deg surface, which v1-v7 used to mislabel `native`) plus one `native` row per
+  INPUT model whose original a later release already publishes (PMTiles range or the 0.5 deg
+  AquaMaps COG), matched on the stable model key. Keyed by `mdl_seq` as a string, like v1-v7's
+  `taxon_model`; a duplicate `(mdl_key, representation)` is an error; unmatched inputs keep one
+  `model` row. Original URLs are the STORE's (`store` maps the reference's URL to a hash), never the
+  reference release's versioned paths.
+* **New: `native_key_v8()`** spells v1-v7 keys the way v8 does (`bl|bl:22698216` -> `bl|22698216`,
+  `ch_nmfs|ch_nmfs:Acropora globiceps` -> `ch_nmfs|Acropora_globiceps`); **`native_vintage_check()`**
+  compares the two releases' `dataset` vintage columns so an original is reused only for the same
+  source.
+* `app_taxon_shards()` needs no change: `.app_assets()` already prefers a `native_asset` table, so a
+  v7-shaped release that carries the backfilled table ships shards whose inputs list both `rep`s
+  (regression test added; only `assets` changes, `merged` and every other field are identical).
+  A release that gains `native_asset` now advertises the `native_representation` capability.
+
+# msens 0.44.2
+
+* **Added: `app_zone_bbox()`, and `app_zones()`/`app_boot()`/`app_bundle_build()` now publish a
+  per-zone `bbox`** (round-3 plan item R3-C3 / app defect R3-B14). The Atlas app's scores search
+  zooms to a zone by reading `querySourceFeatures()`, which only sees vector-tile features already
+  in view — a zone far outside the current camera falls back to an announce-only path with no zoom.
+  `app_zone_bbox(path, type)` reads the SAME zone-set GeoPackage `app_zone_names()` already reads
+  and returns `data.frame(fld, key, w, s, e, n)`, one WGS84 extent per distinct `{type}_key`,
+  **dateline-aware**: it uses `lon_span()` to pick the narrower of the `-180..180`/`0..360` frames
+  per zone, then folds a wraparound frame's `xmax > 180` back into `-180..180` — a zone crossing the
+  antimeridian (e.g. the Aleutian Arc) is published with `w > e` (e.g. `w = 170, e = -170`), the
+  west/east reversal itself signalling the wraparound rather than a spurious ~358-degree box. New
+  `zone_bbox` argument on `app_zones()`, `app_boot()` and `app_bundle_build()` is purely additive
+  (`NULL` default publishes `bbox = NULL` for every zone, exactly as before) and threads through the
+  same way `zone_names` already does. `inst/schema/app_boot.schema.json`'s `zones[].bbox` field
+  already allowed this shape (optional, 4 numbers) — this release is the first to populate it.
+
+# msens 0.44.1
+
+* **Fixed: `app_capabilities()`'s `cell`/`cell_model` probes no longer default to a
+  tile that no release ever publishes.** `tile=0` is not a real tile on any
+  generation (`usa05` releases, v1-v7b, start at `tile=19`; `global05`, v8+,
+  starts at `tile=436`), so an unhinted probe 403s on both every single time and
+  the staged `app{}` manifest block always said `cell: false, cell_model: false`
+  — a false published contract, even when the tiles genuinely existed on S3.
+  New optional `cell_tile`/`cell_model_tile` arguments let a caller pass the REAL
+  first tile a build actually wrote (there is no way for this function to
+  discover it itself: anonymous `ListObjectsV2` is denied on the bucket); the
+  default (`NULL`) still probes the old `tile=0` placeholder, so this is purely
+  additive and every existing caller's behavior is unchanged.
 
 # msens 0.44.0
 
@@ -31,8 +120,13 @@
 
 * **Fixed: every v1-v7 input model's asset is now published, not just the merged one.**
   `.app_assets()` used to INNER JOIN `model_asset` to `taxon` on the taxon's MERGED key, which
-  only ever matched the `ds_key = 'ms_merge'` row — a real v7 release lost all 19,811 input COGs
-  (am/bl/rng_iucn/…) and every input pill in the species app rendered struck through. Now a LEFT
+  only ever matched the `ds_key = 'ms_merge'` row — on the real, published v7 tables that INNER
+  JOIN left **0 of 12,120 input edges** with an asset (every input pill in the species app
+  rendered struck through); the fix resolves **10,247 of 12,120** (measured against the real
+  `taxon`/`taxon_model`/`model_asset` parquet, row for row identical to what `apps/species/app.R`
+  itself resolves). The remaining 1,873 are `rng_iucn` models with no `model_asset` row at all — a
+  data gap struck through in BOTH apps, not a join bug (19,811 is `model_asset`'s total non-merged
+  row count across the whole release, not the input-edge count — the wrong denominator). Now a LEFT
   JOIN, and `app_taxon_shards()`'s `card()` resolves an input's asset by `mdl_key` ALONE — exactly
   the join `apps/species/app.R`'s working v1-v7 branch makes (`native_asset |> left_join(d_edges,
   by = "mdl_key")`) — rather than requiring `ds_key` equality too: `model_asset.ds_key` is
@@ -55,20 +149,42 @@
   `NULL` (the default) publishes exactly as before.
 * **New: canonical short metric labels, `.metric_short_label()` and `manifest_build()` backfill.**
   The Atlas's `metricLabelsFromManifest()` reads `manifest$metrics[].label` for the legend title
-  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description) — a
-  release with no curated `layers_{ver}.csv`, or one that left a key unlabelled, published nothing
-  there, or the bare metric-key fragment ("score" for the composite, on the live v7 manifest).
-  `manifest_build()` now backfills any blank `metrics$label` with a canonical, version-independent
+  and layer picker's SHORT text (`boot.layers[].label` is deliberately the long description).
+  `manifest_build()` now backfills any BLANK `metrics$label` with a canonical, version-independent
   label ("Overall score" for the composite; "Primary productivity" / "Primary productivity
   (ecoregion-rescaled)" for `primprod`; "{docs category name}: extinction risk[ (ecoregion-
-  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) —
-  never overwriting a label the caller already supplied.
+  rescaled)]" for every species category, matching the docs repo's `receptors.qmd` headings) — but
+  it NEVER overwrites a label the caller already supplied. On the published manifests
+  (2026-09-24): **v3-v8, including v7 (the public default), already carry a curated `label` from
+  `layers_{ver}.csv` and keep showing it unchanged** — v7's composite is still "score" until Ben
+  re-curates it or the manifest is rebuilt without that CSV; only **v1, v2 and v9**, which publish
+  NO `label` column at all today, gain the canonical wording once their manifests are republished.
+  Every release keeps `boot.layers[].label` (the long description) unchanged either way.
 * **`fs` added to `Imports`.** `R/publish.R`'s `fs::dir_create()`/`fs::path()`/`fs::file_exists()`/
   `fs::file_size()` calls (pre-dating this release) were never declared, which made
   `R CMD check`/`devtools::check()` fail immediately on "Namespace dependency missing from
   DESCRIPTION Imports/Depends entries: 'fs'" before it could check anything else.
+* **`app_zones()` validates `zone_names`, loudly.** A malformed `zone_names` (missing `fld`/`key`/
+  `name` columns) now `stopifnot()`s immediately, and a `zone_names` that matches ZERO of a
+  field's real zones now `warning()`s by name — a typo'd `type` (`"programarea"` instead of
+  `"programarea_key"`) or the wrong GeoPackage (a Planning Area file also carries
+  `region_key`/`region_name`, so `app_zone_names(pa_gpkg, "planarea")` "succeeds" against the wrong
+  keys) used to publish `name = NULL` on every zone with no signal at all.
+* **`app_taxon_shards()` asserts the invariant the `mdl_key`-only asset join depends on.** It now
+  stops on a duplicated `(mdl_key, representation)` pair in the asset table, and — for a legacy
+  `model_asset` table that carries a `ver` column — stops if it spans more than one release's `ver`.
+  Neither happens on any real v1-v9 release today; this makes the join's silent-failure mode loud
+  if it ever does.
+* **`extrisk_all`/`extrisk_reptile` get short labels.** v1's two `sp_cat` values `.SP_CAT_LABEL`
+  didn't cover: "All: extinction risk" and "Reptile: extinction risk".
+* **New, exported: `manifest_labels_backfill(m)`.** The SAME backfill rule `manifest_build()`
+  applies while building a manifest from scratch, exposed so a release-side patch can apply it to
+  an ALREADY-PUBLISHED `manifest.json` (read it back, backfill, [validate_manifest()], `PUT`)
+  without reaching into an internal `:::` function. `manifest_build()` now calls this (via the
+  shared internal `.metrics_backfill_labels()`) rather than duplicating the logic, so the two can
+  never drift.
 
-
+# msens 0.43.0
 
 **The `{ver}/app/` data contract, and one scoring method.** Two changes an app or a
 report can see: the release now publishes a version-independent bundle the browser
@@ -425,6 +541,21 @@ numbers for the same ground.
   commit message.
 * Fixed the `lon_span()` roxygen example, which claimed `170 205` where the code
   returns `170 200`.
+
+# msens 0.42.1
+
+* **`stac_build()` works on a legacy release** (`model` keyed by `mdl_seq`: v1–v7b). It selected
+  `mdl_key` unconditionally, so a legacy build died with a binder error *after* writing the root and
+  version nodes — a half catalog — which is why v7b (v7.1) could not be registered. The id field
+  is now introspected. A legacy Item names only what such a release publishes: the
+  `tables/model_asset.parquet` registry (one content-addressed COG per `mdl_seq`) and `tables/`,
+  with example tile links through stock titiler `/cog` (new `model_asset` argument; omitted rather
+  than invented when absent) — not the `dist_merged/` Parquet and SQL tile factory of v8 onward.
+  v8+ output is unchanged (asserted).
+* **`stac_catalog_register(catalog_json, version)`** — adds a version to a DEPLOYED root catalog,
+  idempotently and in release order (`v7`, `v7b`, `v8`, …, `v10`), instead of overwriting it with
+  the single-version root `stac_build()` writes.
+* `test-stac.R`: the first tests of the STAC generators (both schemas, 27 assertions).
 
 # msens 0.42.0
 

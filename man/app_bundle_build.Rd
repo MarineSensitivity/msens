@@ -16,6 +16,7 @@ app_bundle_build(
   taxonomy_csv = NULL,
   zone_sets = NULL,
   zone_names = NULL,
+  zone_bbox = NULL,
   built_at = format(Sys.time(), "\%Y-\%m-\%dT\%H:\%M:\%SZ", tz = "UTC")
 )
 }
@@ -51,6 +52,10 @@ the geometry actually corresponds to}
 \item{zone_names}{optional \code{data.frame(fld, key, name)} (rbind of
 \code{\link[=app_zone_names]{app_zone_names()}} across the release's zone types), passed to \code{\link[=app_boot]{app_boot()}} for
 \verb{zones.<unit>[i].name}. \code{NULL} (default) publishes no names, exactly as before.}
+
+\item{zone_bbox}{optional \code{data.frame(fld, key, w, s, e, n)} (rbind of
+\code{\link[=app_zone_bbox]{app_zone_bbox()}} across the release's zone types), passed to \code{\link[=app_boot]{app_boot()}} for
+\verb{zones.<unit>[i].bbox}. \code{NULL} (default) publishes no bboxes, exactly as before.}
 
 \item{built_at}{ISO timestamp}
 }

@@ -250,6 +250,34 @@ test_that("manifest_build backfills a human short label, never overwriting a cur
   expect_equal(uncurated$metrics$label, "Seabirds: extinction risk")
 })
 
+test_that("REGRESSION (E7): manifest_labels_backfill() patches an ALREADY-PUBLISHED manifest", {
+  # exported specifically so a release notebook can backfill a published
+  # manifest.json (read back with jsonlite::fromJSON(simplifyVector = TRUE)) in
+  # place, without an internal `:::` call -- and so it applies the IDENTICAL rule
+  # manifest_build() itself uses (both call .metrics_backfill_labels()).
+  fresh <- manifest_build(mk_rel(), "v8")
+  expect_equal(fresh$metrics$label, "Seabirds: extinction risk")
+
+  # the round trip a release patch actually does: simulate reading a published
+  # manifest.json back as plain data (label column absent, as a v1/v2/v9 manifest
+  # is today), then patch
+  pub <- list(metrics = data.frame(metric_key = c("extrisk_bird", "score_x"),
+                                   description = c("x", "y"), stringsAsFactors = FALSE))
+  patched <- manifest_labels_backfill(pub)
+  expect_equal(patched$metrics$label, c("Seabirds: extinction risk", "Overall score"))
+
+  # never overwrites a curated label, same rule as manifest_build()
+  curated <- list(metrics = data.frame(metric_key = "extrisk_bird", label = "bird: ext. risk"))
+  expect_equal(manifest_labels_backfill(curated)$metrics$label, "bird: ext. risk")
+
+  # a manifest with no metrics at all (or an empty one) is returned unchanged, not
+  # an error -- e.g. a v1-v7 release predating cell-level metrics entirely
+  none <- list(metrics = NULL, ver = "v0")
+  expect_identical(manifest_labels_backfill(none), none)
+  empty <- list(metrics = data.frame(metric_key = character(), label = character()))
+  expect_equal(nrow(manifest_labels_backfill(empty)$metrics), 0L)
+})
+
 test_that("manifest_build declares only tables the release actually has", {
   m <- manifest_build(mk_rel(v8 = FALSE, extras = "zone_taxon"), "v6",
                       base = "https://x/marine-atlas")

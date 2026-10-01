@@ -235,6 +235,28 @@ test_that("zone name is NULL by default and populated when zone_names is supplie
   })
 })
 
+test_that("zone bbox is NULL by default and populated when zone_bbox is supplied (R3-C3)", {
+  with_synth("v9", function(con) {
+    bare <- Filter(function(x) x$key == "AAA", app_zones(con)$programarea)[[1]]
+    expect_null(bare$bbox)               # purely additive: unset by default
+
+    bb <- data.frame(fld = "programarea_key", key = c("AAA", "GEO"),
+                     w = c(-166, 179), s = c(52, 51), e = c(-164, -179), n = c(54, 53),
+                     stringsAsFactors = FALSE)
+    z <- app_zones(con, zone_bbox = bb)$programarea
+    a <- Filter(function(x) x$key == "AAA", z)[[1]]
+    b <- Filter(function(x) x$key == "BBB", z)[[1]]
+    expect_equal(a$bbox, c(-166, 52, -164, 54))
+    expect_null(b$bbox)                  # a key with no matching row publishes NULL
+  })
+})
+
+test_that("REGRESSION: a malformed zone_bbox is rejected, not silently ignored", {
+  with_synth("v9", function(con) {
+    expect_error(app_zones(con, zone_bbox = data.frame(x = 1)), "fld.*key.*w.*s.*e.*n")
+  })
+})
+
 test_that("app_zone_names() reads {type}_key/{type}_name off a GeoPackage", {
   skip_if_not_installed("sf")
   pts <- sf::st_sfc(sf::st_point(c(-170, 52)), sf::st_point(c(-165, 53)), crs = 4326)
@@ -257,6 +279,113 @@ test_that("app_zone_names() errors clearly when the expected columns are missing
   f <- withr::local_tempfile(fileext = ".gpkg")
   sf::st_write(d, f, quiet = TRUE)
   expect_error(app_zone_names(f, "programarea"), "programarea_key")
+})
+
+test_that("app_zone_bbox() computes a WGS84 extent per zone key, dateline-aware (R3-C3)", {
+  skip_if_not_installed("sf")
+  # ALA: an ordinary zone, nowhere near the antimeridian
+  ala <- sf::st_polygon(list(rbind(c(-166, 52), c(-164, 52), c(-165, 54), c(-166, 52))))
+  # GEO: a zone whose vertices straddle the antimeridian (a Bering-Sea-like sliver
+  # stored, as real zone-set geometry is, as raw -180..180 longitudes on both sides
+  # of the cut -- 179 on one edge, -179 on the other)
+  geo <- sf::st_polygon(list(rbind(c(179, 51), c(-179, 51), c(-179, 53), c(179, 53),
+                                   c(179, 51))))
+  d <- sf::st_sf(programarea_key = c("ALA", "GEO"),
+                 geometry = sf::st_sfc(ala, geo, crs = 4326))
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+
+  bb <- app_zone_bbox(f, "programarea")
+  expect_equal(nrow(bb), 2L)
+  expect_equal(unique(bb$fld), "programarea_key")
+
+  a <- bb[bb$key == "ALA", ]
+  expect_equal(a$w, -166); expect_equal(a$e, -164)
+  expect_true(a$w < a$e)               # ordinary zone: west < east
+  expect_equal(a$s, 52); expect_equal(a$n, 54)
+
+  g <- bb[bb$key == "GEO", ]
+  expect_equal(g$w, 179); expect_equal(g$e, -179)
+  expect_true(g$w > g$e)                # antimeridian-crossing signal, per lon_span()
+  expect_equal(g$s, 51); expect_equal(g$n, 53)
+})
+
+test_that("app_zone_bbox() errors clearly when the expected key column is missing", {
+  skip_if_not_installed("sf")
+  pts <- sf::st_sfc(sf::st_point(c(0, 0)), crs = 4326)
+  d <- sf::st_sf(some_other_key = "X", geometry = pts)
+  f <- withr::local_tempfile(fileext = ".gpkg")
+  sf::st_write(d, f, quiet = TRUE)
+  expect_error(app_zone_bbox(f, "programarea"), "programarea_key")
+})
+
+test_that("REGRESSION (E3): a malformed zone_names is rejected, not silently ignored", {
+  with_synth("v9", function(con) {
+    expect_error(app_zones(con, zone_names = data.frame(x = 1)), "fld.*key.*name")
+    expect_error(app_zones(con, zone_names = list(fld = "a", key = "b", name = "c")),
+                "data.frame")
+  })
+})
+
+test_that("REGRESSION (E3): zone_names naming ZERO real zones of a field it lists warns", {
+  with_synth("v9", function(con) {
+    # a typo'd `type` ("programarea" instead of "programarea_key") -- a mistake
+    # that used to publish name = NULL everywhere with no signal at all. Matched
+    # against the WHOLE zone table (not just what this call's `flds` publishes), so
+    # this really is "no such field on this release", not merely "not this call".
+    wrong_fld <- data.frame(fld = "programarea", key = "AAA", name = "Aleutian Arc",
+                            stringsAsFactors = FALSE)
+    expect_warning(app_zones(con, zone_names = wrong_fld), "names 0 of")
+
+    # the wrong geometry's names -- right fld, keys from a different unit entirely
+    wrong_keys <- data.frame(fld = "programarea_key", key = c("ZZZ", "YYY"),
+                             name = c("Nowhere", "Nowhere Else"), stringsAsFactors = FALSE)
+    expect_warning(app_zones(con, zone_names = wrong_keys), "names 0 of")
+  })
+
+  # a zone_names that covers a field the RELEASE genuinely has (real keys, matched
+  # against the whole zone table) but THIS call's `flds` does not publish is not
+  # itself a mistake -- no warning. v2 is the one synth generation with a second
+  # real field (subregion_key: SR1/SR2/SR3) alongside programarea_key.
+  with_synth("v2", function(con) {
+    other_fld <- data.frame(fld = "subregion_key", key = c("SR1", "SR2"),
+                            name = c("Region One", "Region Two"), stringsAsFactors = FALSE)
+    ch <- app_zone_tbl(con, synth_manifest(con, "v2", BASE))
+    expect_no_warning(app_zones(con, flds = "programarea_key", chosen = ch,
+                                zone_names = other_fld))
+  })
+})
+
+test_that("REGRESSION (E5): a zone name reaches boot.json and passes schema validation", {
+  with_synth("v9", function(con) {
+    m  <- synth_manifest(con, "v9", BASE)
+    ch <- app_zone_tbl(con, m)
+    nm <- data.frame(fld = "programarea_key", key = "AAA", name = "Aleutian Arc",
+                     stringsAsFactors = FALSE)
+    b <- app_boot(con, "v9", m, tables = list(), chosen = ch, zone_names = nm)
+    a <- Filter(function(z) z$key == "AAA", b$zones$programarea)[[1]]
+    expect_equal(a$name, "Aleutian Arc")
+    # app_boot() already ran app_validate() internally (it would have thrown
+    # otherwise); re-validate explicitly so this test fails loudly if that ever
+    # stops being true
+    expect_silent(app_validate(b, "boot", "boot.json"))
+  })
+})
+
+test_that("REGRESSION (E5): a whitespace-only curated label falls back to the backfill", {
+  # self-contained (not mk_rel(), which lives in test-version.R and is only in
+  # scope once every test file has loaded together): the minimum manifest_build()
+  # needs to declare one cell-scored metric.
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE TABLE metric (metric_seq INTEGER, metric_key VARCHAR, description VARCHAR)")
+  DBI::dbExecute(con, "INSERT INTO metric VALUES (1, 'extrisk_bird', 'x')")
+  DBI::dbExecute(con, "CREATE TABLE cell_metric (cell_id BIGINT, metric_seq INTEGER, val DOUBLE)")
+  DBI::dbExecute(con, "INSERT INTO cell_metric VALUES (1, 1, 5)")
+
+  m <- manifest_build(con, "v8", metrics = data.frame(
+    metric_key = "extrisk_bird", subregion_key = "FULL", label = "   "))
+  expect_equal(m$metrics$label, "Seabirds: extinction risk")
 })
 
 test_that("the v7.1 _coverage metrics ride along as `coverage`, optional by presence", {
@@ -537,6 +666,32 @@ test_that("app capabilities are PROBED, never copied from manifest$capabilities"
     expect_false(blk$capabilities$cell_model)
     expect_identical(blk$boot, paste0(BASE, "/v7/app/boot.json"))
   })
+})
+
+test_that("cell_tile/cell_model_tile override the never-real tile=0 default", {
+  # unhinted: still probes the placeholder tile=0 (backward compatible)
+  p0 <- app_capabilities("v7", base = BASE, timeout = 2)
+  expect_identical(p0$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=0/data_0.parquet"))
+  expect_identical(p0$probed$cell_model$url,
+                   paste0(BASE, "/v7/serve/cell_model/tile=0/data_0.parquet"))
+
+  # hinted: probes the REAL first tile a build actually wrote (usa05 releases
+  # start at tile=19, global05 at tile=436 -- neither is ever 0)
+  p1 <- app_capabilities("v7", base = BASE, timeout = 2, cell_tile = 19, cell_model_tile = 19)
+  expect_identical(p1$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=19/data_0.parquet"))
+  expect_identical(p1$probed$cell_model$url,
+                   paste0(BASE, "/v7/serve/cell_model/tile=19/data_0.parquet"))
+  # against example.invalid every probe still answers nothing -- the point of
+  # this test is the URL constructed, not a live 200 (no bucket to hit here)
+  expect_false(any(unlist(p1$capabilities)))
+  expect_setequal(names(p1$capabilities),
+                  c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"))
+
+  # `sample=` still overrides a whole relative path directly, taking priority
+  # over cell_tile/cell_model_tile for that one capability
+  p2 <- app_capabilities("v7", base = BASE, timeout = 2, cell_tile = 19,
+                         sample = list(cell = "app/cell/tile=436/data_0.parquet"))
+  expect_identical(p2$probed$cell$url, paste0(BASE, "/v7/app/cell/tile=436/data_0.parquet"))
 })
 
 test_that("boot.json tables carry an href, byte size and content digest", {
@@ -1097,6 +1252,12 @@ test_that("REGRESSION (M1): every v1-v7 input asset is published, not just the m
   expect_equal(nrow(a), 3L)                          # merged + BOTH inputs, not 1
   expect_setequal(a$mdl_key, c("101", "201", "301"))
   expect_setequal(a$ds_key, c("ms_merge", "am", "bl"))
+  # E5 (parity review): an input row carries NO taxon key -- .app_merged()'s "is
+  # this the taxon's own merged surface" test relies on that NA, not on a dropped
+  # row (the old INNER JOIN's failure mode). Only the merged row (mdl_key "101")
+  # resolves a `key` at all.
+  expect_equal(a$key[a$mdl_key == "101"], "101")
+  expect_true(all(is.na(a$key[a$mdl_key %in% c("201", "301")])))
 
   e <- .app_edges(con)
   expect_equal(nrow(e), 2L)                          # the ms_merge self-edge dropped
@@ -1111,6 +1272,10 @@ test_that("REGRESSION (M1): every v1-v7 input asset is published, not just the m
   cards <- unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE)
   expect_equal(length(cards), 1L)
   cd <- cards[[1]]
+  # E5 (parity review): the tern's merged$url was asserted only indirectly before
+  # (via the walrus test) -- assert it directly here too, on the fixture that
+  # exercises the LEFT JOIN fix.
+  expect_equal(cd$merged$url, "https://example.invalid/cog/usa05/merged.tif")
   expect_equal(length(cd$inputs), 2L)
   for (inp in cd$inputs)
     expect_equal(length(inp$assets), 1L, info = inp$ds_key)   # never struck through
@@ -1230,6 +1395,13 @@ test_that(".metric_short_label(): the composite and every species category get a
               "Seabirds: extinction risk (ecoregion-rescaled)")
   expect_equal(.metric_short_label("extrisk_primary_producer_ecoregion_rescaled"),
               "Primary Producers: extinction risk (ecoregion-rescaled)")
+  # E6 (parity review 2026-09-24): v1's two sp_cat values the docs table does not
+  # cover -- `all` (its whole-taxon bucket) and `reptile` (its pre-v3-taxonomy
+  # turtle bucket) -- must not silently coin "All: extinction risk"/"Reptile:
+  # extinction risk" via the generic title-case fallback (which they would still
+  # spell the same way here, but only .SP_CAT_LABEL is the source of truth).
+  expect_equal(.metric_short_label("extrisk_all"), "All: extinction risk")
+  expect_equal(.metric_short_label("extrisk_reptile"), "Reptile: extinction risk")
   # an unrecognised shape falls back to the key itself, same as .metric_label()
   expect_equal(.metric_short_label("something_else"), "something_else")
   expect_true(is.na(.metric_short_label(NA_character_)))

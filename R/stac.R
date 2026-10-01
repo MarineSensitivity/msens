@@ -200,10 +200,22 @@ stac_dataset_collection <- function(ds, cfg, item_files = character()) {
 #' @param ds one-row data.frame from `dataset`
 #' @param cfg config from [stac_cfg()]
 #' @param time_periods character vector of distinct `model.time_period` for the dataset
+#' @param mdl_key_ex a representative `mdl_key` of the dataset, baked into the example tile links
+#' @param id_field `"mdl_key"` (v8 onward) or `"mdl_seq"` — a LEGACY release (v1–v7b, `usa05` grid).
+#'   A legacy release publishes no `dist_merged/` Parquet and is not served by the SQL tile
+#'   factory: its surfaces are one content-addressed COG per model, registered in
+#'   `tables/model_asset.parquet`, so that registry is the Item's data asset and the example tile
+#'   links go through titiler's stock `/cog`.
+#' @param cog_ex for a legacy release, the `cog_url` of a representative model (example links);
+#'   `NA` omits the links rather than inventing one.
 #' @return STAC Item as a list
 #' @export
 #' @concept stac
-stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_) {
+stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_,
+                                 id_field = c("mdl_key", "mdl_seq"), cog_ex = NA_character_) {
+  id_field <- match.arg(id_field)
+  if (id_field == "mdl_seq")
+    return(.stac_model_cell_item_legacy(ds, cfg, cog_ex = cog_ex))
   id     <- paste0("msens-", cfg$version, "-", ds$ds_key, "-model_cell")
   props  <- stac_sdm_props(ds)
   obs_beg<- .iso(ds$date_obs_beg); obs_end <- .iso(ds$date_obs_end)
@@ -316,6 +328,72 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
            title = "TileJSON for the DuckDB-SQL surface"),
       list(rel = "self",       href = paste0(
         cfg$stac_base, "/", cfg$version, "/", ds$ds_key, "/", id, ".json"))))
+}
+
+# A legacy (v1-v7b) release's Item. Everything it names EXISTS: `tables/` is what
+# backfill_versions.qmd publishes, and `model_asset.parquet` maps each `mdl_seq` to the COG the
+# apps draw. The live v7 Item named a Parquet path and an SQL tile factory that no longer reflect
+# how a legacy release is served; a catalog that points at what is not there is worse than none.
+.stac_model_cell_item_legacy <- function(ds, cfg, cog_ex = NA_character_) {
+  id     <- paste0("msens-", cfg$version, "-", ds$ds_key, "-model_cell")
+  props  <- stac_sdm_props(ds)
+  obs_beg<- .iso(ds$date_obs_beg); obs_end <- .iso(ds$date_obs_end)
+  if (!is.null(obs_beg) && !is.null(obs_end)) {
+    props$datetime <- NULL; props$start_datetime <- obs_beg; props$end_datetime <- obs_end
+  } else {
+    props$datetime <- paste0(ds$year_pub %or% 2025, "-01-01T00:00:00Z")
+  }
+  props$title       <- paste0(ds$name_display %or% ds$ds_key, " surfaces, ", cfg$version)
+  props$description <- paste0(
+    "Per-model surfaces on the regional 0.05-degree grid, each published as one content-addressed ",
+    "Cloud-Optimized GeoTIFF. `model_asset.parquet` maps a model id (`mdl_seq`) to its COG.")
+
+  tbl_base <- glue::glue("{cfg$atlas_base}/{cfg$version}/tables")
+  links <- list(
+    list(rel = "root",       href = "../../catalog.json"),
+    list(rel = "parent",     href = "../collection.json"),
+    list(rel = "collection", href = "../collection.json"))
+  if (!is.na(cog_ex) && nzchar(cog_ex)) {
+    rescale <- if (.sdm_response_type(ds$response_type) == "suitability") c(1, 100) else NULL
+    xyz <- cog_tile_url(cog_ex, rescale = rescale)
+    links <- c(links, list(
+      list(rel = "xyz", href = xyz, type = "image/png",
+           title = "Rendered raster tiles via titiler /cog (a representative model; swap url= per mdl_seq)"),
+      list(rel = "tilejson", type = "application/json",
+           href = sub("/tiles/([^/]+)/\\{z\\}/\\{x\\}/\\{y\\}\\.png", "/\\1/tilejson.json", xyz),
+           title = "TileJSON for the same COG")))
+  }
+  links <- c(links, list(list(rel = "self", href = paste0(
+    cfg$stac_base, "/", cfg$version, "/", ds$ds_key, "/", id, ".json"))))
+
+  list(
+    type            = "Feature",
+    stac_version    = "1.0.0",
+    stac_extensions = I(c(TABLE_EXT, WML_EXT, SDM_EXT_URL)),
+    id              = id,
+    collection      = paste0("msens-", cfg$version, "-", ds$ds_key),
+    bbox            = I(cfg$bbox),
+    geometry        = list(type = "Polygon", coordinates = .bbox_poly(cfg$bbox)),
+    properties      = props,
+    assets          = list(
+      data = list(
+        href  = paste0(tbl_base, "/model_asset.parquet"),
+        type  = "application/vnd.apache.parquet",
+        roles = I("data"),
+        title = "model registry: one content-addressed COG per model (filter by ds_key / mdl_seq)",
+        `table:columns` = list(
+          list(name = "mdl_seq",      type = "int32",  description = "model id (FK model.mdl_seq)"),
+          list(name = "ds_key",       type = "string", description = "source dataset"),
+          list(name = "n_cells",      type = "double", description = "cells carrying a value"),
+          list(name = "content_hash", type = "string", description = "hash of the surface AND its encoding"),
+          list(name = "cog_url",      type = "string", description = "the model's COG; render with titiler /cog"),
+          list(name = "grid_id",      type = "string", description = "the grid its cell_id indexes"))),
+      tables = list(
+        href  = paste0(tbl_base, "/"),
+        type  = "application/vnd.apache.parquet",
+        roles = I("data"),
+        title = "release tables (Parquet): model, taxon, taxon_model, dataset, cell, cell_metric, zone, zone_cell, zone_metric, zone_taxon")),
+    links = links)
 }
 
 #' Seasonal per-species Item from the NCCOS season-COG metadata
@@ -445,6 +523,37 @@ stac_root_catalog <- function(cfg) {
       list(rel = "child", href = paste0("./", cfg$version, "/collection.json"))))
 }
 
+#' Register a version in a deployed root catalog (idempotent)
+#'
+#' [stac_build()] writes a root `catalog.json` that knows only the version it just built, so
+#' copying it over a deployed catalog would orphan every other release. This edits the DEPLOYED
+#' root instead: it adds `./{version}/collection.json` as a child if it is not already there and
+#' keeps the children in release order (`v7`, `v7b`, `v8`, ... — numeric part, then suffix), which
+#' is how a patch release dated after its successors still lands beside the release it patches.
+#' A missing catalog is created.
+#'
+#' @param catalog_json path to the deployed root `catalog.json`
+#' @param version version to register, e.g. `"v7b"`
+#' @param cfg config from [stac_cfg()] (used only when the catalog does not exist yet)
+#' @return invisibly, the child hrefs now in the catalog, in order
+#' @importFrom jsonlite fromJSON
+#' @export
+#' @concept stac
+stac_catalog_register <- function(catalog_json, version, cfg = stac_cfg(version)) {
+  stopifnot(is.character(version), length(version) == 1, grepl("^v[0-9]+[a-z]?$", version))
+  cat0 <- if (file.exists(catalog_json))
+    jsonlite::fromJSON(catalog_json, simplifyVector = FALSE) else stac_root_catalog(cfg)
+  is_child <- vapply(cat0$links, function(l) identical(l$rel, "child"), logical(1))
+  hrefs    <- unique(c(vapply(cat0$links[is_child], function(l) l$href, ""),
+                       paste0("./", version, "/collection.json")))
+  vers     <- sub("^\\./([^/]+)/collection\\.json$", "\\1", hrefs)
+  ord      <- order(as.integer(gsub("\\D", "", vers)), sub("^v[0-9]+", "", vers))
+  cat0$links <- c(cat0$links[!is_child],
+                  lapply(hrefs[ord], function(h) list(rel = "child", href = h)))
+  .stac_write(cat0, catalog_json)
+  invisible(hrefs[ord])
+}
+
 #' Build the full static STAC catalog for a version
 #'
 #' Connects to the version's SDM DuckDB, emits a Collection + model-surface Item
@@ -457,13 +566,16 @@ stac_root_catalog <- function(cfg) {
 #' @param cfg config from [stac_cfg()] (defaults to `stac_cfg(version)`)
 #' @param nc_csv optional path to `nc_models.csv` for seasonal Items
 #' @param con optional open DBI connection (else opens read-only via [sdm_db_con()])
+#' @param model_asset for a LEGACY release (`model` keyed by `mdl_seq`, v1–v7b): data frame with
+#'   `ds_key` and `cog_url` (the release's `tables/model_asset.parquet`), used for each dataset's
+#'   example tile links. `NULL` builds the catalog without those links. Ignored from v8 on.
 #' @return invisibly, the path to the root `catalog.json`
 #' @importFrom DBI dbGetQuery
 #' @importFrom glue glue
 #' @export
 #' @concept stac
 stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
-                       nc_csv = NULL, con = NULL) {
+                       nc_csv = NULL, con = NULL, model_asset = NULL) {
   if (is.null(cfg))     cfg     <- stac_cfg(version)
   if (is.null(dir_out)) dir_out <- file.path(tempdir(), paste0("stac_", version))
   close_con <- FALSE
@@ -485,16 +597,30 @@ stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
               file.path(dir_out, version, "collection.json"))
 
   # per DuckDB dataset: build item, then collection (with item link), then item
-  has_tp   <- "time_period" %in% DBI::dbListFields(con, "model")   # v8 registry may omit it
+  # the model id is INTROSPECTED, never assumed: `mdl_key` from v8, `mdl_seq` before it. Selecting
+  # `mdl_key` unconditionally made every legacy release fail here with a binder error, after the
+  # root + version nodes were already written -- a half catalog with no datasets under it.
+  mdl_flds <- DBI::dbListFields(con, "model")
+  id_field <- if ("mdl_key" %in% mdl_flds) "mdl_key" else "mdl_seq"
+  stopifnot("model table has neither mdl_key nor mdl_seq" = id_field %in% mdl_flds)
+  has_tp   <- "time_period" %in% mdl_flds                          # v8 registry may omit it
   for (i in seq_len(nrow(datasets))) {
     ds     <- datasets[i, ]
     dir_ds <- file.path(dir_out, version, ds$ds_key)
     tps    <- if (has_tp) DBI::dbGetQuery(con, glue::glue(
       "SELECT DISTINCT time_period FROM model WHERE ds_key = '{ds$ds_key}'"))$time_period else NULL
-    mk_ex  <- DBI::dbGetQuery(con, glue::glue(
-      "SELECT mdl_key FROM model WHERE ds_key = '{ds$ds_key}' LIMIT 1"))$mdl_key
-    item   <- stac_model_cell_item(ds, cfg, time_periods = tps,
-                                   mdl_key_ex = if (length(mk_ex)) mk_ex[1] else NA_character_)
+    if (id_field == "mdl_key") {
+      mk_ex <- DBI::dbGetQuery(con, glue::glue(
+        "SELECT mdl_key FROM model WHERE ds_key = '{ds$ds_key}' LIMIT 1"))$mdl_key
+      item  <- stac_model_cell_item(ds, cfg, time_periods = tps,
+                                    mdl_key_ex = if (length(mk_ex)) mk_ex[1] else NA_character_)
+    } else {
+      cog_ex <- if (is.data.frame(model_asset) && all(c("ds_key", "cog_url") %in% names(model_asset)))
+        utils::head(model_asset$cog_url[model_asset$ds_key == ds$ds_key &
+                                          !is.na(model_asset$cog_url)], 1) else character()
+      item  <- stac_model_cell_item(ds, cfg, time_periods = tps, id_field = "mdl_seq",
+                                    cog_ex = if (length(cog_ex)) cog_ex else NA_character_)
+    }
     item_f <- paste0(item$id, ".json")
     .stac_write(stac_dataset_collection(ds, cfg, item_files = item_f),
                 file.path(dir_ds, "collection.json"))
