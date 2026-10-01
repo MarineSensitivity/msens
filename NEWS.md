@@ -1,3 +1,33 @@
+# msens 0.46.0
+
+**Backfill v1-v7 with the ORIGINAL species surfaces, so the atlas can show Original | Interpolated
+on the public release (R4-F; dry run only, nothing published).** (0.45.0 is the uncommitted
+density-response work in the main checkout; this branch skips to 0.46.0 to leave it free.)
+
+* **New: an unversioned, content-addressed store for ORIGINAL surfaces** (twin of the model-COG store):
+  `native/{ds_key}/{hash}.tif|.pmtiles` on S3, PMTiles also at the file host
+  `pmtiles/native/{ds_key}/{hash}.pmtiles`. `native_key()` / `native_url()` (twins of `content_url()`),
+  `native_store_index()` (twin of `cog_store_index()`), `native_hash_file()` (MD5 of bytes) and
+  `native_store_rewrite()` (re-point a `native_asset`'s originals to the store; an unmapped row is an
+  error). A 16-hex hash is a SOURCE-content hash, a 32-hex hash is the MD5 of an existing object's
+  bytes; identical content re-published is the same key, so nothing is uploaded twice.
+* **New: `native_asset_backfill(model_asset, crosswalk, native_ref, store, taxon_key)`** builds a v8-shaped
+  `native_asset` for a `model_asset`-only release: one `representation = 'model'` COG row per model
+  (the gridded 0.05 deg surface, which v1-v7 used to mislabel `native`) plus one `native` row per
+  INPUT model whose original a later release already publishes (PMTiles range or the 0.5 deg
+  AquaMaps COG), matched on the stable model key. Keyed by `mdl_seq` as a string, like v1-v7's
+  `taxon_model`; a duplicate `(mdl_key, representation)` is an error; unmatched inputs keep one
+  `model` row. Original URLs are the STORE's (`store` maps the reference's URL to a hash), never the
+  reference release's versioned paths.
+* **New: `native_key_v8()`** spells v1-v7 keys the way v8 does (`bl|bl:22698216` -> `bl|22698216`,
+  `ch_nmfs|ch_nmfs:Acropora globiceps` -> `ch_nmfs|Acropora_globiceps`); **`native_vintage_check()`**
+  compares the two releases' `dataset` vintage columns so an original is reused only for the same
+  source.
+* `app_taxon_shards()` needs no change: `.app_assets()` already prefers a `native_asset` table, so a
+  v7-shaped release that carries the backfilled table ships shards whose inputs list both `rep`s
+  (regression test added; only `assets` changes, `merged` and every other field are identical).
+  A release that gains `native_asset` now advertises the `native_representation` capability.
+
 # msens 0.44.2
 
 * **Added: `app_zone_bbox()`, and `app_zones()`/`app_boot()`/`app_bundle_build()` now publish a
