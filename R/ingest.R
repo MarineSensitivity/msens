@@ -138,13 +138,19 @@ cells_pct_marine <- function(cell_ids, ocean_cell_ids, area_km2 = NULL) {
 #' @param min_value drop resampled cells below this (default 1)
 #' @param zero_fill zero-fill NA within the source extent before resampling so the
 #'   surface fades to 0 at its edge (default TRUE)
+#' @param digits rounding of `val` (default 2, the atlas' [0,100] precision). Pass a larger
+#'   value, or `NULL` for none, when `r` holds NATIVE units rather than [0,100] — a density of
+#'   0.004 animals km^-2 rounds to 0 at two decimals, which is how the v8 `gm` ingest turned
+#'   every low-density cetacean surface into a field of 0s and 100s (rescale BEFORE this call,
+#'   or keep the digits).
 #' @return a tibble `(cell_id integer, val double)`
 #' @export
 #' @concept ingest
 #' @importFrom tibble tibble
 cells_from_raster <- function(r, cellid_tif, method = "bilinear",
-                              min_value = 1, zero_fill = TRUE) {
-  stopifnot(file.exists(cellid_tif), inherits(r, "SpatRaster"))
+                              min_value = 1, zero_fill = TRUE, digits = 2) {
+  stopifnot(file.exists(cellid_tif), inherits(r, "SpatRaster"),
+            is.null(digits) || (is.numeric(digits) && length(digits) == 1))
   if (zero_fill) r[is.na(r)] <- 0
   r_cell <- terra::crop(terra::rast(cellid_tif), terra::ext(r))
   r_val  <- terra::resample(r, r_cell, method = method)
@@ -152,7 +158,8 @@ cells_from_raster <- function(r, cellid_tif, method = "bilinear",
 
   s <- c(r_val, r_cell); names(s) <- c("v", "cell_id")
   d <- terra::as.data.frame(s, na.rm = TRUE)
-  tibble::tibble(cell_id = as.integer(d$cell_id), val = round(d$v, 2))   # `val` not `value`
+  v <- if (is.null(digits)) d$v else round(d$v, digits)
+  tibble::tibble(cell_id = as.integer(d$cell_id), val = v)   # `val` not `value`
 }
 
 #' `(cell_id, val)` from a raster ALREADY on the cell grid (no resample)

@@ -54,3 +54,24 @@ test_that("cells_from_aligned_raster maps by position, scales, thresholds, drops
   terra::values(r2) <- 1
   expect_error(cells_from_aligned_raster(r2, tif), "not on this grid")
 })
+
+test_that("cells_from_raster keeps native-unit densities when told the digits (gm regression)", {
+  skip_if_not_installed("terra")
+  # a 4x4 cell-id grid and a source ALREADY on it holding densities in animals km^-2 — the
+  # values the SEFSC Gulf models carry for beaked, sperm and Rice's whales (0.001-0.01)
+  rc <- terra::rast(nrows = 4, ncols = 4, xmin = 0, xmax = 0.2, ymin = 0, ymax = 0.2, crs = "EPSG:4326")
+  terra::values(rc) <- 1:16
+  tif <- tempfile(fileext = ".tif"); terra::writeRaster(rc, tif, overwrite = TRUE, datatype = "INT4U")
+  r <- terra::rast(rc); terra::values(r) <- c(0.004, 0.001, 0.012, 0.007, rep(0.003, 12))
+  # the default 2-decimal rounding — right for a [0,100] surface — zeroes all but one cell, and
+  # the survivor is quantized to 0.01: the field of 0s and 100s the v8 gm ingest published
+  d2 <- cells_from_raster(r, tif, min_value = 0, zero_fill = FALSE)
+  expect_equal(sort(unique(d2$val)), c(0, 0.01))
+  # with the digits kept, every cell survives at its own density
+  d6 <- cells_from_raster(r, tif, min_value = 0, zero_fill = FALSE, digits = 6)
+  expect_equal(nrow(d6), 16)
+  expect_equal(d6$val[d6$cell_id == 2], 0.001)
+  expect_equal(d6$val[d6$cell_id == 3], 0.012)
+  dn <- cells_from_raster(r, tif, min_value = 0, zero_fill = FALSE, digits = NULL)
+  expect_equal(dn$val, d6$val)
+})

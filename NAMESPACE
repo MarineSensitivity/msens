@@ -95,6 +95,8 @@ export(copy_atlas_parquet)
 export(coverage_floor)
 export(coverage_sql)
 export(dataset_is_scored)
+export(density_annual)
+export(density_to_suit)
 export(dps_sql)
 export(drawn_features_sf)
 export(force_target)
@@ -387,7 +389,11 @@ importFrom(sf,
   st_write,
   st_zm
 )
-importFrom(stats,aggregate)
+importFrom(stats,
+  aggregate,
+  ecdf,
+  quantile
+)
 importFrom(stringr,
   str_detect,
   str_replace,

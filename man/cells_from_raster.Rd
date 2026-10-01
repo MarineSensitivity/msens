@@ -9,7 +9,8 @@ cells_from_raster(
   cellid_tif,
   method = "bilinear",
   min_value = 1,
-  zero_fill = TRUE
+  zero_fill = TRUE,
+  digits = 2
 )
 }
 \arguments{
@@ -23,6 +24,12 @@ cells_from_raster(
 
 \item{zero_fill}{zero-fill NA within the source extent before resampling so the
 surface fades to 0 at its edge (default TRUE)}
+
+\item{digits}{rounding of \code{val} (default 2, the atlas' \link{0,100} precision). Pass a larger
+value, or \code{NULL} for none, when \code{r} holds NATIVE units rather than \link{0,100} — a density of
+0.004 animals km^-2 rounds to 0 at two decimals, which is how the v8 \code{gm} ingest turned
+every low-density cetacean surface into a field of 0s and 100s (rescale BEFORE this call,
+or keep the digits).}
 }
 \value{
 a tibble \verb{(cell_id integer, val double)}
