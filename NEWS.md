@@ -14,14 +14,19 @@ re-publish look new and upload everything again. A release now owns pointers, ne
   `asset_catalog_read()`/`asset_catalog_write()`; `store_unreferenced()` (catalog rows no
   release's pointer table names - the only way anything is ever pruned); `asset_key_collisions()`
   (one key, one content); `asset_key()`, `asset_key_from_url()` (a versioned path returns `NA`).
-* **New: the hash functions.** `asset_enc(family)` is the encoding tag of each file family
-  (`cog_model` = `int1u-trunc-nd0-ovr` - terra truncates doubles into INT1U, so that is part of the identity -, `native_am`, `native_ax`, `native_pmtiles` = `mvt-z0-10-simp10`,
-  ...). `native_vector_hash()` / `native_vector_hashes()` hash a model's features as
-  `publish_pmtiles()` tiles them (EPSG:4326, XY, empties dropped; sorted WKB + the `mdl_key`/`ds_key`
-  tile attributes), blind to feature order and to source columns that never reach the tile.
+* **New: the hash functions.** The store key hashes the PIXELS a file holds, not the raw source rows.
+  `pixel_hashes()` is `content_hashes()` over the values as the writer stores them (`pixel_quant_sql()`:
+  `"trunc"` = what terra does when it writes a double into INT1U, `"round_trunc"` = what the AquaX and
+  suitability-only merged paints do, `"none"` for Float32), sub-1 pixels dropped as NoData, and optionally
+  collapsed to one value per cell by `max()` (`dedup = "max"`, the rule `turtle_sql()`/`merge_sql()` consume).
+  It equals `content_hashes_df(native_raster_rows(<the painted COG>))`, so "does this object hold the rows its
+  key says?" is one equality (found necessary: 14% of sampled AquaMaps COGs did not). `asset_enc(family)` is
+  now the CONTAINER tag only (`cog_model` = `int1u-nd0-ovr`, `native_am`, `native_ax`, `native_pmtiles` =
+  `mvt-z0-10-simp10`, ...). `native_vector_hash()` / `native_vector_hashes()` hash a model's features as
+  `publish_pmtiles()` tiles them (EPSG:4326, XY, empties dropped; sorted WKB + the `mdl_key`/`ds_key` tile
+  attributes), blind to feature order and to source columns that never reach the tile.
   `native_raster_rows()` decodes a COG to the `(cell_id, val)` rows it was painted from, and
-  `content_hashes_df()` runs the same DuckDB reduction on a data frame, so a hash from decoded
-  pixels equals one from the Parquet.
+  `content_hashes_df()` runs the same DuckDB reduction on a data frame (canonical `INTEGER, DOUBLE` types).
 * **Changed: `native_key()` accepts only a 16-hex source-content hash** (a 32-hex bytes-MD5 is an
   error; the MD5 is the catalog's integrity column and equals a single-part S3 ETag).
   **`native_url()` defaults PMTiles to the S3 store** like COGs (`pmtiles_base` now defaults to

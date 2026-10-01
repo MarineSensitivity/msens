@@ -12,16 +12,17 @@
 # not byte-identical, so a bytes key would make every re-publish look new).
 
 # encoding tags, one per file family ----
-# a tag names HOW the payload is written (datatype, nodata, overviews, tiling); changing any of
-# those must change the key, or one URL serves two different files (the GDAL /vsicurl header
-# cache then 500s low zooms - see content_hash_encoded()).
+# a tag names the CONTAINER the payload is written in (datatype, nodata, overviews, tiling);
+# changing any of those must change the key, or one URL serves two different files (the GDAL
+# /vsicurl header cache then 500s low zooms - see content_hash_encoded()). The QUANTISATION a
+# writer applies (terra truncates a double into INT1U) is not a tag: the hashed content is the
+# pixel values as the file stores them (pixel_hashes()), so identical pixels always share a key
+# and trunc-vs-round differences get different keys.
 .ASSET_ENC <- c(
   cog_model_usa05 = "int1u-nd0-noovr",            # v1-v7 species COGs (backfill_versions.qmd)
-  cog_model       = "int1u-trunc-nd0-ovr",        # publish_cog() defaults: INT1U (terra TRUNCATES doubles - verified: all
-                                                  # pixels of an am model equal trunc(val), 274k of 512k equal round(val)),
-                                                  # nodata 0, DEFLATE, 256 blocks, NEAREST overviews
+  cog_model       = "int1u-nd0-ovr",              # publish_cog() defaults: INT1U, nodata 0, DEFLATE, 256 blocks, NEAREST overviews
   cog_score       = "flt4s-nd9999-noovr",         # publish_score_cogs.qmd
-  native_am       = "int1u-trunc-nd0-ovr-0.5deg", # AquaMaps HCAF probability*100 on the 720x360 grid, via publish_cog()
+  native_am       = "int1u-nd0-ovr-0.5deg",       # AquaMaps HCAF probability*100 on the 720x360 grid, via publish_cog()
   native_ax       = "flt4s-nd9999-ovr-delivered", # AquaX band 1 as delivered (Float32), msens::cog_from_tif()
   native_pmtiles  = "mvt-z0-10-simp10")           # publish_pmtiles(): tippecanoe z0-10, --simplification 10 (low zooms only)
 
@@ -72,6 +73,64 @@ content_hashes_df <- function(df, by = "mdl_key", cols = c("cell_id", "val")) {
   sel[cols == "val"] <- 'CAST("val" AS DOUBLE) AS "val"'
   h <- content_hashes(con, sprintf('(SELECT "%s", %s FROM rows_in) AS canon', by, paste(sel, collapse = ", ")), by, cols)
   h <- h[order(h[[by]]), , drop = FALSE]                                     # GROUP BY order is unspecified
+  rownames(h) <- NULL
+  h
+}
+
+#' SQL for the pixel value a writer stores
+#'
+#' The value a COG holds for a source value: `"trunc"` is what terra does when it writes a double
+#' into INT1U (verified on 512,073 pixels of an AquaMaps model: every pixel equals `trunc(val)`,
+#' only 54% equal `round(val)`); `"round_trunc"` rounds half-to-even first, as `ingest_aquax.qmd`
+#' and the suitability-only merged paint do (`round()` in R is half-to-even, so `round_even`
+#' here); `"none"` keeps the value (a Float32 as-delivered raster). Integer modes cap at 255.
+#'
+#' @param expr SQL expression for the source value (default `"val"`)
+#' @param quant `"trunc"`, `"round_trunc"` or `"none"`
+#' @return a SQL expression string yielding a DOUBLE
+#' @examples
+#' pixel_quant_sql("val", "trunc")
+#' @export
+#' @concept cog_store
+pixel_quant_sql <- function(expr = "val", quant = c("trunc", "round_trunc", "none")) {
+  quant <- match.arg(quant)
+  switch(quant,
+    trunc       = sprintf("CAST(trunc(LEAST(%s, 255)) AS DOUBLE)", expr),
+    round_trunc = sprintf("CAST(trunc(LEAST(round_even(%s, 0), 255)) AS DOUBLE)", expr),
+    none        = sprintf("CAST(%s AS DOUBLE)", expr))
+}
+
+#' Pixel-content fingerprint of every model in a surface table
+#'
+#' [content_hashes()] over the PIXELS a COG would hold: `val` quantised as the writer does
+#' ([pixel_quant_sql()]), pixels below 1 dropped (they are NoData in the integer families), and -
+#' for a dataset whose models can repeat a cell - collapsed to one value per cell by `max()`, the
+#' rule the merge consumes (`turtle_sql()` / `merge_sql()` take `max(val)` per cell). The result is
+#' exactly what `content_hashes_df(native_raster_rows(<the painted COG>))` returns, so "does this
+#' object hold the rows its key says?" is one equality, and the key is known before any file is built.
+#'
+#' @param con open DuckDB connection
+#' @param from table name, `read_parquet(...)` expression or parenthesised subquery with `by`,
+#'   `cell_id` and `val`
+#' @param by grouping column (e.g. `mdl_key`)
+#' @param quant see [pixel_quant_sql()]
+#' @param min_pixel keep only pixels with a quantised value `>=` this (default 1; `-Inf` keeps all)
+#' @param dedup `"none"` or `"max"` (collapse repeated cells by `max(val)` BEFORE quantising)
+#' @return data frame `by`, `n`, `content_hash`
+#' @export
+#' @concept cog_store
+pixel_hashes <- function(con, from, by = "mdl_key", quant = c("trunc", "round_trunc", "none"),
+                         min_pixel = 1, dedup = c("none", "max")) {
+  quant <- match.arg(quant); dedup <- match.arg(dedup)
+  stopifnot(is.numeric(min_pixel), length(min_pixel) == 1L)
+  src <- if (dedup == "max")
+    sprintf('(SELECT "%s", cell_id, max(val) AS val FROM %s GROUP BY "%s", cell_id) d', by, from, by)
+  else from
+  q <- pixel_quant_sql("val", quant)
+  flt <- if (is.finite(min_pixel)) sprintf("WHERE %s >= %s", q, format(min_pixel, scientific = FALSE)) else ""
+  sql <- sprintf('(SELECT "%s", CAST(cell_id AS INTEGER) AS cell_id, %s AS val FROM %s %s) px', by, q, src, flt)
+  h <- content_hashes(con, sql, by)
+  h <- h[order(h[[by]]), , drop = FALSE]
   rownames(h) <- NULL
   h
 }

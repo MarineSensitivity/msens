@@ -7,7 +7,7 @@ vec <- function(geoms, key = "bl|1", crs = 4326, ...) sf::st_sf(
 
 test_that("asset_enc names one tag per file family and refuses an unknown one", {
   expect_equal(asset_enc("native_pmtiles"), "mvt-z0-10-simp10")
-  expect_equal(asset_enc("cog_model"), "int1u-trunc-nd0-ovr")   # the writer truncates: that is part of the object identity
+  expect_equal(asset_enc("cog_model"), "int1u-nd0-ovr")   # the container; the quantisation is in the hashed pixels (pixel_hashes)
   expect_false(asset_enc("cog_model") == asset_enc("cog_model_usa05"))        # v1-v7 (no overviews) is a different object
   expect_true(all(c("cog_model", "native_am", "native_ax", "native_pmtiles") %in% names(asset_enc())))
   expect_error(asset_enc("jpeg"), "unknown asset family")
@@ -158,4 +158,43 @@ test_that("asset_key_collisions: one key, one content (the migration invariant)"
   expect_equal(unique(asset_key_collisions(m)$key), "k1")
   m2 <- data.frame(key = c("k1", "k1"), content_hash = "a", enc = c("e1", "e2"))   # same payload, other encoding
   expect_equal(nrow(asset_key_collisions(m2)), 2L)
+})
+
+test_that("pixel_quant_sql reproduces what each writer stores: terra truncates, ax/suit-merged round half-to-even", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  v <- c(0.4, 1, 1.99, 2.5, 3.5, 12.34, 254.9, 300, 100)
+  q <- function(mode) DBI::dbGetQuery(con, sprintf("SELECT %s AS q FROM (SELECT unnest(%s) AS val) t",
+    pixel_quant_sql("val", mode), paste0("[", paste(v, collapse = ","), "]::DOUBLE[]")))$q
+  expect_equal(q("trunc"),       c(0, 1, 1, 2, 3, 12, 254, 255, 100))
+  expect_equal(q("round_trunc"), c(0, 1, 2, 2, 4, 12, 255, 255, 100))   # 2.5 -> 2 and 3.5 -> 4: half to even, like R
+  expect_equal(q("none"), v)
+})
+
+test_that("pixel_hashes == the hash of the pixels a painted COG decodes to (the key is the file's own content)", {
+  g <- list(nc = 20L, nr = 10L, xmin = 0, ymax = 10, resx = 1, resy = 1, crs = "EPSG:4326")
+  rows <- data.frame(mdl_key = "m", cell_id = c(23, 24, 45, 46, 120, 121), val = c(5.9, 6.2, 7, 0.6, 99.99, 1.01))
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "r", rows)
+  f <- tempfile(fileext = ".tif"); publish_cog(rows$cell_id, rows$val, f, g)       # INT1U: terra truncates
+  dec <- native_raster_rows(terra::rast(f), g)
+  expect_equal(sort(dec$val), c(1, 5, 6, 7, 99))                                      # 0.6 -> 0 = NoData: not a pixel
+  want <- content_hashes_df(cbind(mdl_key = "m", dec))$content_hash
+  expect_equal(pixel_hashes(con, "r", "mdl_key", "trunc")$content_hash, want)
+  # rounding gives different pixels, hence a different key, from the same rows
+  expect_false(pixel_hashes(con, "r", "mdl_key", "round_trunc")$content_hash == want)
+  # sub-1 pixels never enter the hash; min_pixel = -Inf keeps them
+  expect_equal(pixel_hashes(con, "r", "mdl_key", "trunc")$n, 5L)
+  expect_equal(pixel_hashes(con, "r", "mdl_key", "trunc", min_pixel = -Inf)$n, 6L)
+})
+
+test_that("pixel_hashes dedup = 'max' paints the value the merge consumes where a cell repeats", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  rows <- data.frame(mdl_key = "t", cell_id = c(1, 1, 2, 3, 3), val = c(10, 40, 20, 30.9, 30))   # cells 1 and 3 repeat
+  DBI::dbWriteTable(con, "r", rows)
+  one <- data.frame(mdl_key = "t", cell_id = 1:3, val = c(40, 20, 30.9))                          # max per cell
+  DBI::dbWriteTable(con, "one", one)
+  expect_equal(pixel_hashes(con, "r", dedup = "max")$content_hash, pixel_hashes(con, "one")$content_hash)
+  expect_equal(pixel_hashes(con, "r", dedup = "max")$n, 3L)
+  expect_equal(pixel_hashes(con, "r")$n, 5L)                                      # without it the repeats count twice
+  expect_false(pixel_hashes(con, "r")$content_hash == pixel_hashes(con, "one")$content_hash)
 })
