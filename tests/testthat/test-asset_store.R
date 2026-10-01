@@ -7,7 +7,7 @@ vec <- function(geoms, key = "bl|1", crs = 4326, ...) sf::st_sf(
 
 test_that("asset_enc names one tag per file family and refuses an unknown one", {
   expect_equal(asset_enc("native_pmtiles"), "mvt-z0-10-simp10")
-  expect_equal(asset_enc("cog_model"), "int1u-nd0-ovr")
+  expect_equal(asset_enc("cog_model"), "int1u-trunc-nd0-ovr")   # the writer truncates: that is part of the object identity
   expect_false(asset_enc("cog_model") == asset_enc("cog_model_usa05"))        # v1-v7 (no overviews) is a different object
   expect_true(all(c("cog_model", "native_am", "native_ax", "native_pmtiles") %in% names(asset_enc())))
   expect_error(asset_enc("jpeg"), "unknown asset family")
@@ -21,6 +21,11 @@ test_that("content_hashes_df equals content_hashes on the same rows, and ignores
   ref <- content_hashes(con, "t", "mdl_key"); ref <- ref[order(ref$mdl_key), ]; rownames(ref) <- NULL
   expect_equal(h, ref)
   expect_equal(content_hashes_df(d[sample(nrow(d)), ]), h)                   # order-blind
+  # R integers vs doubles must not change the hash: the payload is canonical (INTEGER, DOUBLE)
+  dd <- d; dd$cell_id <- as.double(dd$cell_id)
+  expect_equal(content_hashes_df(dd), h)
+  dd <- d; dd$val <- as.integer(dd$val)
+  expect_equal(content_hashes_df(dd), h)
   d2 <- d; d2$val[1] <- 11
   h2 <- content_hashes_df(d2)
   expect_false(h2$content_hash[h2$mdl_key == "a"] == h$content_hash[h$mdl_key == "a"])

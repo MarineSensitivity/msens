@@ -15,7 +15,7 @@ re-publish look new and upload everything again. A release now owns pointers, ne
   release's pointer table names - the only way anything is ever pruned); `asset_key_collisions()`
   (one key, one content); `asset_key()`, `asset_key_from_url()` (a versioned path returns `NA`).
 * **New: the hash functions.** `asset_enc(family)` is the encoding tag of each file family
-  (`cog_model` = `int1u-nd0-ovr`, `native_am`, `native_ax`, `native_pmtiles` = `mvt-z0-10-simp10`,
+  (`cog_model` = `int1u-trunc-nd0-ovr` - terra truncates doubles into INT1U, so that is part of the identity -, `native_am`, `native_ax`, `native_pmtiles` = `mvt-z0-10-simp10`,
   ...). `native_vector_hash()` / `native_vector_hashes()` hash a model's features as
   `publish_pmtiles()` tiles them (EPSG:4326, XY, empties dropped; sorted WKB + the `mdl_key`/`ds_key`
   tile attributes), blind to feature order and to source columns that never reach the tile.

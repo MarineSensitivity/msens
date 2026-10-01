@@ -17,9 +17,11 @@
 # cache then 500s low zooms - see content_hash_encoded()).
 .ASSET_ENC <- c(
   cog_model_usa05 = "int1u-nd0-noovr",            # v1-v7 species COGs (backfill_versions.qmd)
-  cog_model       = "int1u-nd0-ovr",              # publish_cog() defaults: INT1U, nodata 0, DEFLATE, 256 blocks, NEAREST overviews
+  cog_model       = "int1u-trunc-nd0-ovr",        # publish_cog() defaults: INT1U (terra TRUNCATES doubles - verified: all
+                                                  # pixels of an am model equal trunc(val), 274k of 512k equal round(val)),
+                                                  # nodata 0, DEFLATE, 256 blocks, NEAREST overviews
   cog_score       = "flt4s-nd9999-noovr",         # publish_score_cogs.qmd
-  native_am       = "int1u-nd0-ovr-0.5deg",       # AquaMaps HCAF probability*100 on the 720x360 grid, via publish_cog()
+  native_am       = "int1u-trunc-nd0-ovr-0.5deg", # AquaMaps HCAF probability*100 on the 720x360 grid, via publish_cog()
   native_ax       = "flt4s-nd9999-ovr-delivered", # AquaX band 1 as delivered (Float32), msens::cog_from_tif()
   native_pmtiles  = "mvt-z0-10-simp10")           # publish_pmtiles(): tippecanoe z0-10, --simplification 10 (low zooms only)
 
@@ -64,7 +66,11 @@ content_hashes_df <- function(df, by = "mdl_key", cols = c("cell_id", "val")) {
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   duckdb::duckdb_register(con, "rows_in", df[c(by, cols)])
-  h <- content_hashes(con, "rows_in", by, cols)
+  # canonical payload types: every Parquet surface in the pipeline is (cell_id INTEGER, val DOUBLE),
+  # and DuckDB's hash() depends on the type, so an R double cell_id would hash differently
+  sel <- sprintf('"%s"', cols); sel[cols == "cell_id"] <- 'CAST("cell_id" AS INTEGER) AS "cell_id"'
+  sel[cols == "val"] <- 'CAST("val" AS DOUBLE) AS "val"'
+  h <- content_hashes(con, sprintf('(SELECT "%s", %s FROM rows_in) AS canon', by, paste(sel, collapse = ", ")), by, cols)
   h <- h[order(h[[by]]), , drop = FALSE]                                     # GROUP BY order is unspecified
   rownames(h) <- NULL
   h
