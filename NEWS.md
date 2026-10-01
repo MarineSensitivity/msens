@@ -1,3 +1,22 @@
+# msens 0.48.0
+
+**Density-response models (`gm`, `nc`): transforms for unscored density datasets.** These datasets
+are displayed as RAW density for now (unscored); nothing here changes merge/scoring code.
+
+* **New, exported: `density_to_suit(d, method, ...)`** — maps a density surface (individuals km^-2)
+  onto [0,100] by `"cap"` (linear to the p99.5 quantile, clamped), `"log"` (log density between a
+  floor and cap quantile), `"ud"` (population percentile of the cell; `val >= 100 - p` is the p %
+  core) or `"qmap"` (quantile mapping onto a reference suitability distribution). Absent
+  (`d <= 0`) is 0 under every method; `NA` passes through. Raw density needs no call: simply do
+  not rescale.
+* **New, exported: `density_annual(x, n_intervals)`** — annual mean over ALL intervals of the
+  year, an absent interval counting as zero (averaging only present intervals biases cells upward).
+* **`cells_from_raster()` gains `digits` (default 2, unchanged).** `val` was always rounded to two
+  decimals, which zeroed raw densities below 0.005; pass `digits = 6` (or `NULL`) for native units.
+* **Fixed: `density_to_suit(method = "ud")` with near-equal densities.** Ties were grouped via
+  `factor()`, whose `as.character()` collapsed near-equal doubles into duplicate levels and errored
+  on real surfaces; ties are now grouped on the numeric values. Regression tests added.
+
 # msens 0.47.0
 
 **One content-addressed store for every distribution file of every release (R4-F redesign; code
