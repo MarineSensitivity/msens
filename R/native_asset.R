@@ -7,10 +7,13 @@
 # AquaMaps COG) next to the gridded COG (`model`). This builds the same table for v7 by
 # reusing the originals a later release already publishes, matched on the stable model key.
 
-# columns of a v8 `native_asset`, in v8's order
+# columns of a v8 `native_asset`, in v8's order, then `content_hash` (0.47.0): the 16-hex store hash
+# naming the object the row points at (`cog/{grid}/{hash}.tif` or `native/{ds}/{hash}.ext`), NA
+# for a row that points at a legacy versioned path
 .NATIVE_ASSET_COLS <- c(
   "ms_merge_key", "mdl_key", "ds_key", "asset_type", "representation", "asset_url",
-  "rescale_min", "rescale_max", "colormap", "xmin", "xmax", "ymin", "ymax", "source_layer")
+  "rescale_min", "rescale_max", "colormap", "xmin", "xmax", "ymin", "ymax", "source_layer",
+  "content_hash")
 
 #' Spell a v1-v7 stable model key the way a later release's `native_asset` does
 #'
@@ -39,19 +42,20 @@ native_key_v8 <- function(mdl_key) {
 
 # the unversioned, content-addressed store of ORIGINAL surfaces ----
 #
-#   S3 (mirror of everything):  {atlas_base}/native/{ds_key}/{hash}.tif | .pmtiles
-#   file host (PMTiles served): https://file.marinesensitivity.org/pmtiles/native/{ds_key}/{hash}.pmtiles
+#   S3:  {atlas_base}/native/{ds_key}/{hash}.tif | .pmtiles       (PMTiles are served from S3 too)
 #
 # Twin of cog_store.R's `cog/{grid_id}/{content_hash}.tif`: no version in the path, so a release
 # that re-publishes identical content writes nothing, and every release's `native_asset`
-# references the same objects. `hash` is 16 hex chars for a SOURCE-content hash (new publishes,
-# like content_hashes()) or 32 hex chars for the MD5 of the object's BYTES (existing v8/v9
-# objects whose source is not at hand); the lengths cannot collide, so one key names one thing.
+# references the same objects. `hash` is ALWAYS the 16-hex SOURCE-content hash folded with the
+# file family's encoding tag (content_hash_encoded(); tags in asset_enc()) - computed before the
+# file is built. The MD5 of an object's bytes is an integrity column of the catalog
+# (`assets.parquet`), never a key: a rebuilt GeoTIFF is not byte-identical, so a bytes key would
+# make every re-publish look new.
 
 #' Object key of a stored original surface
 #'
 #' @param ds_key dataset key (`"am"`, `"bl"`, `"rng_iucn"`, ...)
-#' @param hash content hash (16 hex = source content, 32 hex = object-bytes MD5)
+#' @param hash 16-hex source-content hash folded with the encoding tag ([content_hash_encoded()])
 #' @param type `"cog"` (`.tif`) or `"pmtiles"`
 #' @return relative key(s), e.g. `"native/bl/3f2a....pmtiles"`
 #' @export
@@ -59,24 +63,25 @@ native_key_v8 <- function(mdl_key) {
 native_key <- function(ds_key, hash, type = c("cog", "pmtiles")) {
   type <- match.arg(type)
   stopifnot(length(ds_key) == 1 || length(ds_key) == length(hash),
-            !anyNA(hash), all(grepl("^([0-9a-f]{16}|[0-9a-f]{32})$", hash)),
+            !anyNA(hash), all(grepl("^[0-9a-f]{16}$", hash)),
             all(grepl("^[A-Za-z0-9_]+$", ds_key)))
   sprintf("native/%s/%s.%s", ds_key, hash, if (type == "cog") "tif" else "pmtiles")
 }
 
 #' Public URL of a stored original surface
 #'
-#' Twin of [content_url()]. COGs are served from S3; PMTiles from the file host (they are
-#' mirrored to S3 under the same key, as the model COGs are).
+#' Twin of [content_url()]. COGs AND PMTiles are served from S3 (S3 answers range requests with
+#' CORS, as the zone PMTiles already prove); `pmtiles_base` exists only to point a test or a
+#' legacy mirror elsewhere, and defaults to `base`.
 #'
 #' @param ds_key,hash,type see [native_key()]
-#' @param base S3 atlas base URL (COGs), from [atlas_base_url()]
-#' @param pmtiles_base file-host PMTiles root (no trailing slash)
+#' @param base S3 atlas base URL, from [atlas_base_url()]
+#' @param pmtiles_base PMTiles root (no trailing slash); default `base`
 #' @return absolute `https://` URL(s)
 #' @export
 #' @concept cog_store
 native_url <- function(ds_key, hash, type = c("cog", "pmtiles"), base = atlas_base_url(),
-                       pmtiles_base = "https://file.marinesensitivity.org/pmtiles") {
+                       pmtiles_base = base) {
   type <- match.arg(type)
   k <- native_key(ds_key, hash, type)
   if (type == "cog") sprintf("%s/%s", base, k)
@@ -109,7 +114,7 @@ native_store_index <- function(ds_key = NULL,
   }
   keys <- sub("^.*\\s+", "", out[nzchar(out)])
   # the release-scoped v8/v9 layout also lives under native/; only {ds_key}/{hash}.ext counts
-  keys <- keys[grepl("/[0-9a-f]{16}([0-9a-f]{16})?\\.(tif|pmtiles)$", keys)]
+  keys <- keys[grepl("/[0-9a-f]{16}\\.(tif|pmtiles)$", keys)]
   unique(sub("\\.[^.]*$", "", basename(keys)))
 }
 
@@ -122,7 +127,8 @@ native_store_index <- function(ds_key = NULL,
 #' @param native_ref a `native_asset` (v8 shape)
 #' @param map data frame `asset_url` (current URL), `hash`
 #' @param ... passed to [native_url()] (`base`, `pmtiles_base`)
-#' @return `native_ref` with store URLs on its `native` rows
+#' @return `native_ref` with store URLs on its `native` rows, and `content_hash` set to the store
+#'   hash on those rows
 #' @export
 #' @concept cog_store
 native_store_rewrite <- function(native_ref, map, ...) {
@@ -136,10 +142,15 @@ native_store_rewrite <- function(native_ref, map, ...) {
   ty <- ifelse(native_ref$asset_type[isn] == "pmtiles", "pmtiles", "cog")
   native_ref$asset_url[isn] <- vapply(seq_along(h), function(i)
     native_url(native_ref$ds_key[isn][i], h[i], ty[i], ...), "")
+  if (!"content_hash" %in% names(native_ref)) native_ref$content_hash <- rep(NA_character_, nrow(native_ref))
+  native_ref$content_hash[isn] <- h
   native_ref
 }
 
-#' MD5 of an object's bytes (the store hash for an already-built object)
+#' MD5 of an object's bytes (the catalog's integrity column, never a store key)
+#'
+#' For a single-part S3 upload this equals the object's ETag, so a copy can be checked without
+#' downloading it. A rebuilt GeoTIFF is not byte-identical, which is why it is not the key.
 #'
 #' @param path local file(s)
 #' @return 32-hex MD5(s)
@@ -206,7 +217,10 @@ native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, tax
     mdl_key = ma$mdl_seq, ds_key = ma$ds_key, asset_type = "cog", representation = "model",
     asset_url = ma$cog_url, rescale_min = 1L, rescale_max = 100L, colormap = "spectral_r",
     xmin = NA_real_, xmax = NA_real_, ymin = NA_real_, ymax = NA_real_,
-    source_layer = NA_character_, stringsAsFactors = FALSE)
+    source_layer = NA_character_,
+    content_hash = ifelse(grepl("/cog/[A-Za-z0-9]+/[0-9a-f]{16}\\.tif$", ma$cog_url),
+                          sub("^.*/([0-9a-f]{16})\\.tif$", "\\1", ma$cog_url), NA_character_),
+    stringsAsFactors = FALSE)
 
   nat <- native_ref[native_ref$representation == "native", , drop = FALSE]
   dup <- paste(nat$mdl_key, nat$representation, sep = "\r")
@@ -219,7 +233,7 @@ native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, tax
   j <- match(inp$ref_key, nat$mdl_key)
   hit <- which(!is.na(j))
   keep <- c("asset_type", "asset_url", "rescale_min", "rescale_max", "colormap",
-            "xmin", "xmax", "ymin", "ymax", "source_layer")
+            "xmin", "xmax", "ymin", "ymax", "source_layer", "content_hash")
   n <- length(hit)
   sel <- native_store_rewrite(nat[j[hit], , drop = FALSE], store, ...)   # store URLs, never the reference's
   native <- data.frame(ms_merge_key = rep(NA_character_, n), mdl_key = inp$mdl_seq[hit],

@@ -2,7 +2,7 @@
 % Please edit documentation in R/native_asset.R
 \name{native_hash_file}
 \alias{native_hash_file}
-\title{MD5 of an object's bytes (the store hash for an already-built object)}
+\title{MD5 of an object's bytes (the catalog's integrity column, never a store key)}
 \usage{
 native_hash_file(path)
 }
@@ -13,6 +13,7 @@ native_hash_file(path)
 32-hex MD5(s)
 }
 \description{
-MD5 of an object's bytes (the store hash for an already-built object)
+For a single-part S3 upload this equals the object's ETag, so a copy can be checked without
+downloading it. A rebuilt GeoTIFF is not byte-identical, which is why it is not the key.
 }
 \concept{cog_store}

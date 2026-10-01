@@ -9,7 +9,7 @@ native_key(ds_key, hash, type = c("cog", "pmtiles"))
 \arguments{
 \item{ds_key}{dataset key (\code{"am"}, \code{"bl"}, \code{"rng_iucn"}, ...)}
 
-\item{hash}{content hash (16 hex = source content, 32 hex = object-bytes MD5)}
+\item{hash}{16-hex source-content hash folded with the encoding tag (\code{\link[=content_hash_encoded]{content_hash_encoded()}})}
 
 \item{type}{\code{"cog"} (\code{.tif}) or \code{"pmtiles"}}
 }

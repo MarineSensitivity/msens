@@ -1,3 +1,38 @@
+# msens 0.47.0
+
+**One content-addressed store for every distribution file of every release (R4-F redesign; code
+only, nothing published).** Supersedes the "key = MD5 of the object's bytes" half of 0.46.0: a
+future `publish_native.qmd` computes a SOURCE-content hash, so a bytes key would make every
+re-publish look new and upload everything again. A release now owns pointers, never files.
+
+* **New: the store catalog** (`R/asset_store.R`). `assets.parquet` (bucket root, public) has one
+  row per stored object (`store, key, content_hash, enc, asset_type, grid_id, ds_key, bytes, md5,
+  created, first_ver`). `asset_catalog_check()` rejects a duplicated key, a key that is not
+  `{cog/<grid>|native/<ds>}/<16 hex>.<tif|pmtiles>`, a `store`/`grid_id`/`ds_key`/extension that
+  disagrees with the key, and any row whose key hash is not `content_hash_encoded(content_hash,
+  enc)`; `asset_catalog_add()` is idempotent and refuses a key that already names other content;
+  `asset_catalog_read()`/`asset_catalog_write()`; `store_unreferenced()` (catalog rows no
+  release's pointer table names - the only way anything is ever pruned); `asset_key_collisions()`
+  (one key, one content); `asset_key()`, `asset_key_from_url()` (a versioned path returns `NA`).
+* **New: the hash functions.** `asset_enc(family)` is the encoding tag of each file family
+  (`cog_model` = `int1u-nd0-ovr`, `native_am`, `native_ax`, `native_pmtiles` = `mvt-z0-10-simp10`,
+  ...). `native_vector_hash()` / `native_vector_hashes()` hash a model's features as
+  `publish_pmtiles()` tiles them (EPSG:4326, XY, empties dropped; sorted WKB + the `mdl_key`/`ds_key`
+  tile attributes), blind to feature order and to source columns that never reach the tile.
+  `native_raster_rows()` decodes a COG to the `(cell_id, val)` rows it was painted from, and
+  `content_hashes_df()` runs the same DuckDB reduction on a data frame, so a hash from decoded
+  pixels equals one from the Parquet.
+* **Changed: `native_key()` accepts only a 16-hex source-content hash** (a 32-hex bytes-MD5 is an
+  error; the MD5 is the catalog's integrity column and equals a single-part S3 ETag).
+  **`native_url()` defaults PMTiles to the S3 store** like COGs (`pmtiles_base` now defaults to
+  `base`); the file-host copy is no longer a default home. `native_store_index()` matches only 16-hex
+  objects.
+* **Changed: `native_asset` gains `content_hash`** (last column): the 16-hex store hash of the object
+  a row points at, `NA` for a legacy versioned pointer. `native_store_rewrite()` and
+  `native_asset_backfill()` set it (a v7 model row takes it from its `cog/{grid}/{hash}.tif` URL).
+* 0.45.0 (gm/nc density transforms) is uncommitted work in the `msens-density` worktree; this
+  release does not include it.
+
 # msens 0.46.0
 
 **Backfill v1-v7 with the ORIGINAL species surfaces, so the atlas can show Original | Interpolated

@@ -14,7 +14,8 @@ native_store_rewrite(native_ref, map, ...)
 \item{...}{passed to \code{\link[=native_url]{native_url()}} (\code{base}, \code{pmtiles_base})}
 }
 \value{
-\code{native_ref} with store URLs on its \code{native} rows
+\code{native_ref} with store URLs on its \code{native} rows, and \code{content_hash} set to the store
+hash on those rows
 }
 \description{
 Replaces \code{asset_url} of every \code{native} row by \code{\link[=native_url]{native_url()}} of its \code{hash}, looked up by the

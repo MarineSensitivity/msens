@@ -20,21 +20,27 @@ fx_ref <- rbind(
   ref_row("am|Fis-1", "cog", "model"),                     # a v8 model row: never copied
   ref_row("ms_merge|WORMS:1", "cog", "model"))
 
-H16 <- "0123456789abcdef"; H32 <- paste0(H16, "fedcba9876543210")
+H16 <- "0123456789abcdef"; H16b <- "fedcba9876543210"
 fx_store <- data.frame(
   asset_url = c("https://x.invalid/am|Fis-1", "https://x.invalid/bl|777",
                 "https://x.invalid/ch_nmfs|Acropora_palmata"),
-  hash = c(H32, H16, H32), stringsAsFactors = FALSE)
+  hash = c(H16b, H16, H16b), stringsAsFactors = FALSE)
 B <- "https://s3.example/marine-atlas"; P <- "https://files.example/pmtiles"
 
-test_that("native_key / native_url lay out the unversioned store, COGs on S3 and PMTiles on the file host", {
-  expect_equal(native_key("am", H32), paste0("native/am/", H32, ".tif"))
+test_that("native_key / native_url lay out the unversioned store, COGs AND PMTiles on S3", {
+  expect_equal(native_key("am", H16b), paste0("native/am/", H16b, ".tif"))
   expect_equal(native_key("bl", H16, "pmtiles"), paste0("native/bl/", H16, ".pmtiles"))
-  expect_equal(native_url("am", H32, base = B), paste0(B, "/native/am/", H32, ".tif"))
-  expect_equal(native_url("bl", H16, "pmtiles", pmtiles_base = P), paste0(P, "/native/bl/", H16, ".pmtiles"))
-  expect_false(grepl("v[0-9]", native_url("bl", H16, "pmtiles", pmtiles_base = P)))   # no version in the path
+  expect_equal(native_url("am", H16b, base = B), paste0(B, "/native/am/", H16b, ".tif"))
+  # 0.47.0: PMTiles default to the S3 store (the file host is no longer the default home)
+  expect_equal(native_url("bl", H16, "pmtiles", base = B), paste0(B, "/native/bl/", H16, ".pmtiles"))
+  expect_false(grepl("file.marinesensitivity.org", native_url("bl", H16, "pmtiles")))
+  expect_true(startsWith(native_url("bl", H16, "pmtiles"), atlas_base_url()))
+  expect_equal(native_url("bl", H16, "pmtiles", pmtiles_base = P), paste0(P, "/native/bl/", H16, ".pmtiles"))   # override kept
+  expect_false(grepl("v[0-9]", native_url("bl", H16, "pmtiles", base = B)))   # no version in the path
   expect_error(native_key("am", "nothex"))                                  # a malformed hash never makes a key
   expect_error(native_key("am|x", H16))                                     # nor a ds_key with a separator
+  # 0.47.0: a 32-hex bytes-MD5 is NO LONGER a key - the MD5 is a catalog integrity column
+  expect_error(native_key("am", paste0(H16, H16b)))
 })
 
 test_that("native_hash_file is the MD5 of the bytes (== an S3 single-part ETag)", {
@@ -45,7 +51,8 @@ test_that("native_hash_file is the MD5 of the bytes (== an S3 single-part ETag)"
 test_that("native_store_rewrite re-points native rows and refuses an unmapped one", {
   ref <- fx_ref[fx_ref$mdl_key %in% c("am|Fis-1", "bl|777") & fx_ref$representation == "native", ]
   o <- native_store_rewrite(ref, fx_store, base = B, pmtiles_base = P)
-  expect_equal(o$asset_url, c(paste0(B, "/native/am/", H32, ".tif"), paste0(P, "/native/bl/", H16, ".pmtiles")))
+  expect_equal(o$asset_url, c(paste0(B, "/native/am/", H16b, ".tif"), paste0(P, "/native/bl/", H16, ".pmtiles")))
+  expect_equal(o$content_hash, c(H16b, H16))                                 # the pointer names its object
   expect_error(native_store_rewrite(ref, fx_store[1, ]), "no store mapping")
   m <- rbind(fx_store, fx_store[1, ])
   expect_error(native_store_rewrite(ref, m))                                # duplicate mapping
@@ -63,7 +70,7 @@ test_that("a matched input gets a model row AND a native row, copied from the re
   o <- native_asset_backfill(fx_ma, fx_xw, fx_ref, fx_store, base = B, pmtiles_base = P)
   expect_named(o, c("ms_merge_key", "mdl_key", "ds_key", "asset_type", "representation",
                     "asset_url", "rescale_min", "rescale_max", "colormap", "xmin", "xmax",
-                    "ymin", "ymax", "source_layer"))
+                    "ymin", "ymax", "source_layer", "content_hash"))
   a <- o[o$mdl_key == "20", ]
   expect_setequal(a$representation, c("model", "native"))
   nat <- a[a$representation == "native", ]

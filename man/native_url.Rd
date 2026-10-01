@@ -9,21 +9,22 @@ native_url(
   hash,
   type = c("cog", "pmtiles"),
   base = atlas_base_url(),
-  pmtiles_base = "https://file.marinesensitivity.org/pmtiles"
+  pmtiles_base = base
 )
 }
 \arguments{
 \item{ds_key, hash, type}{see \code{\link[=native_key]{native_key()}}}
 
-\item{base}{S3 atlas base URL (COGs), from \code{\link[=atlas_base_url]{atlas_base_url()}}}
+\item{base}{S3 atlas base URL, from \code{\link[=atlas_base_url]{atlas_base_url()}}}
 
-\item{pmtiles_base}{file-host PMTiles root (no trailing slash)}
+\item{pmtiles_base}{PMTiles root (no trailing slash); default \code{base}}
 }
 \value{
 absolute \verb{https://} URL(s)
 }
 \description{
-Twin of \code{\link[=content_url]{content_url()}}. COGs are served from S3; PMTiles from the file host (they are
-mirrored to S3 under the same key, as the model COGs are).
+Twin of \code{\link[=content_url]{content_url()}}. COGs AND PMTiles are served from S3 (S3 answers range requests with
+CORS, as the zone PMTiles already prove); \code{pmtiles_base} exists only to point a test or a
+legacy mirror elsewhere, and defaults to \code{base}.
 }
 \concept{cog_store}
