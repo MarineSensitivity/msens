@@ -10,7 +10,8 @@
   with `table:columns`). Filter it by `ds_key`; `asset_url` is the COG or PMTiles, `representation` is `native` or `model`.
 * New argument `has_native_asset` on both functions. `stac_build()` defaults it (`NULL`) to whether the connection has a
   `native_asset` table; a release without one gets no native asset at all rather than a dead link. A legacy (`mdl_seq`) release's
-  Item is unchanged.
+  local database has no such table even when the pointer table is published (v7, v7b): pass `has_native_asset = TRUE` and each
+  input dataset's Item links it beside `model_asset.parquet`.
 * The regression tests build a whole catalog and assert that no asset points at a `/pmtiles/` or `/native/` directory.
 
 # msens 0.51.0

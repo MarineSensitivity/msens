@@ -31,7 +31,8 @@ example tile links. \code{NULL} builds the catalog without those links. Ignored 
 
 \item{has_native_asset}{whether the release publishes \code{tables/native_asset.parquet}, so each raster /
 vector dataset Item links it (see \code{\link[=stac_model_cell_item]{stac_model_cell_item()}}). \code{NULL} (default) checks the connection
-for a \code{native_asset} table. Ignored for a legacy release, whose Items link \code{model_asset.parquet}.}
+for a \code{native_asset} table. A legacy release's local database has none even when the pointer table is
+published (v7, v7b since 2026-10-02): pass \code{TRUE} there and its Items link it beside \code{model_asset.parquet}.}
 }
 \value{
 invisibly, the path to the root \code{catalog.json}

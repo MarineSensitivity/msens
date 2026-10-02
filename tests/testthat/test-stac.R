@@ -75,6 +75,23 @@ test_that("a legacy release without model_asset still builds, without inventing 
   expect_true("self" %in% rels)
 })
 
+test_that("a legacy release that publishes the pointer table links it on each input dataset (v7, v7b)", {
+  # its local database has no native_asset table, so the caller says so; the default stays 'no link'
+  con <- stac_fixture_con(legacy = TRUE); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d0  <- tempfile("stac_"); d1 <- tempfile("stac_"); on.exit(unlink(c(d0, d1), recursive = TRUE), add = TRUE)
+  stac_build("v7", dir_out = d0, con = con)
+  expect_null(read_item(d0, "v7", "am_0.05")$assets$native_asset)
+  stac_build("v7", dir_out = d1, con = con, has_native_asset = TRUE)
+  na <- read_item(d1, "v7", "am_0.05")$assets$native_asset
+  expect_match(na$href, "/v7/tables/native_asset\\.parquet$")
+  expect_match(na$title, "ds_key = 'am_0.05'", fixed = TRUE)
+  expect_equal(vapply(na$`table:columns`, `[[`, "", "name"),
+               c("mdl_key", "ds_key", "asset_type", "representation", "asset_url", "content_hash"))
+  # the merged dataset keeps its model_asset registry only, as from v8
+  expect_null(read_item(d1, "v7", "ms_merge")$assets$native_asset)
+  expect_match(read_item(d1, "v7", "am_0.05")$assets$data$href, "/v7/tables/model_asset\\.parquet$")
+})
+
 test_that("a v8+ (mdl_key) release is unchanged: dist_merged Parquet + the SQL surface", {
   con <- stac_fixture_con(legacy = FALSE); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   d   <- tempfile("stac_"); on.exit(unlink(d, recursive = TRUE), add = TRUE)
