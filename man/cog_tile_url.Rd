@@ -8,7 +8,7 @@ cog_tile_url(
   cog_url,
   colormap = "spectral_r",
   rescale = c(1, 100),
-  base = "https://titiler-v8.marinesensitivity.org",
+  base = atlas_bases()$titiler,
   tms = "WebMercatorQuad",
   color = NULL
 )

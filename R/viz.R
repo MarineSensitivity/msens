@@ -348,7 +348,7 @@ cell_tile_url <- function(
     sql = NULL,
     colormap = "spectral_r", rescale = NULL, color = NULL, mtime = NULL,
     mdl_key = NULL,
-    base = "https://titiler-v8.marinesensitivity.org") {
+    base = atlas_bases()$titiler) {
   # source param: the merged-model fast-path (the STABLE `mdl_key`, resolved server-side to a
   # serve partition read by exact path) OR a base64url SELECT. Exactly one. The internal integer
   # partition id is NEVER put in the URL — mdl_key is what stays constant across releases.
@@ -400,7 +400,7 @@ cell_tile_url <- function(
 cog_tile_url <- function(
     cog_url,
     colormap = "spectral_r", rescale = c(1, 100),
-    base = "https://titiler-v8.marinesensitivity.org",
+    base = atlas_bases()$titiler,
     tms  = "WebMercatorQuad",
     color = NULL) {
   stopifnot(is.character(cog_url), length(cog_url) == 1, nchar(cog_url) > 0)
@@ -448,7 +448,7 @@ cell_stats <- function(
     sql = NULL,
     mtime = NULL,
     mdl_key = NULL,
-    base = "https://titiler-v8.marinesensitivity.org") {
+    base = atlas_bases()$titiler) {
   # req_url_query URL-encodes values, so pass the raw mdl_key (stable public id, not the
   # internal integer partition id).
   if (!is.null(mdl_key)) {
@@ -1034,7 +1034,7 @@ utils::globalVariables(c(
 #' @export
 #' @concept viz
 cog_point_value <- function(cog_url, lon, lat,
-                            base = "https://titiler-v8.marinesensitivity.org",
+                            base = atlas_bases()$titiler,
                             timeout = 8) {
   if (!is.character(cog_url) || length(cog_url) != 1 || !nzchar(cog_url)) return(NA_real_)
   u <- sprintf("%s/cog/point/%s,%s?url=%s", base,

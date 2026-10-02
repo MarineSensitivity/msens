@@ -87,3 +87,69 @@ test_that("pages are self-contained and empty input is not an error", {
   expect_false(grepl("<link[^>]+stylesheet", h))
   expect_equal(nrow(build_storage_index(data.frame(key = character(), size = numeric()))), 0L)
 })
+
+# ---- ga4 snippet -------------------------------------------------------------
+
+test_that("ga4_id = NULL leaves the page byte-identical to what 0.50.0 emitted", {
+  tmp <- tempfile(); on.exit(unlink(tmp))
+  md5 <- function(x) { writeBin(charToRaw(x), tmp); unname(tools::md5sum(tmp)) }
+  # digests recorded from the pre-ga4_id code
+  expect_identical(md5(storage_page("t", "s", "<p>b</p>", "c")), "70536b549ea3ef028620bb8c9b3c2a25")
+  ix <- build_storage_index(data.frame(key = c("a/b/c.tif", "d.json", "a/e.parquet"), size = c(1, 2, 3)))
+  expect_identical(md5(paste(ix$key, ix$html, collapse = "|")), "a31e9181658f6a6fc33654c4cd338e1e")
+  expect_false(grepl("gtag|googletagmanager", storage_page("t")))
+})
+
+test_that("ga4_id adds the gtag snippet with content_group 'storage'", {
+  pg <- storage_page("t", ga4_id = "G-TEST123")
+  expect_match(pg, "googletagmanager.com/gtag/js?id=G-TEST123", fixed = TRUE)
+  expect_match(pg, "gtag('config','G-TEST123',{content_group:'storage'})", fixed = TRUE)
+  # inside <head>, before the title
+  expect_lt(regexpr("gtag", pg), regexpr("<title>", pg))
+  expect_error(storage_page("t", ga4_id = "G-X'><script>"))
+  # build_storage_index passes it to every page
+  ix <- build_storage_index(objs(), ga4_id = "G-TEST123")
+  expect_true(all(grepl("content_group:'storage'", ix$html, fixed = TRUE)))
+})
+
+# ---- linking rule (regression): files -> object store, folders -> browse host --
+
+test_that("file links use obj_url; folder and breadcrumb links use site_url", {
+  site <- "https://site.test"; obj <- "https://obj.test/bucket"
+  o <- data.frame(
+    key  = c("top.json",                                  # a file at the root
+             "marine-atlas/v8/tables/taxon.parquet",      # nested dirs
+             "marine-atlas/v8/manifest.json",
+             sprintf("marine-atlas/serve/model_cell/mdl_id=%d/data_0.parquet", 1:3),
+             "marine-atlas/serve/model_cell/mdl_id=9/a.parquet",   # a partition with
+             "marine-atlas/serve/model_cell/mdl_id=9/b.parquet"),  # two objects
+    size = 100, stringsAsFactors = FALSE)
+  ix <- build_storage_index(o, site_url = site, obj_url = obj, max_child_dirs = 2L)
+
+  # the crowded directory is collapsed: no page per partition
+  expect_false(any(grepl("mdl_id=", ix$key)))
+  expect_true("marine-atlas/serve/model_cell/index.html" %in% ix$key)
+
+  hrefs <- unlist(lapply(ix$html, function(h) {
+    m <- regmatches(h, gregexpr("href='[^']*'", h))[[1]]
+    sub("^href='(.*)'$", "\\1", m)
+  }))
+  folder <- grepl("/$", hrefs)
+  # every folder / crumb link is on the browse host, and only there
+  expect_true(length(hrefs[folder]) > 0)
+  expect_true(all(startsWith(hrefs[folder], site)))
+  # every file link (incl. the single-object partition linked straight to its object)
+  # is on the object store; none is on the browse host
+  expect_true(all(startsWith(hrefs[!folder], obj)))
+  expect_false(any(startsWith(hrefs[!folder], site)))
+  # and each object is reachable under its exact key
+  expect_true(all(c(paste0(obj, "/top.json"),
+                    paste0(obj, "/marine-atlas/v8/tables/taxon.parquet"),
+                    paste0(obj, "/marine-atlas/serve/model_cell/mdl_id=1/data_0.parquet")) %in% hrefs))
+  # the root file is linked from the root page, the two-object partition is not linked at all
+  root <- ix$html[ix$key == "index.html"]
+  expect_match(root, paste0("href='", obj, "/top.json'"), fixed = TRUE)
+  mc <- ix$html[ix$key == "marine-atlas/serve/model_cell/index.html"]
+  expect_false(grepl("mdl_id=9/'", mc, fixed = TRUE))
+  expect_false(grepl(paste0(site, "/marine-atlas/serve/model_cell/mdl_id"), mc, fixed = TRUE))
+})

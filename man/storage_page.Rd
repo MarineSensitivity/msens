@@ -4,7 +4,7 @@
 \alias{storage_page}
 \title{One self-contained storage index page}
 \usage{
-storage_page(title, subtitle = "", body_html = "", crumb = "")
+storage_page(title, subtitle = "", body_html = "", crumb = "", ga4_id = NULL)
 }
 \arguments{
 \item{title, subtitle}{page heading}
@@ -12,6 +12,11 @@ storage_page(title, subtitle = "", body_html = "", crumb = "")
 \item{body_html}{the listing table}
 
 \item{crumb}{breadcrumb HTML}
+
+\item{ga4_id}{GA4 measurement id (e.g. \code{"G-XXXXXXXXXX"}). When set, the page
+head carries the gtag.js snippet with \code{content_group} = \code{"storage"}, the
+same shape as the project's other products so one stream spans them all.
+\code{NULL} (default) emits no script and the HTML is unchanged.}
 }
 \value{
 an HTML string

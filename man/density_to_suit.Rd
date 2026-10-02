@@ -2,7 +2,7 @@
 % Please edit documentation in R/density.R
 \name{density_to_suit}
 \alias{density_to_suit}
-\title{Density → suitability-scale \link{0,100} transforms}
+\title{Density → suitability-scale [0,100] transforms}
 \usage{
 density_to_suit(
   d,

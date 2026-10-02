@@ -1,3 +1,27 @@
+# msens 0.51.0
+
+**One place names the hosts, one function classifies a URL (the egress rule).**
+
+* The rule: bulk bytes (`.tif .tiff .pmtiles .parquet .gpkg .duckdb .zip .gz .nc`) come from the object store; the VM serves
+  only computed responses (tiles, API, apps) and small HTML/JSON pages. A sync client that re-read PMTiles from the VM host
+  cost $450 of egress, and published pointer tables still carry thousands of `file.marinesensitivity.org/pmtiles/...` URLs.
+* **New: `atlas_bases()`** returns the base URLs of every host (`store`, `atlas`, `file`, `storage`, `titiler`,
+  `titiler_legacy`, `stac`, `stac_api`, `app`, `preview`). Override with `options(msens.atlas_bases = list(store = "..."))`;
+  `atlas` follows `store`. `stac_cfg()`, `cell_tile_url()`, `cog_tile_url()`, `cell_stats()`, `cog_point_value()` and
+  `build_storage_index()` now read their default hosts from it (every default value is unchanged).
+* **New: `url_audit(urls)`** classifies URLs, with no network, as `store`, `computed` (titiler, STAC API, tile hosts),
+  `vm_bulk` (a project host serving a bulk extension, or a `/pmtiles/` or `/derived/` directory on the file host),
+  `page` or `external`; a bulk extension in a query string does not count. **`url_audit_assert()`** stops a publish with the
+  count and examples when any URL is `vm_bulk` (with an `allow` regex escape hatch).
+* **`storage_page()` / `build_storage_index()` gain `ga4_id`**: when set, each page head carries the project's gtag.js
+  snippet with `content_group` = `"storage"`. `NULL` (default) leaves the HTML byte-identical. A regression test now pins the
+  linking rule: file links go to the object store, folder and breadcrumb links to the browse host.
+* **New: `stac_catalog_alias()`** builds the alias of the static root catalog that the main site (a different origin) serves at
+  `marinesensitivity.org/stac/catalog.json`: `root`/`self` point at the alias, a `canonical` link at the file-host root, a
+  `service-desc` link at the searchable STAC API, and every child link is made absolute against the canonical tree, in release
+  order. Pure (no network unless given a URL); **`stac_catalog_alias_write()`** writes it with the package's own STAC JSON
+  formatting.
+
 # msens 0.50.0
 
 **`source_key`: the key a PMTiles range's features carry (found by running the live Atlas against the staged v7 bundle).**

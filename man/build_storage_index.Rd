@@ -6,11 +6,12 @@
 \usage{
 build_storage_index(
   objs,
-  site_url = "https://storage.marinesensitivity.org",
-  obj_url = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public",
+  site_url = atlas_bases()$storage,
+  obj_url = atlas_bases()$store,
   max_child_dirs = 500L,
   max_rows = 2000L,
-  readme = list()
+  readme = list(),
+  ga4_id = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ A file listing says WHAT is there but never what it means, how it was made,
 or how to reach it without a browser; this is where that goes. The same text
 is published as \code{README.md} beside the data, so \verb{aws s3 cp} and \code{curl} users
 get it too.}
+
+\item{ga4_id}{GA4 measurement id passed to \code{\link[=storage_page]{storage_page()}}; \code{NULL} for none}
 }
 \value{
 a data frame of \code{key} (the index.html object key) and \code{html}

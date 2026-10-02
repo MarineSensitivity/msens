@@ -17,26 +17,28 @@ ITEM_ASSETS_EXT<- "https://stac-extensions.github.io/item-assets/v1.0.0/schema.j
 #' Default configuration (base URLs) for STAC generation
 #'
 #' Mirrors the `is_prod`/`pmtiles_base_url` pattern: defaults point at the public
-#' marinesensitivity.org hosts. Override for local or BOEM-internal deployments.
+#' marinesensitivity.org hosts, read from [atlas_bases()]. Override for local or
+#' BOEM-internal deployments with `options(msens.atlas_bases = ...)`.
 #'
 #' @param version data version (e.g. "v7")
 #' @return named list of base URLs + the study-area bbox
 #' @export
 #' @concept stac
 stac_cfg <- function(version = "v7") {
+  b <- atlas_bases()
   list(
     version      = version,
     # static catalog tree (served from /share/public/stac)
-    stac_base    = "https://file.marinesensitivity.org/stac",
+    stac_base    = b$stac,
     # versioned derived data: GeoParquet, COGs, GeoPackages (served from /share/data/derived)
-    data_base    = "https://file.marinesensitivity.org/derived",
-    file_base    = "https://file.marinesensitivity.org",
+    data_base    = paste0(b$file, "/derived"),
+    file_base    = b$file,
     # custom DuckDB-SQL TiTiler factory (mounted at /msens on the titiler host)
-    titiler_base = "https://titiler.marinesensitivity.org/msens",
+    titiler_base = b$titiler_legacy,
     # pg_tileserv vector tiles
     pg_base      = "https://tile.marinesensitivity.org",
     # v8 partitioned-Parquet release (path-style; the dotted bucket breaks vhost TLS)
-    atlas_base   = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/marine-atlas",
+    atlas_base   = b$atlas,
     # full study-area bbox [W,S,E,N] (US EEZ incl. Pacific territories + Alaska)
     bbox         = c(-180, -18, 180, 75))
 }
@@ -552,6 +554,77 @@ stac_catalog_register <- function(catalog_json, version, cfg = stac_cfg(version)
                   lapply(hrefs[ord], function(h) list(rel = "child", href = h)))
   .stac_write(cat0, catalog_json)
   invisible(hrefs[ord])
+}
+
+#' Alias of the root catalog for another origin
+#'
+#' The static root catalog lives on the file host with RELATIVE child links. The main site
+#' (GitHub Pages, a different origin) serves an alias of it at `/stac/catalog.json`, in which every
+#' child link is ABSOLUTE so a client starting there walks into the canonical tree. The alias
+#' keeps every top-level field of the source (same order) and replaces `links` with, in order:
+#' `root` and `self` (both `self_url`), `canonical` (the source catalog), `service-desc` (the
+#' searchable STAC API), then every other source link except its `root` and `self`, with a
+#' relative `href` resolved against `src_base` and an absolute one left untouched (`type` is
+#' added as `application/json` when missing). Pure: no network unless `catalog` is a URL.
+#'
+#' @param catalog a parsed catalog (`jsonlite::fromJSON(x, simplifyVector = FALSE)`) or a path
+#'   or URL to one
+#' @param self_url where the alias is served
+#' @param src_base base of the canonical STAC tree (the folder holding `catalog.json`)
+#' @param api_url base of the searchable STAC API
+#' @return the alias catalog as a list
+#' @importFrom jsonlite fromJSON
+#' @export
+#' @concept stac
+stac_catalog_alias <- function(catalog,
+                               self_url = "https://marinesensitivity.org/stac/catalog.json",
+                               src_base = atlas_bases()$stac,
+                               api_url  = atlas_bases()$stac_api) {
+  if (is.character(catalog)) {
+    stopifnot(length(catalog) == 1, !is.na(catalog))
+    catalog <- jsonlite::fromJSON(catalog, simplifyVector = FALSE)
+  }
+  stopifnot(
+    "`catalog` must be a STAC Catalog" = is.list(catalog), identical(catalog$type, "Catalog"),
+    "`catalog` has no links"           = is.list(catalog$links))
+  rel_of <- function(l) if (is.null(l$rel)) NA_character_ else l$rel
+  rels   <- vapply(catalog$links, rel_of, "")
+  stopifnot("`catalog` needs at least one `child` link" = any(rels == "child"))
+
+  src_base <- sub("/+$", "", src_base)
+  api_url  <- sub("/+$", "", api_url)
+  json     <- "application/json"
+
+  rest <- lapply(catalog$links[!(rels %in% c("root", "self"))], function(l) {
+    if (!grepl("^[A-Za-z][A-Za-z0-9+.-]*://", l$href))
+      l$href <- paste0(src_base, "/", sub("^\\./", "", l$href))
+    if (is.null(l$type)) l$type <- json
+    l
+  })
+  catalog$links <- c(
+    list(list(rel = "root",         href = self_url, type = json),
+         list(rel = "self",         href = self_url, type = json),
+         list(rel = "canonical",    href = paste0(src_base, "/catalog.json"), type = json),
+         list(rel = "service-desc", href = paste0(api_url, "/"), type = json,
+              title = "searchable STAC API (one Item per model)")),
+    rest)
+  catalog
+}
+
+#' Write a catalog alias to disk
+#'
+#' A thin exported wrapper over the package's own node writer (`.stac_write()`, the same pretty
+#' JSON every other STAC node is written with), so the alias is formatted exactly like the
+#' canonical tree.
+#'
+#' @param alias catalog from [stac_catalog_alias()]
+#' @param path output file
+#' @return invisibly, `path`
+#' @export
+#' @concept stac
+stac_catalog_alias_write <- function(alias, path) {
+  stopifnot(is.list(alias), identical(alias$type, "Catalog"), is.character(path), length(path) == 1)
+  .stac_write(alias, path)
 }
 
 #' Build the full static STAC catalog for a version

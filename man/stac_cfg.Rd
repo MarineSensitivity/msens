@@ -14,6 +14,7 @@ named list of base URLs + the study-area bbox
 }
 \description{
 Mirrors the \code{is_prod}/\code{pmtiles_base_url} pattern: defaults point at the public
-marinesensitivity.org hosts. Override for local or BOEM-internal deployments.
+marinesensitivity.org hosts, read from \code{\link[=atlas_bases]{atlas_bases()}}. Override for local or
+BOEM-internal deployments with \code{options(msens.atlas_bases = ...)}.
 }
 \concept{stac}

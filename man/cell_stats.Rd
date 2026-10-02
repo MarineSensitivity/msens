@@ -8,7 +8,7 @@ cell_stats(
   sql = NULL,
   mtime = NULL,
   mdl_key = NULL,
-  base = "https://titiler-v8.marinesensitivity.org"
+  base = atlas_bases()$titiler
 )
 }
 \arguments{

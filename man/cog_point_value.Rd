@@ -4,13 +4,7 @@
 \alias{cog_point_value}
 \title{Value of a COG at a point, via titiler}
 \usage{
-cog_point_value(
-  cog_url,
-  lon,
-  lat,
-  base = "https://titiler-v8.marinesensitivity.org",
-  timeout = 8
-)
+cog_point_value(cog_url, lon, lat, base = atlas_bases()$titiler, timeout = 8)
 }
 \arguments{
 \item{cog_url}{the COG the layer is drawn from}

@@ -53,6 +53,7 @@ export(assign_mdl_id)
 export(atlas_access_default)
 export(atlas_allow_access)
 export(atlas_base_url)
+export(atlas_bases)
 export(atlas_is_preview)
 export(atlas_latest)
 export(atlas_manifest)
@@ -212,6 +213,8 @@ export(species_for_zone)
 export(sphere_centroid)
 export(spp_db_con)
 export(stac_build)
+export(stac_catalog_alias)
+export(stac_catalog_alias_write)
 export(stac_catalog_register)
 export(stac_cfg)
 export(stac_dataset_collection)
@@ -229,6 +232,8 @@ export(tbl_species)
 export(turtle_sql)
 export(unwrap_polygon)
 export(unwrap_ring)
+export(url_audit)
+export(url_audit_assert)
 export(validate_manifest)
 export(validate_manifest_app)
 export(validate_zone_sets)
@@ -427,6 +432,7 @@ importFrom(sf,
 importFrom(stats,
   aggregate,
   ecdf,
+  na.omit,
   quantile
 )
 importFrom(stringr,
@@ -462,6 +468,7 @@ importFrom(tidyr,
 )
 importFrom(utils,
   URLencode,
+  head,
   modifyList,
   packageVersion,
   read.csv

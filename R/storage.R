@@ -69,13 +69,25 @@ s3_list_all <- function(bucket = "s3://oceanmetrics.io-public", prefix = "", aws
 #' @param title,subtitle page heading
 #' @param body_html the listing table
 #' @param crumb breadcrumb HTML
+#' @param ga4_id GA4 measurement id (e.g. `"G-XXXXXXXXXX"`). When set, the page
+#'   head carries the gtag.js snippet with `content_group` = `"storage"`, the
+#'   same shape as the project's other products so one stream spans them all.
+#'   `NULL` (default) emits no script and the HTML is unchanged.
 #' @return an HTML string
 #' @export
 #' @concept storage
-storage_page <- function(title, subtitle = "", body_html = "", crumb = "") {
+storage_page <- function(title, subtitle = "", body_html = "", crumb = "", ga4_id = NULL) {
+  stopifnot(is.null(ga4_id) ||
+              (is.character(ga4_id) && length(ga4_id) == 1 && grepl("^[A-Za-z0-9-]+$", ga4_id)))
+  # gtag.js: the one place a storage page loads an external script
+  gtag <- if (is.null(ga4_id)) "" else paste0(
+    "<script async src='https://www.googletagmanager.com/gtag/js?id=", ga4_id, "'></script>",
+    "<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}",
+    "gtag('js',new Date());gtag('config','", ga4_id, "',{content_group:'storage'});</script>")
   paste0(
     "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
     "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+    gtag,
     "<title>", .esc(title), "</title><style>",
     ":root{--fg:#1a1a1a;--muted:#6b7280;--bd:#e5e7eb;--bg:#fff;--acc:#0b6bcb}",
     "@media(prefers-color-scheme:dark){:root{--fg:#e5e7eb;--muted:#9ca3af;--bd:#374151;",
@@ -129,15 +141,17 @@ storage_page <- function(title, subtitle = "", body_html = "", crumb = "") {
 #'   or how to reach it without a browser; this is where that goes. The same text
 #'   is published as `README.md` beside the data, so `aws s3 cp` and `curl` users
 #'   get it too.
+#' @param ga4_id GA4 measurement id passed to [storage_page()]; `NULL` for none
 #' @return a data frame of `key` (the index.html object key) and `html`
 #' @export
 #' @concept storage
 build_storage_index <- function(objs,
-                                site_url = "https://storage.marinesensitivity.org",
-                                obj_url  = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public",
+                                site_url = atlas_bases()$storage,
+                                obj_url  = atlas_bases()$store,
                                 max_child_dirs = 500L,
                                 max_rows = 2000L,
-                                readme = list()) {
+                                readme = list(),
+                                ga4_id = NULL) {
   objs <- objs[!grepl("(^|/)index[.]html$", objs$key), , drop = FALSE]
   objs <- objs[!grepl("/$", objs$key), , drop = FALSE]   # 0-byte directory markers
   if (!nrow(objs)) return(data.frame(key = character(), html = character()))
@@ -219,7 +233,7 @@ build_storage_index <- function(objs,
          html = storage_page(if (nzchar(d)) d else "oceanmetrics.io-public",
                              sprintf("%s object(s), %s", format(nrow(here), big.mark = ","),
                                      .fmt_size(sum(here$size))),
-                             body, crumbs))
+                             body, crumbs, ga4_id = ga4_id))
   })
 
   data.frame(key  = vapply(pages, `[[`, character(1), "key"),

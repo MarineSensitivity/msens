@@ -88,3 +88,87 @@ test_that("stac_catalog_register adds a version once, in release order, keeping 
   expect_equal(sum(rels == "root"), 1L); expect_equal(sum(rels == "self"), 1L)
   expect_error(stac_catalog_register(f, "../etc"))
 })
+
+# ---- root catalog alias for another origin ------------------------------------
+
+alias_src <- function(kids = c("v7", "v7b", "v9"), rel_prefix = "./", extra = NULL) list(
+  type = "Catalog", stac_version = "1.0.0", id = "marinesensitivity",
+  title = "MarineSensitivity STAC Catalog", description = "d",
+  links = c(list(list(rel = "root", href = "./catalog.json"),
+                 list(rel = "self", href = "https://file.marinesensitivity.org/stac/catalog.json")),
+            lapply(kids, function(v) list(rel = "child", href = paste0(rel_prefix, v, "/collection.json"))),
+            extra))
+hrefs <- function(a) vapply(a$links, `[[`, "", "href")
+relsv <- function(a) vapply(a$links, `[[`, "", "rel")
+
+test_that("stac_catalog_alias makes every child absolute, in a fixed link order", {
+  a <- stac_catalog_alias(alias_src())
+  expect_equal(relsv(a), c("root", "self", "canonical", "service-desc", "child", "child", "child"))
+  expect_equal(hrefs(a), c(
+    "https://marinesensitivity.org/stac/catalog.json",
+    "https://marinesensitivity.org/stac/catalog.json",
+    "https://file.marinesensitivity.org/stac/catalog.json",
+    "https://stac-api.marinesensitivity.org/",
+    "https://file.marinesensitivity.org/stac/v7/collection.json",
+    "https://file.marinesensitivity.org/stac/v7b/collection.json",
+    "https://file.marinesensitivity.org/stac/v9/collection.json"))
+  expect_false(any(grepl("^[.]", hrefs(a))))
+  expect_equal(a$links[[1]]$type, "application/json")
+  expect_equal(a$links[[4]]$title, "searchable STAC API (one Item per model)")
+  expect_equal(unname(hrefs(a)[relsv(a) %in% c("root", "self")]), rep("https://marinesensitivity.org/stac/catalog.json", 2))
+  # the source's own self URL survives only as `canonical`
+  src_self <- "https://file.marinesensitivity.org/stac/catalog.json"
+  expect_equal(relsv(a)[hrefs(a) == src_self], "canonical")
+  # same top-level fields in the same order
+  expect_equal(names(a), names(alias_src()))
+  expect_equal(a[names(a) != "links"], alias_src()[names(alias_src()) != "links"])
+})
+
+test_that("stac_catalog_alias: absolute child hrefs are untouched, bare relative ones resolve like ./", {
+  ex <- list(list(rel = "child", href = "https://elsewhere.org/stac/x/collection.json", type = "application/json"),
+             list(rel = "describedby", href = "docs/readme.html", type = "text/html"))
+  a <- stac_catalog_alias(alias_src(extra = ex))
+  expect_equal(hrefs(a)[8], "https://elsewhere.org/stac/x/collection.json")
+  expect_equal(a$links[[9]]$href, "https://file.marinesensitivity.org/stac/docs/readme.html")
+  expect_equal(a$links[[9]]$type, "text/html")                      # an existing type is kept
+  expect_equal(hrefs(stac_catalog_alias(alias_src(rel_prefix = ""))),
+               hrefs(stac_catalog_alias(alias_src())))
+  # custom hosts, trailing slashes tolerated
+  b <- stac_catalog_alias(alias_src(), self_url = "https://x.test/c.json", src_base = "http://h/stac/", api_url = "http://api/")
+  expect_equal(hrefs(b)[c(1, 3, 4, 5)], c("https://x.test/c.json", "http://h/stac/catalog.json", "http://api/", "http://h/stac/v7/collection.json"))
+})
+
+test_that("stac_catalog_alias refuses a non-Catalog and a catalog without children", {
+  expect_error(stac_catalog_alias(alias_src(kids = character())), "child")
+  expect_error(stac_catalog_alias(list(type = "Collection", links = alias_src()$links)), "Catalog")
+  expect_error(stac_catalog_alias(list(type = "Catalog")), "links")
+})
+
+test_that("register then alias gives children in release order v7 v7b v8 v9 (and reads a path)", {
+  f <- tempfile(fileext = ".json"); on.exit(unlink(f))
+  for (v in c("v9", "v7", "v8", "v7b")) stac_catalog_register(f, v)
+  a <- stac_catalog_alias(f)
+  expect_equal(hrefs(a)[relsv(a) == "child"],
+               paste0("https://file.marinesensitivity.org/stac/", c("v7", "v7b", "v8", "v9"), "/collection.json"))
+})
+
+test_that("alias of the deployed root matches the alias published today", {
+  src <- alias_src(kids = c("v7", "v7b", "v8", "v9"))
+  expect_equal(src$id, "marinesensitivity"); expect_equal(src$title, "MarineSensitivity STAC Catalog")
+  expect_equal(hrefs(stac_catalog_alias(src)), c(
+    "https://marinesensitivity.org/stac/catalog.json",
+    "https://marinesensitivity.org/stac/catalog.json",
+    "https://file.marinesensitivity.org/stac/catalog.json",
+    "https://stac-api.marinesensitivity.org/",
+    paste0("https://file.marinesensitivity.org/stac/", c("v7", "v7b", "v8", "v9"), "/collection.json")))
+})
+
+test_that("stac_catalog_alias_write writes the same pretty JSON as the package's node writer", {
+  a <- stac_catalog_alias(alias_src())
+  f <- tempfile(fileext = ".json"); g <- tempfile(fileext = ".json"); on.exit(unlink(c(f, g)))
+  expect_equal(stac_catalog_alias_write(a, f), f)
+  msens:::.stac_write(a, g)
+  expect_identical(readLines(f), readLines(g))
+  expect_equal(hrefs(jsonlite::fromJSON(f, simplifyVector = FALSE)), hrefs(a))
+  expect_error(stac_catalog_alias_write(list(type = "Item"), f))
+})

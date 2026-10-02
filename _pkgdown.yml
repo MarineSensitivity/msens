@@ -67,6 +67,7 @@ reference:
   - has_concept("publish")
   - has_concept("stac")
   - has_concept("report")
+  - has_concept("urls")
 - title: Pipeline
   desc: >
     The targets DAG, content-addressed target manifests, Parquet staging and the
@@ -104,5 +105,5 @@ reference:
                      "ingest", "merge", "mdl_key", "taxa", "listings",
                      "calc", "viz", "publish", "stac", "report",
                      "workflow", "manifest", "parquet", "validate",
-                     "read", "analytics", "data", "dormant",
+                     "read", "analytics", "data", "dormant", "urls",
                      "hex", "interp"))
