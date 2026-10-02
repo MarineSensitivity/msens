@@ -70,11 +70,14 @@ test_that("a matched input gets a model row AND a native row, copied from the re
   o <- native_asset_backfill(fx_ma, fx_xw, fx_ref, fx_store, base = B, pmtiles_base = P)
   expect_named(o, c("ms_merge_key", "mdl_key", "ds_key", "asset_type", "representation",
                     "asset_url", "rescale_min", "rescale_max", "colormap", "xmin", "xmax",
-                    "ymin", "ymax", "source_layer", "content_hash"))
+                    "ymin", "ymax", "source_layer", "content_hash", "source_key"))
   a <- o[o$mdl_key == "20", ]
   expect_setequal(a$representation, c("model", "native"))
   nat <- a[a$representation == "native", ]
   expect_equal(nat$asset_type, "pmtiles"); expect_equal(nat$source_layer, "bl")
+  # v1-v7 key this model by mdl_seq ("20") but the original's tile features carry the reference's key
+  expect_equal(nat$source_key, "bl|777")
+  expect_true(is.na(a$source_key[a$representation == "model"]))             # a COG has no feature key
   expect_equal(nat$asset_url, paste0(P, "/native/bl/", H16, ".pmtiles"))   # store URL, not the reference's
   expect_false(any(grepl("x.invalid", o$asset_url[o$representation == "native"])))
   expect_equal(c(nat$xmin, nat$xmax, nat$ymin, nat$ymax), c(1, 2, 3, 4))
@@ -237,4 +240,15 @@ test_that("native_asset_restore_model gives every vector range its gridded row b
   expect_equal(o[o$mdl_key == "am|Fis-1", ], na[na$mdl_key == "am|Fis-1", ], ignore_attr = TRUE)           # nothing else touched
   expect_equal(nrow(native_asset_restore_model(o, mu)), 4L)                                                  # idempotent
   expect_error(native_asset_restore_model(na, mu[0, ]), "no gridded COG")
+})
+
+test_that("source_key: a backfilled PMTiles row carries the feature key of the reference tile, a COG row none", {
+  o <- native_asset_backfill(fx_ma, fx_xw, fx_ref, fx_store, base = B)
+  expect_equal(o$source_key[o$mdl_key == "20" & o$representation == "native"], "bl|777")          # pmtiles
+  expect_equal(o$source_key[o$mdl_key == "50" & o$representation == "native"], "ch_nmfs|Acropora_palmata")
+  expect_true(all(is.na(o$source_key[o$asset_type == "cog"])))                                    # cogs
+  # a reference that already says which key its features carry wins over the mdl_key default
+  ref2 <- fx_ref; ref2$source_key <- NA_character_; ref2$source_key[ref2$mdl_key == "bl|777"] <- "bl|777-tile"
+  o2 <- native_asset_backfill(fx_ma, fx_xw, ref2, fx_store, base = B)
+  expect_equal(o2$source_key[o2$mdl_key == "20" & o2$representation == "native"], "bl|777-tile")
 })

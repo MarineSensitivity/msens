@@ -1281,14 +1281,21 @@ isTRUE_v <- function(x) !is.na(x) & x
                      asset_type = character(), representation = character(),
                      asset_url = character(), rescale_min = numeric(),
                      rescale_max = numeric(), colormap = character(),
-                     source_layer = character(), xmin = numeric(), xmax = numeric(),
+                     source_layer = character(), source_key = character(), xmin = numeric(), xmax = numeric(),
                      ymin = numeric(), ymax = numeric(), stringsAsFactors = FALSE)
-  if ("native_asset" %in% tb)
-    return(DBI::dbGetQuery(con, "
+  if ("native_asset" %in% tb) {
+    # `source_key` (msens 0.50.0): the `mdl_key` the PMTiles tile's FEATURES carry, which the Atlas filters on. v8+ stamps the
+    # input's own mdl_key into every feature, so a table that predates the column defaults a PMTiles row to its mdl_key; a
+    # backfilled v1-v7 table (mdl_key = mdl_seq) carries the reference release's key explicitly.
+    sk <- if ("source_key" %in% DBI::dbListFields(con, "native_asset")) "source_key" else "CAST(NULL AS VARCHAR)"
+    return(DBI::dbGetQuery(con, sprintf("
       SELECT CAST(ms_merge_key AS VARCHAR) AS key, CAST(mdl_key AS VARCHAR) AS mdl_key,
              ds_key, asset_type, representation, asset_url,
-             rescale_min, rescale_max, colormap, source_layer, xmin, xmax, ymin, ymax
-        FROM native_asset"))
+             rescale_min, rescale_max, colormap, source_layer,
+             CASE WHEN asset_type = 'pmtiles' THEN coalesce(CAST(%s AS VARCHAR), CAST(mdl_key AS VARCHAR)) END AS source_key,
+             xmin, xmax, ymin, ymax
+        FROM native_asset", sk)))
+  }
   if (!"model_asset" %in% tb) return(none)
   k <- .app_taxon_cols(con)
   DBI::dbGetQuery(con, glue::glue("
@@ -1297,7 +1304,7 @@ isTRUE_v <- function(x) !is.na(x) & x
            ma.ds_key, 'cog' AS asset_type, 'native' AS representation,
            ma.cog_url AS asset_url,
            1.0 AS rescale_min, 100.0 AS rescale_max, 'spectral_r' AS colormap,
-           CAST(NULL AS VARCHAR) AS source_layer,
+           CAST(NULL AS VARCHAR) AS source_layer, CAST(NULL AS VARCHAR) AS source_key,
            CAST(NULL AS DOUBLE) AS xmin, CAST(NULL AS DOUBLE) AS xmax,
            CAST(NULL AS DOUBLE) AS ymin, CAST(NULL AS DOUBLE) AS ymax
       FROM model_asset ma LEFT JOIN taxon t
@@ -1417,6 +1424,7 @@ app_taxon_shards <- function(con, ver) {
              rescale = if (is.na(ai$rescale_min[r])) NULL else
                c(as.numeric(ai$rescale_min[r]), as.numeric(ai$rescale_max[r])),
              colormap = ai$colormap[r], source_layer = ai$source_layer[r],
+             source_key = ai$source_key[r],
              bbox = .app_bbox(ai$xmin[r], ai$xmax[r], ai$ymin[r], ai$ymax[r]))))
     })
     list(key = key, sci = d$sci[i], common = d$common[i], sp_cat = d$sp_cat[i],

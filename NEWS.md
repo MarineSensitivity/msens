@@ -1,3 +1,17 @@
+# msens 0.50.0
+
+**`source_key`: the key a PMTiles range's features carry (found by running the live Atlas against the staged v7 bundle).**
+
+* The Atlas draws a vector range by filtering the tile's features on the key they were stamped with. v8+ stamps the input's own
+  `mdl_key` (`bl|22694870`) and the input is keyed the same, so the filter matches. v1-v7 key the SAME input by `mdl_seq`
+  (`17626`) while the original in the store still says `bl|22694870`, so the filter matched nothing and the Original drew
+  **nothing**. `native_asset` gains a last column **`source_key`** (PMTiles rows: the feature key; COG rows: `NA`);
+  `native_asset_backfill()` fills it from the reference release's tile (its own `source_key`, else its `mdl_key`);
+  `app_taxon_shards()` emits it on every asset beside `source_layer` (`null` for a COG); `inst/schema/app_taxon.schema.json`
+  allows it. A table that predates the column (any published v8/v9) defaults a PMTiles row to its `mdl_key`, so old and new
+  tables give the same shard. Regression cases in `test-app_bundle.R` (a v7-shaped fixture keeps the input's `mdl_seq` and
+  names the v8-style feature key) and `test-native_asset.R`.
+
 # msens 0.49.0
 
 **Re-pointing a release at the store (asset-store M3 support; code only).**

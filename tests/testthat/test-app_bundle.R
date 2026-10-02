@@ -2041,3 +2041,47 @@ test_that("geometry for a type that will never be a unit is ignored, and recorde
                "not a drawable unit type: geometry ignored", fixed = TRUE)
   expect_match(ch$why[ch$fld == "programarea_key"], "geometry keys agree", fixed = TRUE)
 })
+
+test_that("source_key (0.50.0): a v7-shaped shard asset names the feature key the tile carries; v8-shaped tables default to mdl_key", {
+  # The Atlas draws a range by filtering the PMTiles tile's features on the key they were stamped with. v8+ stamps `bl|22694870`
+  # and the input is keyed `bl|22694870`; v1-v7 key the SAME input by mdl_seq ("301") while the (store) tile still says `bl|...`.
+  mk <- function(native) {
+    con <- DBI::dbConnect(duckdb::duckdb(dbdir = tempfile("sk_", fileext = ".duckdb")))
+    DBI::dbWriteTable(con, "taxon", data.frame(
+      taxon_id = as.numeric(137162), taxon_authority = "worms", scientific_name = "Sterna paradisaea",
+      common_name = "Arctic Tern", sp_cat = "bird", mdl_seq = 101L, is_ok = TRUE, stringsAsFactors = FALSE))
+    DBI::dbWriteTable(con, "taxon_model", data.frame(
+      taxon_id = as.numeric(137162), ds_key = c("ms_merge", "bl"), mdl_seq = c(101L, 301L), stringsAsFactors = FALSE))
+    DBI::dbWriteTable(con, "native_asset", native)
+    con
+  }
+  na <- data.frame(
+    ms_merge_key = c("101", NA, NA), mdl_key = c("101", "301", "301"), ds_key = c("ms_merge", "bl", "bl"),
+    asset_type = c("cog", "cog", "pmtiles"), representation = c("model", "model", "native"),
+    asset_url = c("https://x.invalid/cog/usa05/m.tif", "https://x.invalid/cog/usa05/bl.tif", "https://x.invalid/native/bl/h.pmtiles"),
+    rescale_min = c(1, 1, NA), rescale_max = c(100, 100, NA), colormap = c("spectral_r", "spectral_r", NA),
+    xmin = NA_real_, xmax = NA_real_, ymin = NA_real_, ymax = NA_real_, source_layer = c(NA, NA, "bl"),
+    stringsAsFactors = FALSE)
+  card <- function(con) { sh <- app_taxon_shards(con, "v7"); unname(unlist(lapply(sh, function(s) unname(s$taxa)), recursive = FALSE))[[1]] }
+
+  # (1) v7-shaped, as native_asset_backfill() writes it: the original's row names the reference's feature key
+  con <- mk(transform(na, source_key = c(NA, NA, "bl|22725044"))); on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  inp <- card(con)$inputs[[1]]
+  expect_equal(inp$mdl_key, "301")                                              # the input keeps its mdl_seq
+  by_rep <- stats::setNames(inp$assets, vapply(inp$assets, `[[`, "", "rep"))
+  expect_equal(by_rep$native$source_key, "bl|22725044")                         # ...the tile's features carry the v8-style key
+  expect_equal(by_rep$native$source_layer, "bl")
+  expect_true(is.na(by_rep$model$source_key))                                   # a COG has no feature key (null in the JSON, like source_layer)
+  expect_true(grepl('"source_key":null', app_json(card(con)$inputs[[1]]$assets[[which(names(by_rep) == "model")]]), fixed = TRUE))
+
+  # (2) a v8-shaped table that predates the column: v8+ stamps the input's own mdl_key into the features
+  na8 <- na; na8$mdl_key[2:3] <- "bl|22694870"
+  con8 <- mk(na8); on.exit(DBI::dbDisconnect(con8, shutdown = TRUE), add = TRUE)
+  a8 <- .app_assets(con8)
+  expect_equal(a8$source_key[a8$asset_type == "pmtiles"], "bl|22694870")        # defaults to the input's mdl_key
+  expect_true(all(is.na(a8$source_key[a8$asset_type == "cog"])))
+
+  # (3) the schema accepts the field on every asset, and rejects a non-string one
+  sh <- app_taxon_shards(con, "v7")
+  expect_error(app_validate(within(sh[[1]], taxa[[1]]$inputs[[1]]$assets[[1]]$source_key <- 5), "taxon"))
+})

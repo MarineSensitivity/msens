@@ -9,11 +9,12 @@
 
 # columns of a v8 `native_asset`, in v8's order, then `content_hash` (0.47.0): the 16-hex store hash
 # naming the object the row points at (`cog/{grid}/{hash}.tif` or `native/{ds}/{hash}.ext`), NA
-# for a row that points at a legacy versioned path
+# for a row that points at a legacy versioned path; then `source_key` (0.50.0): for a PMTiles row,
+# the `mdl_key` the tile's FEATURES carry (the Atlas draws a range by filtering the tile on it); NA for a COG
 .NATIVE_ASSET_COLS <- c(
   "ms_merge_key", "mdl_key", "ds_key", "asset_type", "representation", "asset_url",
   "rescale_min", "rescale_max", "colormap", "xmin", "xmax", "ymin", "ymax", "source_layer",
-  "content_hash")
+  "content_hash", "source_key")
 
 #' Spell a v1-v7 stable model key the way a later release's `native_asset` does
 #'
@@ -224,9 +225,16 @@ native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, tax
     source_layer = NA_character_,
     content_hash = ifelse(grepl("/cog/[A-Za-z0-9]+/[0-9a-f]{16}\\.tif$", ma$cog_url),
                           sub("^.*/([0-9a-f]{16})\\.tif$", "\\1", ma$cog_url), NA_character_),
+    source_key = NA_character_,
     stringsAsFactors = FALSE)
 
   nat <- native_ref[native_ref$representation == "native", , drop = FALSE]
+  # the key the reference tile's features carry: its own `source_key`, else (a v8/v9 table that predates the column) the
+  # row's `mdl_key`, which v8+ stamps into every feature. v1-v7 key the SAME model by `mdl_seq`, so the original's row
+  # must tell the app which feature key to filter on.
+  if (!"source_key" %in% names(nat)) nat$source_key <- rep(NA_character_, nrow(nat))
+  nat$source_key <- ifelse(nat$asset_type == "pmtiles" & is.na(nat$source_key), as.character(nat$mdl_key), nat$source_key)
+  nat$source_key[nat$asset_type != "pmtiles"] <- NA_character_
   dup <- paste(nat$mdl_key, nat$representation, sep = "\r")
   if (anyDuplicated(dup))
     stop("native_asset_backfill(): duplicate (mdl_key, representation) in native_ref (e.g. ",
@@ -248,7 +256,7 @@ native_asset_backfill <- function(model_asset, crosswalk, native_ref, store, tax
   j <- match(inp$ref_key, nat$mdl_key)
   hit <- which(!is.na(j))
   keep <- c("asset_type", "asset_url", "rescale_min", "rescale_max", "colormap",
-            "xmin", "xmax", "ymin", "ymax", "source_layer", "content_hash")
+            "xmin", "xmax", "ymin", "ymax", "source_layer", "content_hash", "source_key")
   n <- length(hit)
   sel <- native_store_rewrite(nat[j[hit], , drop = FALSE], store, ...)   # store URLs, never the reference's
   native <- data.frame(ms_merge_key = rep(NA_character_, n), mdl_key = inp$mdl_seq[hit],
@@ -319,6 +327,7 @@ native_asset_restore_model <- function(native_asset, model_urls) {
                  sum(is.na(u)), paste(utils::head(need$mdl_key[is.na(u)], 2), collapse = ", ")), call. = FALSE)
   add <- need
   add$asset_type <- "cog"; add$representation <- "model"; add$asset_url <- u
+  if ("source_key" %in% names(add)) add$source_key <- NA_character_
   add$rescale_min <- 1L; add$rescale_max <- 100L; add$colormap <- "spectral_r"; add$source_layer <- NA_character_
   if ("content_hash" %in% names(native_asset))
     add$content_hash <- if ("content_hash" %in% names(model_urls)) model_urls$content_hash[match(need$mdl_key, model_urls$mdl_key)] else NA_character_
