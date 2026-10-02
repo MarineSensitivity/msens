@@ -10,7 +10,8 @@ stac_model_cell_item(
   time_periods = NULL,
   mdl_key_ex = NA_character_,
   id_field = c("mdl_key", "mdl_seq"),
-  cog_ex = NA_character_
+  cog_ex = NA_character_,
+  has_native_asset = FALSE
 )
 }
 \arguments{
@@ -30,6 +31,11 @@ links go through titiler's stock \verb{/cog}.}
 
 \item{cog_ex}{for a legacy release, the \code{cog_url} of a representative model (example links);
 \code{NA} omits the links rather than inventing one.}
+
+\item{has_native_asset}{\code{TRUE} when the release publishes \code{tables/native_asset.parquet} (the pointer
+table of per-model COG / PMTiles files in the content-addressed store); a raster or vector dataset
+then gets one \code{native_asset} asset linking it. \code{FALSE} (default) emits no per-model file asset
+rather than a dead link. \code{\link[=stac_build]{stac_build()}} sets it from the release's tables.}
 }
 \value{
 STAC Item as a list

@@ -1,3 +1,18 @@
+# msens 0.52.0
+
+**STAC dataset Items link the per-model pointer table, not directories that do not answer.**
+
+* `stac_model_cell_item()` / `stac_build()`: a raster or vector dataset's Item used to carry up to four assets whose `href` was a
+  DIRECTORY (`cog_native`, `cog_model`, `pmtiles_native`: `.../native/{ds_key}_native/`, `.../native/{ds_key}/`,
+  `.../native/vec_grid/`, and `file.marinesensitivity.org/pmtiles/{ver}/{ds_key}/`). The bucket denies listing and the file host
+  turned directory indexes off, and since 2026-10-02 per-model files live in the content-addressed store anyway.
+  It now carries ONE asset, `native_asset`: `{atlas_base}/{ver}/tables/native_asset.parquet` (Parquet, roles `metadata` + `index`,
+  with `table:columns`). Filter it by `ds_key`; `asset_url` is the COG or PMTiles, `representation` is `native` or `model`.
+* New argument `has_native_asset` on both functions. `stac_build()` defaults it (`NULL`) to whether the connection has a
+  `native_asset` table; a release without one gets no native asset at all rather than a dead link. A legacy (`mdl_seq`) release's
+  Item is unchanged.
+* The regression tests build a whole catalog and assert that no asset points at a `/pmtiles/` or `/native/` directory.
+
 # msens 0.51.0
 
 **One place names the hosts, one function classifies a URL (the egress rule).**

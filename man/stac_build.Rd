@@ -10,7 +10,8 @@ stac_build(
   cfg = NULL,
   nc_csv = NULL,
   con = NULL,
-  model_asset = NULL
+  model_asset = NULL,
+  has_native_asset = NULL
 )
 }
 \arguments{
@@ -27,6 +28,10 @@ stac_build(
 \item{model_asset}{for a LEGACY release (\code{model} keyed by \code{mdl_seq}, v1–v7b): data frame with
 \code{ds_key} and \code{cog_url} (the release's \code{tables/model_asset.parquet}), used for each dataset's
 example tile links. \code{NULL} builds the catalog without those links. Ignored from v8 on.}
+
+\item{has_native_asset}{whether the release publishes \code{tables/native_asset.parquet}, so each raster /
+vector dataset Item links it (see \code{\link[=stac_model_cell_item]{stac_model_cell_item()}}). \code{NULL} (default) checks the connection
+for a \code{native_asset} table. Ignored for a legacy release, whose Items link \code{model_asset.parquet}.}
 }
 \value{
 invisibly, the path to the root \code{catalog.json}

@@ -208,13 +208,18 @@ stac_dataset_collection <- function(ds, cfg, item_files = character()) {
 #'   factory: its surfaces are one content-addressed COG per model, registered in
 #'   `tables/model_asset.parquet`, so that registry is the Item's data asset and the example tile
 #'   links go through titiler's stock `/cog`.
+#' @param has_native_asset `TRUE` when the release publishes `tables/native_asset.parquet` (the pointer
+#'   table of per-model COG / PMTiles files in the content-addressed store); a raster or vector dataset
+#'   then gets one `native_asset` asset linking it. `FALSE` (default) emits no per-model file asset
+#'   rather than a dead link. [stac_build()] sets it from the release's tables.
 #' @param cog_ex for a legacy release, the `cog_url` of a representative model (example links);
 #'   `NA` omits the links rather than inventing one.
 #' @return STAC Item as a list
 #' @export
 #' @concept stac
 stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_character_,
-                                 id_field = c("mdl_key", "mdl_seq"), cog_ex = NA_character_) {
+                                 id_field = c("mdl_key", "mdl_seq"), cog_ex = NA_character_,
+                                 has_native_asset = FALSE) {
   id_field <- match.arg(id_field)
   if (id_field == "mdl_seq")
     return(.stac_model_cell_item_legacy(ds, cfg, cog_ex = cog_ex))
@@ -266,33 +271,30 @@ stac_model_cell_item <- function(ds, cfg, time_periods = NULL, mdl_key_ex = NA_c
 
   pq_href <- glue::glue("{cfg$atlas_base}/{cfg$version}/dist_merged/")
 
-  # Phase 4b/4c native input surfaces (pyramided), one file PER MODEL, driven by the dataset
-  # registry's `native_format` (NOT a hardcoded ds_key list). Each model is published in BOTH
-  # representations, keyed on the stable mdl_key + a `representation` field:
-  #   original/native  = source resolution (raster: native/{ds}_native/ COG; vector: PMTiles polygons)
-  #   model/interpolated = the 0.05° grid surface used in scoring (raster: native/{ds}/ COG;
-  #                        vector: native/vec_grid/ COG, opt-in)
-  cog_type <- "image/tiff; application=geotiff; profile=cloud-optimized"
-  native_stac <- switch(as.character(ds$native_format),
-    raster = list(
-      cog_native = list(
-        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}_native/"),
-        type  = cog_type, roles = I(c("data", "visual")), representation = "native",
-        title = "Per-model native-resolution COGs (the ORIGINAL surface); titiler /cog"),
-      cog_model = list(
-        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/{ds$ds_key}/"),
-        type  = cog_type, roles = I(c("data", "visual")), representation = "model",
-        title = "Per-model 0.05° resampled COGs (the MODELED surface); titiler /cog")),
-    vector = list(
-      pmtiles_native = list(
-        href  = glue::glue("{cfg$file_base}/pmtiles/{cfg$version}/{ds$ds_key}/"),
-        type  = "application/vnd.pmtiles", roles = I(c("data", "visual")), representation = "native",
-        title = "Per-model original-range PMTiles (the ORIGINAL surface; filter by mdl_key)"),
-      cog_model = list(
-        href  = glue::glue("{cfg$atlas_base}/{cfg$version}/native/vec_grid/"),
-        type  = cog_type, roles = I(c("data", "visual")), representation = "model",
-        title = "Per-model 0.05° gridded COGs (the MODELED surface; opt-in); titiler /cog")),
-    list())
+  # per-model distribution files (Phase 4b/4c): one file PER MODEL, in the content-addressed
+  # store ({atlas_base}/cog/{grid_id}/{hash}.tif and {atlas_base}/native/{ds_key}/{hash}.tif|.pmtiles).
+  # the store is not listable (the bucket denies LIST; the file host has no directory indexes), so
+  # there is no per-dataset directory to link. instead each release publishes a POINTER TABLE,
+  # tables/native_asset.parquet: one row per (model, representation), where `representation` is
+  # native (the source's own resolution original) or model (the surface on the analysis grid) and
+  # `asset_url` is the absolute store URL of the COG or PMTiles. the Item links that one real file
+  # and tells the reader to filter it by ds_key. a release without the table gets no asset at all.
+  native_stac <- if (isTRUE(has_native_asset) && isTRUE(as.character(ds$native_format)[1] %in% c("raster", "vector")))
+    list(native_asset = list(
+      href  = glue::glue("{cfg$atlas_base}/{cfg$version}/tables/native_asset.parquet"),
+      type  = "application/vnd.apache.parquet",
+      roles = I(c("metadata", "index")),
+      title = glue::glue(
+        "Per-model distribution files for this release (pointer table; filter by ds_key = '{ds$ds_key}'; ",
+        "asset_url is a COG or PMTiles in the content-addressed store)"),
+      `table:columns` = list(
+        list(name = "mdl_key",        type = "string", description = "stable model id (FK model.mdl_key)"),
+        list(name = "ds_key",         type = "string", description = "source dataset"),
+        list(name = "asset_type",     type = "string", description = "cog or pmtiles"),
+        list(name = "representation", type = "string", description = "native = the source's own resolution; model = the surface on the analysis grid"),
+        list(name = "asset_url",      type = "string", description = "absolute URL of the file in the content-addressed store"),
+        list(name = "content_hash",   type = "string", description = "hash of the file's surface and encoding"))))
+  else list()
 
   list(
     type            = "Feature",
@@ -642,13 +644,16 @@ stac_catalog_alias_write <- function(alias, path) {
 #' @param model_asset for a LEGACY release (`model` keyed by `mdl_seq`, v1–v7b): data frame with
 #'   `ds_key` and `cog_url` (the release's `tables/model_asset.parquet`), used for each dataset's
 #'   example tile links. `NULL` builds the catalog without those links. Ignored from v8 on.
+#' @param has_native_asset whether the release publishes `tables/native_asset.parquet`, so each raster /
+#'   vector dataset Item links it (see [stac_model_cell_item()]). `NULL` (default) checks the connection
+#'   for a `native_asset` table. Ignored for a legacy release, whose Items link `model_asset.parquet`.
 #' @return invisibly, the path to the root `catalog.json`
-#' @importFrom DBI dbGetQuery
+#' @importFrom DBI dbGetQuery dbListTables
 #' @importFrom glue glue
 #' @export
 #' @concept stac
 stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
-                       nc_csv = NULL, con = NULL, model_asset = NULL) {
+                       nc_csv = NULL, con = NULL, model_asset = NULL, has_native_asset = NULL) {
   if (is.null(cfg))     cfg     <- stac_cfg(version)
   if (is.null(dir_out)) dir_out <- file.path(tempdir(), paste0("stac_", version))
   close_con <- FALSE
@@ -677,6 +682,7 @@ stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
   id_field <- if ("mdl_key" %in% mdl_flds) "mdl_key" else "mdl_seq"
   stopifnot("model table has neither mdl_key nor mdl_seq" = id_field %in% mdl_flds)
   has_tp   <- "time_period" %in% mdl_flds                          # v8 registry may omit it
+  if (is.null(has_native_asset)) has_native_asset <- "native_asset" %in% DBI::dbListTables(con)
   for (i in seq_len(nrow(datasets))) {
     ds     <- datasets[i, ]
     dir_ds <- file.path(dir_out, version, ds$ds_key)
@@ -686,7 +692,8 @@ stac_build <- function(version = "v7", dir_out = NULL, cfg = NULL,
       mk_ex <- DBI::dbGetQuery(con, glue::glue(
         "SELECT mdl_key FROM model WHERE ds_key = '{ds$ds_key}' LIMIT 1"))$mdl_key
       item  <- stac_model_cell_item(ds, cfg, time_periods = tps,
-                                    mdl_key_ex = if (length(mk_ex)) mk_ex[1] else NA_character_)
+                                    mdl_key_ex = if (length(mk_ex)) mk_ex[1] else NA_character_,
+                                    has_native_asset = has_native_asset)
     } else {
       cog_ex <- if (is.data.frame(model_asset) && all(c("ds_key", "cog_url") %in% names(model_asset)))
         utils::head(model_asset$cog_url[model_asset$ds_key == ds$ds_key &
