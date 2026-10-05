@@ -24,7 +24,7 @@ against cellid_tif directly."><script async src="https://www.googletagmanager.co
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -68,7 +68,8 @@ against <code>cellid_tif</code> directly.</p>
 <span>  <span class="va">cellid_tif</span>,</span>
 <span>  method <span class="op">=</span> <span class="st">"bilinear"</span>,</span>
 <span>  min_value <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  zero_fill <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  zero_fill <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  digits <span class="op">=</span> <span class="fl">2</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -95,6 +96,14 @@ against <code>cellid_tif</code> directly.</p>
 <dt id="arg-zero-fill">zero_fill<a class="anchor" aria-label="anchor" href="#arg-zero-fill"></a></dt>
 <dd><p>zero-fill NA within the source extent before resampling so the
 surface fades to 0 at its edge (default TRUE)</p></dd>
+
+
+<dt id="arg-digits">digits<a class="anchor" aria-label="anchor" href="#arg-digits"></a></dt>
+<dd><p>rounding of <code>val</code> (default 2, the atlas' 0,100 precision). Pass a larger
+value, or <code>NULL</code> for none, when <code>r</code> holds NATIVE units rather than 0,100 — a density of
+0.004 animals km^-2 rounds to 0 at two decimals, which is how the v8 <code>gm</code> ingest turned
+every low-density cetacean surface into a field of 0s and 100s (rescale BEFORE this call,
+or keep the digits).</p></dd>
 
 </dl></div>
     <div class="section level2">

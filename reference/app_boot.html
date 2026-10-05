@@ -20,7 +20,7 @@ ramps and the table manifest with a digest per table (the OPFS invalidation key)
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -66,6 +66,7 @@ ramps and the table manifest with a digest per table (the OPFS invalidation key)
 <span>  zone_sets <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  chosen <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  zone_names <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  zone_bbox <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  built_at <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.time</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"%Y-%m-%dT%H:%M:%SZ"</span>, tz <span class="op">=</span> <span class="st">"UTC"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -111,6 +112,14 @@ bundle agrees on the same table</p></dd>
 rbound across every zone type the release publishes — human names for
 <code>zones.&lt;unit&gt;[i].name</code> (e.g. "Aleutian Arc" for <code>ALA</code>). <code>NULL</code> (default)
 publishes every zone with <code>name = NULL</code>, exactly as before.</p></dd>
+
+
+<dt id="arg-zone-bbox">zone_bbox<a class="anchor" aria-label="anchor" href="#arg-zone-bbox"></a></dt>
+<dd><p>optional <code>data.frame(fld, key, w, s, e, n)</code> from
+<code><a href="app_zone_bbox.html">app_zone_bbox()</a></code>, rbound across every zone type the release publishes —
+<code>zones.&lt;unit&gt;[i].bbox</code> (R3-C3), so the app's search can zoom to a zone
+without a loaded vector tile. <code>NULL</code> (default) publishes every zone with
+<code>bbox = NULL</code>, exactly as before.</p></dd>
 
 
 <dt id="arg-built-at">built_at<a class="anchor" aria-label="anchor" href="#arg-built-at"></a></dt>

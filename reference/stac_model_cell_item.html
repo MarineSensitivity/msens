@@ -18,7 +18,7 @@ interval, a datacube temporal/season dimension enumerates them."><script async s
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -60,7 +60,8 @@ interval, a datacube temporal/season dimension enumerates them.</p>
 <span>  time_periods <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mdl_key_ex <span class="op">=</span> <span class="cn">NA_character_</span>,</span>
 <span>  id_field <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mdl_key"</span>, <span class="st">"mdl_seq"</span><span class="op">)</span>,</span>
-<span>  cog_ex <span class="op">=</span> <span class="cn">NA_character_</span></span>
+<span>  cog_ex <span class="op">=</span> <span class="cn">NA_character_</span>,</span>
+<span>  has_native_asset <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -95,6 +96,13 @@ links go through titiler's stock <code>/cog</code>.</p></dd>
 <dt id="arg-cog-ex">cog_ex<a class="anchor" aria-label="anchor" href="#arg-cog-ex"></a></dt>
 <dd><p>for a legacy release, the <code>cog_url</code> of a representative model (example links);
 <code>NA</code> omits the links rather than inventing one.</p></dd>
+
+
+<dt id="arg-has-native-asset">has_native_asset<a class="anchor" aria-label="anchor" href="#arg-has-native-asset"></a></dt>
+<dd><p><code>TRUE</code> when the release publishes <code>tables/native_asset.parquet</code> (the pointer
+table of per-model COG / PMTiles files in the content-addressed store); a raster or vector dataset
+then gets one <code>native_asset</code> asset linking it. <code>FALSE</code> (default) emits no per-model file asset
+rather than a dead link. <code><a href="stac_build.html">stac_build()</a></code> sets it from the release's tables.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -18,7 +18,7 @@ Items) under dir_out."><script async src="https://www.googletagmanager.com/gtag/
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -60,7 +60,8 @@ Items) under <code>dir_out</code>.</p>
 <span>  cfg <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  nc_csv <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  con <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  model_asset <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  model_asset <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  has_native_asset <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -92,6 +93,13 @@ Items) under <code>dir_out</code>.</p>
 <dd><p>for a LEGACY release (<code>model</code> keyed by <code>mdl_seq</code>, v1–v7b): data frame with
 <code>ds_key</code> and <code>cog_url</code> (the release's <code>tables/model_asset.parquet</code>), used for each dataset's
 example tile links. <code>NULL</code> builds the catalog without those links. Ignored from v8 on.</p></dd>
+
+
+<dt id="arg-has-native-asset">has_native_asset<a class="anchor" aria-label="anchor" href="#arg-has-native-asset"></a></dt>
+<dd><p>whether the release publishes <code>tables/native_asset.parquet</code>, so each raster /
+vector dataset Item links it (see <code><a href="stac_model_cell_item.html">stac_model_cell_item()</a></code>). <code>NULL</code> (default) checks the connection
+for a <code>native_asset</code> table. A legacy release's local database has none even when the pointer table is
+published (v7, v7b since 2026-10-02): pass <code>TRUE</code> there and its Items link it beside <code>model_asset.parquet</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

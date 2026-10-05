@@ -24,7 +24,7 @@ visible rather than mysterious."><script async src="https://www.googletagmanager
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -65,11 +65,12 @@ visible rather than mysterious.</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">build_storage_index</span><span class="op">(</span></span>
 <span>  <span class="va">objs</span>,</span>
-<span>  site_url <span class="op">=</span> <span class="st">"https://storage.marinesensitivity.org"</span>,</span>
-<span>  obj_url <span class="op">=</span> <span class="st">"https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public"</span>,</span>
+<span>  site_url <span class="op">=</span> <span class="fu"><a href="atlas_bases.html">atlas_bases</a></span><span class="op">(</span><span class="op">)</span><span class="op">$</span><span class="va">storage</span>,</span>
+<span>  obj_url <span class="op">=</span> <span class="fu"><a href="atlas_bases.html">atlas_bases</a></span><span class="op">(</span><span class="op">)</span><span class="op">$</span><span class="va">store</span>,</span>
 <span>  max_child_dirs <span class="op">=</span> <span class="fl">500L</span>,</span>
 <span>  max_rows <span class="op">=</span> <span class="fl">2000L</span>,</span>
-<span>  readme <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  readme <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  ga4_id <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -105,6 +106,10 @@ A file listing says WHAT is there but never what it means, how it was made,
 or how to reach it without a browser; this is where that goes. The same text
 is published as <code>README.md</code> beside the data, so <code>aws s3 cp</code> and <code>curl</code> users
 get it too.</p></dd>
+
+
+<dt id="arg-ga-id">ga4_id<a class="anchor" aria-label="anchor" href="#arg-ga-id"></a></dt>
+<dd><p>GA4 measurement id passed to <code><a href="storage_page.html">storage_page()</a></code>; <code>NULL</code> for none</p></dd>
 
 </dl></div>
     <div class="section level2">

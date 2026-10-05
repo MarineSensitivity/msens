@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.44.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.52.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -252,6 +252,62 @@
 
         <dt>
 
+          <code><a href="asset_catalog_add.html">asset_catalog_add()</a></code>
+
+        </dt>
+        <dd>Add objects to the catalog (idempotent)</dd>
+
+        <dt>
+
+          <code><a href="asset_catalog_check.html">asset_catalog_check()</a></code>
+
+        </dt>
+        <dd>Validate a store catalog (<code>assets.parquet</code>)</dd>
+
+        <dt>
+
+          <code><a href="asset_catalog_read.html">asset_catalog_read()</a></code>
+
+        </dt>
+        <dd>Read the public catalog</dd>
+
+        <dt>
+
+          <code><a href="asset_catalog_write.html">asset_catalog_write()</a></code>
+
+        </dt>
+        <dd>Write the catalog as Parquet (zstd), validated</dd>
+
+        <dt>
+
+          <code><a href="asset_enc.html">asset_enc()</a></code>
+
+        </dt>
+        <dd>Encoding tag of a distribution-file family</dd>
+
+        <dt>
+
+          <code><a href="asset_key.html">asset_key()</a></code>
+
+        </dt>
+        <dd>Object key in the unified store</dd>
+
+        <dt>
+
+          <code><a href="asset_key_collisions.html">asset_key_collisions()</a></code>
+
+        </dt>
+        <dd>Keys that name more than one content</dd>
+
+        <dt>
+
+          <code><a href="asset_key_from_url.html">asset_key_from_url()</a></code>
+
+        </dt>
+        <dd>The store key a pointer URL names, or <code>NA</code> when it is not a store object</dd>
+
+        <dt>
+
           <code><a href="cog_store_index.html">cog_store_index()</a></code>
 
         </dt>
@@ -280,6 +336,13 @@
 
         <dt>
 
+          <code><a href="content_hashes_df.html">content_hashes_df()</a></code>
+
+        </dt>
+        <dd>Content fingerprint of in-memory <code>(cell_id, val)</code> rows</dd>
+
+        <dt>
+
           <code><a href="content_key.html">content_key()</a></code>
 
         </dt>
@@ -291,6 +354,83 @@
 
         </dt>
         <dd>Public URL of a stored COG</dd>
+
+        <dt>
+
+          <code><a href="native_hash_file.html">native_hash_file()</a></code>
+
+        </dt>
+        <dd>MD5 of an object's bytes (the catalog's integrity column, never a store key)</dd>
+
+        <dt>
+
+          <code><a href="native_key.html">native_key()</a></code>
+
+        </dt>
+        <dd>Object key of a stored original surface</dd>
+
+        <dt>
+
+          <code><a href="native_raster_rows.html">native_raster_rows()</a></code>
+
+        </dt>
+        <dd><code>(cell_id, val)</code> rows of a raster on an analysis grid</dd>
+
+        <dt>
+
+          <code><a href="native_store_index.html">native_store_index()</a></code>
+
+        </dt>
+        <dd>Index the store of original surfaces</dd>
+
+        <dt>
+
+          <code><a href="native_store_rewrite.html">native_store_rewrite()</a></code>
+
+        </dt>
+        <dd>Rewrite original-surface rows to the content-addressed store</dd>
+
+        <dt>
+
+          <code><a href="native_url.html">native_url()</a></code>
+
+        </dt>
+        <dd>Public URL of a stored original surface</dd>
+
+        <dt>
+
+          <code><a href="native_vector_hash.html">native_vector_hash()</a></code>
+
+        </dt>
+        <dd>Content hash of one model's vector features (what reaches the tile)</dd>
+
+        <dt>
+
+          <code><a href="native_vector_hashes.html">native_vector_hashes()</a></code>
+
+        </dt>
+        <dd>Content hash of every model in a multi-model sf</dd>
+
+        <dt>
+
+          <code><a href="pixel_hashes.html">pixel_hashes()</a></code>
+
+        </dt>
+        <dd>Pixel-content fingerprint of every model in a surface table</dd>
+
+        <dt>
+
+          <code><a href="pixel_quant_sql.html">pixel_quant_sql()</a></code>
+
+        </dt>
+        <dd>SQL for the pixel value a writer stores</dd>
+
+        <dt>
+
+          <code><a href="store_unreferenced.html">store_unreferenced()</a></code>
+
+        </dt>
+        <dd>Catalogued objects that no release points at</dd>
       </dl></div><div class="section level2">
       <h2 id="spatial-units">Spatial units<a class="anchor" aria-label="anchor" href="#spatial-units"></a></h2>
 
@@ -451,6 +591,20 @@
 
         </dt>
         <dd>Percent of a model's cells that are marine (ocean)</dd>
+
+        <dt>
+
+          <code><a href="density_annual.html">density_annual()</a></code>
+
+        </dt>
+        <dd>Annual mean density from interval (monthly / seasonal) surfaces</dd>
+
+        <dt>
+
+          <code><a href="density_to_suit.html">density_to_suit()</a></code>
+
+        </dt>
+        <dd>Density → suitability-scale [0,100] transforms</dd>
 
         <dt>
 
@@ -938,6 +1092,20 @@
 
         <dt>
 
+          <code><a href="stac_catalog_alias.html">stac_catalog_alias()</a></code>
+
+        </dt>
+        <dd>Alias of the root catalog for another origin</dd>
+
+        <dt>
+
+          <code><a href="stac_catalog_alias_write.html">stac_catalog_alias_write()</a></code>
+
+        </dt>
+        <dd>Write a catalog alias to disk</dd>
+
+        <dt>
+
           <code><a href="stac_catalog_register.html">stac_catalog_register()</a></code>
 
         </dt>
@@ -1005,6 +1173,27 @@
 
         </dt>
         <dd>House-style table for pipeline reports</dd>
+
+        <dt>
+
+          <code><a href="atlas_bases.html">atlas_bases()</a></code>
+
+        </dt>
+        <dd>Base URLs of every host the project serves from</dd>
+
+        <dt>
+
+          <code><a href="url_audit.html">url_audit()</a></code>
+
+        </dt>
+        <dd>Classify URLs by what serves them</dd>
+
+        <dt>
+
+          <code><a href="url_audit_assert.html">url_audit_assert()</a></code>
+
+        </dt>
+        <dd>Stop when a URL would be served as bulk bytes from the VM</dd>
       </dl></div><div class="section level2">
       <h2 id="pipeline">Pipeline<a class="anchor" aria-label="anchor" href="#pipeline"></a></h2>
 
@@ -1391,13 +1580,6 @@
 
         <dt>
 
-          <code><a href="HEX_RES.html">HEX_RES</a></code>
-
-        </dt>
-        <dd>H3 resolution of the v8 sampling grid (~5.16 km^2 per hexagon)</dd>
-
-        <dt>
-
           <code><a href="angular_distance.html">angular_distance()</a></code>
 
         </dt>
@@ -1573,6 +1755,13 @@
 
         <dt>
 
+          <code><a href="app_zone_bbox.html">app_zone_bbox()</a></code>
+
+        </dt>
+        <dd>Per-zone WGS84 bounding boxes, for a search that zooms without a loaded tile</dd>
+
+        <dt>
+
           <code><a href="app_zone_names.html">app_zone_names()</a></code>
 
         </dt>
@@ -1622,6 +1811,13 @@
 
         <dt>
 
+          <code><a href="cell_i_grid.html">cell_i_grid()</a></code>
+
+        </dt>
+        <dd>Canonical global 0.5-degree cell index for lon/lat</dd>
+
+        <dt>
+
           <code><a href="cells_in_polygon_grid.html">cells_in_polygon_grid()</a></code>
 
         </dt>
@@ -1650,45 +1846,10 @@
 
         <dt>
 
-          <code><a href="hex_add_membership.html">hex_add_membership()</a></code>
+          <code><a href="hex_grid_weights.html">hex_grid_weights()</a></code>
 
         </dt>
-        <dd>Flag hexes inside a polygon (H3 polyfill membership)</dd>
-
-        <dt>
-
-          <code><a href="hex_centroids.html">hex_centroids()</a></code>
-
-        </dt>
-        <dd>Centroids (lon/lat) for BIGINT H3 ids</dd>
-
-        <dt>
-
-          <code><a href="hex_id_from_lonlat.html">hex_id_from_lonlat()</a></code>
-
-        </dt>
-        <dd>H3 cell ids for lon/lat points</dd>
-
-        <dt>
-
-          <code><a href="hex_id_to_string.html">hex_id_to_string()</a></code>
-
-        </dt>
-        <dd>Hex-string form of BIGINT H3 ids (for display)</dd>
-
-        <dt>
-
-          <code><a href="hex_interp_idw.html">hex_interp_idw()</a></code>
-
-        </dt>
-        <dd>Interpolate source values onto hex centroids (inverse-distance weighting)</dd>
-
-        <dt>
-
-          <code><a href="hex_ocean.html">hex_ocean()</a></code>
-
-        </dt>
-        <dd>Enumerate the ocean H3 hex tiling from a raster mask (GEOMETRY ONLY)</dd>
+        <dd>Precompute IDW weights from a shared source grid to hex centroids</dd>
 
         <dt>
 
@@ -1696,6 +1857,41 @@
 
         </dt>
         <dd>Centre of the smallest circle containing every point</dd>
+
+        <dt>
+
+          <code><a href="model_hex_from_weights.html">model_hex_from_weights()</a></code>
+
+        </dt>
+        <dd>Interpolate one model's source values onto hexes with precomputed weights</dd>
+
+        <dt>
+
+          <code><a href="native_asset_backfill.html">native_asset_backfill()</a></code>
+
+        </dt>
+        <dd>Backfill a v8-shaped <code>native_asset</code> for a <code>model_asset</code>-only release</dd>
+
+        <dt>
+
+          <code><a href="native_asset_restore_model.html">native_asset_restore_model()</a></code>
+
+        </dt>
+        <dd>Restore the gridded (<code>model</code>) representation of vector ranges</dd>
+
+        <dt>
+
+          <code><a href="native_key_v8.html">native_key_v8()</a></code>
+
+        </dt>
+        <dd>Spell a v1-v7 stable model key the way a later release's <code>native_asset</code> does</dd>
+
+        <dt>
+
+          <code><a href="native_vintage_check.html">native_vintage_check()</a></code>
+
+        </dt>
+        <dd>Is a dataset the same source vintage in two releases?</dd>
 
         <dt>
 
