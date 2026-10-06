@@ -1,4 +1,4 @@
-# msens 0.53.0
+# msens 0.55.0
 
 **Publishing into the asset store (M5): a release owns pointers, never files.**
 
@@ -11,6 +11,38 @@
   (`url_audit()` class `store` AND a store key - the file-host PMTiles mirror and `{ver}/native/...` paths both fail) and,
   given a listing of `{ver}/`, no `.tif`/`.tiff`/`.pmtiles` lives under the release's own prefix. `legacy_ok = TRUE` turns the
   prefix check into a warning for v8/v9 until the M6 prune. `publish_native.qmd` runs it before writing any pointer.
+
+# msens 0.54.0
+
+**The regional test of the range rule needs a material shortfall, not only a significant one.**
+
+* `region_effort_test()` gains `ratio = 0.25` and returns `rate` (the region's own `n_occupied / n_searched`). A region is
+  `dropped` only when the binomial tail is below `alpha` AND its record rate is below `ratio` times the precision elsewhere.
+  With hundreds of searched units, significance alone rejected any region where the species was merely scarcer than in its
+  stronghold: on the published OBIS models it dropped the whole US Pacific for the loggerhead (139 occupied 0.5-degree blocks of
+  978 searched) and for the green turtle. `ratio = 1` is the 0.53.0 behaviour. Verdicts on the seven pilot species do not change
+  for any `ratio` between 0.13 and 0.49 (`workflows/obis_range_constraint.qmd`).
+
+# msens 0.53.0
+
+**A range-constraint rule: trim a model surface with the model's own error rates.**
+
+* New `R/range.R` (concept `range`), the rule the OBIS-method turtle and right whale pilot (`og`) is scored against in
+  `workflows/obis_range_constraint.qmd`. Three tests, the same for every species:
+  * `sens_threshold()` -- the threshold that keeps a share of presences (0.90 = "P10"; reproduces OBIS's published P10 exactly);
+    `heldout_threshold()` -- the same from HELD-OUT cross-validation predictions, with per-fold confusion counts taken at a
+    threshold fixed on the training rows; `confusion_at()` -- the counts themselves.
+  * `range_region_sql()` + `region_effort_test()` -- a confusion matrix per region, with search effort: among the units the
+    model calls present and somebody searched, are there too few records for the precision the model shows everywhere else?
+    Verdicts `kept` / `dropped` / `unsearched` (too few searched units to tell: kept and flagged); a dropped region holding a
+    record is labelled `documented occurrence only`.
+  * `range_constrain_sql()` -- applies it per cell (value minus one bootstrap spread clears the threshold; not an extrapolation;
+    region not dropped) and returns a `status` for EVERY cell, so nothing is dropped silently. Critical habitat is never trimmed
+    (`kept_ch`).
+* `range_hull()` -- convex hull of occurrence points in the longitude frame that fits them, cut at the antimeridian.
+* `inst/gates/fresh_install.R` (the install gate `test-install.R` runs) keeps the session's libraries behind the throwaway one
+  and asserts where the namespace was loaded from. It used to keep only the system library, so on a machine whose packages live
+  in the user library (the Mac mini) the fresh copy failed to load for want of a dependency.
 
 # msens 0.52.0
 

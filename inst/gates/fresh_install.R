@@ -57,14 +57,20 @@ if (!is.null(status) && status != 0L || length(bad)) {
 }
 say("R CMD INSTALL: ok")
 
-# load from THAT library and nowhere else, so a copy already on .libPaths() cannot
-# stand in for the one just built. Via a FILE rather than `-e`: deparse() of a path
-# vector wraps across lines and the shell then sees a half-finished call.
+# load msens from THAT library, so a copy already on .libPaths() cannot stand in for the
+# one just built: the throwaway library goes FIRST and the namespace's path is asserted.
+# The session's other libraries stay behind it, because that is where the DEPENDENCIES
+# live -- `.libPaths(lib)` alone keeps only the system library, and on a machine whose
+# packages sit in the user library (rig installs, the Mac mini) the fresh copy then fails
+# to load for want of httr2, not for any fault of its own. Via a FILE rather than `-e`:
+# deparse() of a path vector wraps across lines and the shell then sees a half-finished call.
 loader <- file.path(lib, "load_check.R")
 writeLines(c(
-  sprintf('.libPaths(%s)', deparse(lib, width.cutoff = 500L)),
-  '.libPaths(c(.libPaths(), .Library))',
+  sprintf('.libPaths(c(%s, %s))', deparse(lib, width.cutoff = 500L),
+          paste(deparse(.libPaths(), width.cutoff = 500L), collapse = "")),
   'suppressMessages(library(msens))',
+  sprintf('stopifnot("msens was loaded from another library, not the fresh install" = identical(normalizePath(dirname(getNamespaceInfo("msens", "path"))), normalizePath(%s)))',
+          deparse(lib, width.cutoff = 500L)),
   'cat("loaded msens", as.character(utils::packageVersion("msens")), "\\n")',
   'stopifnot(is.function(msens::cells_in_polygon_grid),',
   '          is.function(msens::place_encode),',
