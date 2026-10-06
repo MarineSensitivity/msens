@@ -184,6 +184,18 @@ test_that("region_effort_test: scarcer is not absent -- a drop needs a material 
   expect_equal(edge$verdict, c("dropped", "kept"))
 })
 
+test_that("region_effort_test: a low rate that is not significant is kept -- both conditions are needed", {
+  # 1 record in 41 searched units, 10 % elsewhere: the rate (2.4 %) is below a quarter of 10 %,
+  # but P(X <= 1 | 41, 0.1) = 0.074 is not below 0.05. One more searched unit without a record
+  # would not be enough either; zero records in 41 is (0.9^41 = 0.013)
+  r <- region_effort_test(
+    n_searched = c(41, 41), n_occupied = c(1, 0),
+    n_searched_all = 5000 + 41, n_occupied_all = 500 + c(1, 0))
+  expect_equal(r$p_value[1], 0.9^41 + 41 * 0.1 * 0.9^40)
+  expect_true(r$rate[1] < 0.25 * r$p_core[1])
+  expect_equal(r$verdict, c("kept", "dropped"))
+})
+
 test_that("region_effort_test rejects impossible counts", {
   expect_error(region_effort_test(10, 1, 100, 50, ratio = 0), "ratio")
   expect_error(region_effort_test(10, 1, 100, 50, ratio = 1.5), "ratio")
