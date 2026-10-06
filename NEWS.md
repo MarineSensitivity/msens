@@ -1,3 +1,17 @@
+# msens 0.53.0
+
+**Publishing into the asset store (M5): a release owns pointers, never files.**
+
+* `asset_store_key(family, scope, content_hash)`: the one way a publisher names an object - the payload hash folded with the
+  family's encoding tag (`asset_enc()`) and laid out under `cog/{grid_id}/` or `native/{ds_key}/`, known before the file is
+  built, so a surface the catalog already lists costs neither a build nor an upload.
+* `asset_catalog_rows(key, content_hash, enc, file, first_ver)`: validated catalog rows for freshly built objects (`bytes`,
+  `md5` from the local file), for `asset_catalog_add()` after the upload.
+* `store_publish_gate(urls, catalog, ver, listed, legacy_ok)`: stops unless every pointer URL is a catalogued store object
+  (`url_audit()` class `store` AND a store key - the file-host PMTiles mirror and `{ver}/native/...` paths both fail) and,
+  given a listing of `{ver}/`, no `.tif`/`.tiff`/`.pmtiles` lives under the release's own prefix. `legacy_ok = TRUE` turns the
+  prefix check into a warning for v8/v9 until the M6 prune. `publish_native.qmd` runs it before writing any pointer.
+
 # msens 0.52.0
 
 **STAC dataset Items link the per-model pointer table, not directories that do not answer.**

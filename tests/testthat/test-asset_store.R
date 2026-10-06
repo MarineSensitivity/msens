@@ -198,3 +198,69 @@ test_that("pixel_hashes dedup = 'max' paints the value the merge consumes where 
   expect_equal(pixel_hashes(con, "r")$n, 5L)                                      # without it the repeats count twice
   expect_false(pixel_hashes(con, "r")$content_hash == pixel_hashes(con, "one")$content_hash)
 })
+
+# publishing into the store (0.53.0) ----
+
+test_that("asset_store_key is the only way a publisher names an object: family tag folded in, laid out by store", {
+  h <- "0123456789abcdef"
+  k <- asset_store_key("cog_model", "global05", h)
+  expect_equal(k$hash, content_hash_encoded(h, asset_enc("cog_model")))
+  expect_equal(k$key, paste0("cog/global05/", k$hash, ".tif")); expect_equal(k$store, "cog")
+  p <- asset_store_key("native_pmtiles", "bl", h)
+  expect_equal(p$key, paste0("native/bl/", content_hash_encoded(h, asset_enc("native_pmtiles")), ".pmtiles"))
+  a <- asset_store_key("native_am", "am", c(h, "fedcba9876543210"))
+  expect_equal(nrow(a), 2L); expect_true(all(startsWith(a$key, "native/am/")) && all(endsWith(a$key, ".tif")))
+  expect_false(a$key[1] == a$key[2])
+  # the same content in two families is two objects (the container differs)
+  expect_false(asset_store_key("cog_model", "global05", h)$key == asset_store_key("cog_score", "global05", h)$key)
+  expect_equal(nrow(asset_store_key("cog_model", "global05", character())), 0L)
+  expect_error(asset_store_key("jpeg", "global05", h), "unknown asset family")
+  expect_error(asset_store_key("cog_model", "global05", NA_character_))
+  expect_error(asset_store_key("cog_model", "global05", "not-a-hash"))
+})
+
+test_that("asset_catalog_rows reads bytes + md5 off the local files and derives the rest from the key", {
+  d <- tempfile(); dir.create(d)
+  f1 <- file.path(d, "a.tif"); writeBin(as.raw(1:10), f1)
+  f2 <- file.path(d, "b.pmtiles"); writeBin(as.raw(1:30), f2)
+  ch <- c("4444444444444444", "3333333333333333")                                   # ch[2] is cat_fx()'s own pmtiles content
+  k1 <- asset_store_key("cog_model", "global05", ch[1]); k2 <- asset_store_key("native_pmtiles", "bl", ch[2])
+  r <- asset_catalog_rows(c(k1$key, k2$key), ch, c(k1$enc, k2$enc), c(f1, f2), first_ver = "v10")
+  expect_equal(r$bytes, c(10, 30)); expect_equal(r$md5, native_hash_file(c(f1, f2)))
+  expect_equal(r$store, c("cog", "native")); expect_equal(r$asset_type, c("cog", "pmtiles"))
+  expect_equal(r$grid_id, c("global05", NA)); expect_equal(r$ds_key, c(NA, "bl")); expect_equal(r$first_ver, c("v10", "v10"))
+  expect_s3_class(r$created, "Date")
+  expect_silent(asset_catalog_check(r))
+  expect_equal(nrow(asset_catalog_add(cat_fx(), r)), nrow(cat_fx()) + 1L)   # k2 is already catalogued: skipped; k1 added
+  expect_equal(nrow(asset_catalog_rows(character(), character(), character(), character(), "v10")), 0L)
+  expect_error(asset_catalog_rows(k1$key, ch[1], k1$enc, file.path(d, "missing.tif"), "v10"), "no local file")
+  expect_error(asset_catalog_rows("v8/native/am/x.tif", ch[1], k1$enc, f1, "v10"), "not a store key")
+})
+
+test_that("store_publish_gate passes a release whose pointers all name catalogued store objects", {
+  B <- atlas_bases()$atlas; cat_ <- cat_fx()
+  urls <- c(paste0(B, "/", cat_$key), NA, paste0(B, "/", cat_$key[1]))
+  g <- store_publish_gate(urls, cat_, "v8")
+  expect_equal(g$n_urls, 4L); expect_equal(g$n_keys, 3L); expect_length(g$legacy, 0)
+  # a listing with only tables, manifest and app shards under the release is fine, as is another release's bulk
+  expect_silent(store_publish_gate(urls, cat_, "v8",
+    listed = c("marine-atlas/v8/tables/native_asset.parquet", "marine-atlas/v8/manifest.json", "v8/app/boot.json", "v9/native/am/x.tif")))
+})
+
+test_that("store_publish_gate refuses a pointer at a VM host, at a versioned path, or at an uncatalogued key", {
+  B <- atlas_bases()$atlas; cat_ <- cat_fx(); H <- "0123456789abcdef"
+  expect_error(store_publish_gate(c(paste0(B, "/", cat_$key[1]), paste0(atlas_bases()$file, "/pmtiles/native/bl/", H, ".pmtiles")),
+                                  cat_, "v8"), "not store objects")                                  # the file-host mirror
+  expect_error(store_publish_gate(paste0(B, "/v8/native/am/am_Fis-1.tif"), cat_, "v8"), "not store objects")   # versioned path
+  expect_error(store_publish_gate(paste0(B, "/cog/global05/", H, ".tif"), cat_, "v8"), "not in the catalog")
+  expect_error(store_publish_gate(paste0(B, "/", cat_$key[1]), cat_, "v8.1"))                        # dotted ids are rejected everywhere
+})
+
+test_that("store_publish_gate: bulk files under the release's own prefix stop the publish, unless legacy_ok (warn, before M6)", {
+  B <- atlas_bases()$atlas; cat_ <- cat_fx(); u <- paste0(B, "/", cat_$key)
+  l <- c("v8/native/am/am_Fis-1.tif", "v8/native/pmtiles/bl/1.pmtiles", "v8/tables/native_asset.parquet")
+  expect_error(store_publish_gate(u, cat_, "v8", listed = l), "live under v8/")
+  expect_warning(g <- store_publish_gate(u, cat_, "v8", listed = l, legacy_ok = TRUE), "live under v8/")
+  expect_equal(sort(g$legacy), sort(l[1:2]))
+  expect_silent(store_publish_gate(u, cat_, "v7", listed = l))                                      # another release's files
+})

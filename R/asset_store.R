@@ -378,3 +378,135 @@ asset_key_collisions <- function(m) {
   n  <- tapply(id, m$key, function(z) length(unique(z)))
   m[m$key %in% names(n)[n > 1L], , drop = FALSE]
 }
+
+# publishing into the store (0.53.0) ----
+#
+# A publisher (publish_native.qmd) never names an object by hand: it hashes the content it is
+# about to write, asks asset_store_key() for the key, skips what the catalog already lists,
+# builds + uploads the rest, catalogues them (asset_catalog_rows()), and only THEN writes the
+# release's pointers - which store_publish_gate() refuses unless every pointer names a
+# catalogued store object and nothing bulk lives under the release's own prefix.
+
+#' Store key of a file family, from its source-content hash
+#'
+#' Folds the content hash with the family's encoding tag ([asset_enc()]) and lays the object out
+#' under the family's store: `cog/{grid_id}/{hash}.tif` for the `cog_*` families,
+#' `native/{ds_key}/{hash}.tif` for `native_am` / `native_ax`, `native/{ds_key}/{hash}.pmtiles`
+#' for `native_pmtiles`. This is the only way a publisher names an object, and the key is known
+#' before the file is built - so a surface already in the catalog costs neither a build nor an
+#' upload.
+#'
+#' @param family one of `names(asset_enc())`
+#' @param scope `grid_id` (cog families) or `ds_key` (native families); length 1 or `length(content_hash)`
+#' @param content_hash 16-hex payload hash(es): [pixel_hashes()] for a raster on a grid,
+#'   [native_vector_hash()] for a vector range, [content_hashes_df()] for decoded pixels
+#' @return data frame `content_hash`, `hash` (the key's 16 hex), `enc`, `store`, `key`; zero rows
+#'   for a zero-length `content_hash`
+#' @examples
+#' asset_store_key("cog_model", "global05", "0123456789abcdef")
+#' @export
+#' @concept cog_store
+asset_store_key <- function(family, scope, content_hash) {
+  enc   <- asset_enc(family)
+  stopifnot(is.character(content_hash), !anyNA(content_hash),
+            all(grepl("^[0-9a-f]{16}$", content_hash)))
+  store <- if (startsWith(family, "cog")) "cog" else "native"
+  ext   <- if (family == "native_pmtiles") "pmtiles" else "tif"
+  hash  <- content_hash_encoded(content_hash, enc)
+  data.frame(content_hash = content_hash, hash = hash, enc = rep_len(enc, length(hash)),
+             store = rep_len(store, length(hash)),
+             key = asset_key(store, rep_len(scope, length(hash)), hash, ext),
+             stringsAsFactors = FALSE)
+}
+
+#' Catalog rows for objects a publisher has just built
+#'
+#' One validated catalog row per local file: `bytes` and `md5` from the file, `store` /
+#' `asset_type` / `grid_id` / `ds_key` from the key. The rows are what [asset_catalog_add()]
+#' appends after the objects are uploaded.
+#'
+#' @param key store key(s) ([asset_store_key()])
+#' @param content_hash,enc the payload hash and encoding tag the key was made from
+#' @param file local path of each object
+#' @param first_ver the release that first stored the object (length 1 or `length(key)`)
+#' @param created date column (default today)
+#' @return a catalog data frame (see [asset_catalog_check()]); zero rows for zero keys
+#' @export
+#' @concept cog_store
+asset_catalog_rows <- function(key, content_hash, enc, file, first_ver, created = Sys.Date()) {
+  n <- length(key)
+  stopifnot(length(content_hash) == n, length(enc) == n, length(file) == n,
+            length(first_ver) %in% c(1L, n), length(created) %in% c(1L, n))
+  if (!n) {
+    out <- data.frame(store = character(), key = character(), content_hash = character(), enc = character(),
+                      asset_type = character(), grid_id = character(), ds_key = character(), bytes = numeric(),
+                      md5 = character(), created = as.Date(character()), first_ver = character(),
+                      stringsAsFactors = FALSE)
+    return(asset_catalog_check(out))
+  }
+  miss <- !file.exists(file)
+  if (any(miss)) stop("asset_catalog_rows(): no local file for ", sum(miss), " key(s), e.g. ", key[miss][1], call. = FALSE)
+  m <- regmatches(key, regexec("^(cog|native)/([A-Za-z0-9_]+)/([0-9a-f]{16})\\.(tif|pmtiles)$", key))
+  if (any(lengths(m) == 0L)) stop("asset_catalog_rows(): not a store key: ", key[lengths(m) == 0L][1], call. = FALSE)
+  M <- do.call(rbind, m)
+  out <- data.frame(
+    store = M[, 2], key = key, content_hash = content_hash, enc = enc,
+    asset_type = ifelse(M[, 5] == "pmtiles", "pmtiles", "cog"),
+    grid_id = ifelse(M[, 2] == "cog", M[, 3], NA_character_),
+    ds_key  = ifelse(M[, 2] == "native", M[, 3], NA_character_),
+    bytes = as.numeric(file.size(file)), md5 = native_hash_file(file),
+    created = rep_len(as.Date(created), n), first_ver = rep_len(as.character(first_ver), n),
+    stringsAsFactors = FALSE)
+  rownames(out) <- NULL
+  asset_catalog_check(out)
+}
+
+#' The publish gate: a release owns pointers, never files
+#'
+#' Stops unless every pointer URL names a catalogued store object, and - when a bucket
+#' listing of the release's own prefix is given - nothing bulk (`.tif`, `.tiff`, `.pmtiles`)
+#' lives under `{ver}/`. A pointer at a VM host (the file-host PMTiles mirror included) or at a
+#' versioned path (`{ver}/native/...`) fails the first check ([url_audit()] class `store` AND
+#' [asset_key_from_url()] not `NA`); a key the catalog does not list fails the second: an object
+#' must be uploaded and catalogued before any pointer names it.
+#'
+#' Until the M6 prune, releases v8 and v9 still carry their pre-store copies under `{ver}/native/`;
+#' `legacy_ok = TRUE` turns that third check into a warning and returns the offending keys, so a
+#' publisher can run before the prune while still refusing to ADD to them.
+#'
+#' @param urls pointer URLs (`native_asset$asset_url`; `NA` ignored)
+#' @param catalog the store catalog ([asset_catalog_read()]), already holding this run's objects
+#' @param ver release id (`^v[0-9]+[a-z]?$`)
+#' @param listed object keys under the atlas root (a recursive listing of `{ver}/`, with or
+#'   without the `marine-atlas/` prefix), or `NULL` to skip the prefix check
+#' @param legacy_ok warn instead of stopping on bulk files under `{ver}/`
+#' @return invisibly, `list(n_urls, n_keys, legacy)` where `legacy` are the bulk keys found under `{ver}/`
+#' @export
+#' @concept cog_store
+store_publish_gate <- function(urls, catalog, ver, listed = NULL, legacy_ok = FALSE) {
+  stopifnot(grepl("^v[0-9]+[a-z]?$", ver))
+  asset_catalog_check(catalog)
+  urls <- as.character(urls); urls <- urls[!is.na(urls)]
+  key  <- asset_key_from_url(urls)
+  cls  <- if (length(urls)) url_audit(urls)$class else character()
+  off  <- urls[is.na(key) | cls != "store"]
+  if (length(off))
+    stop(sprintf("store gate [%s]: %d pointer URL(s) are not store objects (e.g. %s)", ver, length(off), off[1]), call. = FALSE)
+  miss <- unique(key[!key %in% catalog$key])
+  if (length(miss))
+    stop(sprintf("store gate [%s]: %d pointer key(s) are not in the catalog (e.g. %s) - upload and catalogue an object before a pointer names it",
+                 ver, length(miss), miss[1]), call. = FALSE)
+  legacy <- character()
+  if (!is.null(listed)) {
+    l <- sub("^marine-atlas/", "", as.character(listed))
+    l <- l[startsWith(l, paste0(ver, "/"))]
+    legacy <- l[grepl("\\.(tif|tiff|pmtiles)$", sub("\\?.*$", "", l), ignore.case = TRUE)]
+    if (length(legacy)) {
+      msg <- sprintf("store gate [%s]: %d distribution file(s) live under %s/ (e.g. %s); a release owns pointers, not files",
+                     ver, length(legacy), ver, legacy[1])
+      if (!legacy_ok) stop(msg, call. = FALSE)
+      warning(msg, call. = FALSE)
+    }
+  }
+  invisible(list(n_urls = length(urls), n_keys = length(unique(key)), legacy = legacy))
+}
