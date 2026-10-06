@@ -1,3 +1,14 @@
+# msens 0.54.0
+
+**The regional test of the range rule needs a material shortfall, not only a significant one.**
+
+* `region_effort_test()` gains `ratio = 0.25` and returns `rate` (the region's own `n_occupied / n_searched`). A region is
+  `dropped` only when the binomial tail is below `alpha` AND its record rate is below `ratio` times the precision elsewhere.
+  With hundreds of searched units, significance alone rejected any region where the species was merely scarcer than in its
+  stronghold: on the published OBIS models it dropped the whole US Pacific for the loggerhead (139 occupied 0.5-degree blocks of
+  978 searched) and for the green turtle. `ratio = 1` is the 0.53.0 behaviour. Verdicts on the seven pilot species do not change
+  for any `ratio` between 0.13 and 0.49 (`workflows/obis_range_constraint.qmd`).
+
 # msens 0.53.0
 
 **A range-constraint rule: trim a model surface with the model's own error rates.**

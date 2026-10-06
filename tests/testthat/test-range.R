@@ -164,7 +164,29 @@ test_that("region_effort_test leaves the tested region out of the core precision
   expect_equal(r$label, c(NA, "documented occurrence only"))
 })
 
+test_that("region_effort_test: scarcer is not absent -- a drop needs a material shortfall, not only a significant one", {
+  # REGRESSION (published OBIS models, 0.5 degree blocks, megafauna effort): the US Pacific
+  # for the loggerhead, 139 occupied of 978 searched against 23 % elsewhere. Significance alone
+  # (ratio = 1) drops it at p = 4e-12; 14 % is well above a quarter of 23 %, so it is range.
+  args <- list(n_searched = 978, n_occupied = 139, n_searched_all = 978 + 3000, n_occupied_all = 139 + 690)
+  kept    <- do.call(region_effort_test, args)
+  as_was  <- do.call(region_effort_test, c(args, ratio = 1))
+  expect_equal(kept$p_core, 0.23)
+  expect_lt(kept$p_value, 1e-9)                 # significant either way
+  expect_equal(kept$rate, 139 / 978)
+  expect_equal(kept$verdict, "kept")
+  expect_true(is.na(kept$label))
+  expect_equal(as_was$verdict, "dropped")
+  # the boundary: rate must be BELOW ratio * p_core. 0.23 * 0.25 = 0.0575 -> 57 of 1000 drops, 58 stays
+  edge <- region_effort_test(
+    n_searched = c(1000, 1000), n_occupied = c(57, 58),
+    n_searched_all = 1000 + 3000, n_occupied_all = c(57, 58) + 690)
+  expect_equal(edge$verdict, c("dropped", "kept"))
+})
+
 test_that("region_effort_test rejects impossible counts", {
+  expect_error(region_effort_test(10, 1, 100, 50, ratio = 0), "ratio")
+  expect_error(region_effort_test(10, 1, 100, 50, ratio = 1.5), "ratio")
   expect_error(region_effort_test(10, 11, 100, 50))
   expect_error(region_effort_test(10, 1, 5, 1))
 })

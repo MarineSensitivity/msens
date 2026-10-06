@@ -7,7 +7,8 @@
 #                  heldout_threshold()
 #   2. region      a confusion matrix per region, with search effort: among the cells the model
 #                  calls present AND somebody searched, are there too few records of the species
-#                  for the precision the model shows everywhere else?         -> range_region_sql(),
+#                  for the precision the model shows everywhere else (significantly, and by a
+#                  factor: less than `ratio` of that precision)?              -> range_region_sql(),
 #                  region_effort_test()
 #   3. uncertainty a cell stays only if its value minus one bootstrap spread still clears the
 #                  threshold, and it is not an extrapolation                  -> range_constrain_sql()
@@ -127,10 +128,18 @@ heldout_threshold <- function(cv, cv_train = NULL, sens = 0.9) {
 #' how many records to expect; the binomial tail `P(X <= n_occupied | n_searched, p_core)` says
 #' how surprising this few are.
 #'
-#' * `p_value < alpha` -> `"dropped"`: searched, and the species is not there.
+#' * `p_value < alpha` **and** the region's own record rate (`n_occupied / n_searched`) is below
+#'   `ratio` times `p_core` -> `"dropped"`: searched, and the species is not there.
 #' * fewer searched units than `n_min`, the smallest number at which even **zero** records could
 #'   reach `alpha` -> `"unsearched"`: kept, and flagged. Empty of observers is not empty of turtles.
 #' * otherwise `"kept"`.
+#'
+#' The second condition is the effect size. With hundreds of searched units the binomial tail
+#' alone rejects any region where the species is merely scarcer than in its stronghold: on the
+#' published OBIS models it dropped the whole US Pacific for the loggerhead (139 occupied blocks
+#' of 978 searched, against 23 % elsewhere) and for the green turtle, Hawaii included. A region
+#' is contradicted only when records are both significantly AND materially fewer. `ratio = 1`
+#' is the test without the guard.
 #'
 #' A dropped region with at least one record of the species (`n_records > 0`) is labelled
 #' `"documented occurrence only"`: the vagrant is on the record, the region is not range.
@@ -145,8 +154,10 @@ heldout_threshold <- function(cv, cv_train = NULL, sens = 0.9) {
 #' @param n_records units in the region holding a record of the species, whether or not the
 #'   model calls them present (decides the label only)
 #' @param alpha rejection level
+#' @param ratio a region is dropped only if its record rate is below this share of `p_core`
+#'   (in (0, 1]; 1 = significance alone)
 #'
-#' @return a data frame, one row per region: `p_core, n_min, p_value, verdict, label`
+#' @return a data frame, one row per region: `p_core, rate, n_min, p_value, verdict, label`
 #' @importFrom stats pbinom
 #' @export
 #' @concept range
@@ -156,11 +167,12 @@ heldout_threshold <- function(cv, cv_train = NULL, sens = 0.9) {
 #' region_effort_test(n_searched = 400, n_occupied = 2, n_searched_all = 5400, n_occupied_all = 502)
 region_effort_test <- function(
     n_searched, n_occupied, n_searched_all, n_occupied_all,
-    n_records = n_occupied, alpha = 0.05) {
+    n_records = n_occupied, alpha = 0.05, ratio = 0.25) {
   stopifnot(
     length(n_searched) == length(n_occupied),
     all(n_occupied <= n_searched), all(n_searched <= n_searched_all), all(n_occupied <= n_occupied_all),
-    length(alpha) == 1, alpha > 0, alpha < 1)
+    length(alpha) == 1, alpha > 0, alpha < 1,
+    "`ratio` must be one number in (0, 1]" = length(ratio) == 1 && is.finite(ratio) && ratio > 0 && ratio <= 1)
   n_core <- n_searched_all - n_searched
   k_core <- n_occupied_all - n_occupied
   p_core <- ifelse(n_core > 0, k_core / n_core, NA_real_)
@@ -169,11 +181,13 @@ region_effort_test <- function(
     is.na(p_core) | p_core <= 0, Inf,
     ifelse(p_core >= 1, 1, floor(log(alpha) / log1p(-p_core)) + 1))
   p_value <- ifelse(is.na(p_core), NA_real_, pbinom(n_occupied, n_searched, p_core))
+  rate    <- ifelse(n_searched > 0, n_occupied / n_searched, NA_real_)
   verdict <- ifelse(
     n_searched < n_min, "unsearched",
-    ifelse(p_value < alpha, "dropped", "kept"))
+    ifelse(p_value < alpha & rate < ratio * p_core, "dropped", "kept"))
   data.frame(
     p_core  = p_core,
+    rate    = rate,
     n_min   = n_min,
     p_value = p_value,
     verdict = verdict,

@@ -10,7 +10,8 @@ region_effort_test(
   n_searched_all,
   n_occupied_all,
   n_records = n_occupied,
-  alpha = 0.05
+  alpha = 0.05,
+  ratio = 0.25
 )
 }
 \arguments{
@@ -25,9 +26,12 @@ value per species, recycled)}
 model calls them present (decides the label only)}
 
 \item{alpha}{rejection level}
+
+\item{ratio}{a region is dropped only if its record rate is below this share of \code{p_core}
+(in (0, 1]; 1 = significance alone)}
 }
 \value{
-a data frame, one row per region: \verb{p_core, n_min, p_value, verdict, label}
+a data frame, one row per region: \verb{p_core, rate, n_min, p_value, verdict, label}
 }
 \description{
 The range rule's second test, one row per region. Among the units (cells, or blocks of cells)
@@ -39,11 +43,19 @@ how surprising this few are.
 }
 \details{
 \itemize{
-\item \code{p_value < alpha} -> \code{"dropped"}: searched, and the species is not there.
+\item \code{p_value < alpha} \strong{and} the region's own record rate (\code{n_occupied / n_searched}) is below
+\code{ratio} times \code{p_core} -> \code{"dropped"}: searched, and the species is not there.
 \item fewer searched units than \code{n_min}, the smallest number at which even \strong{zero} records could
 reach \code{alpha} -> \code{"unsearched"}: kept, and flagged. Empty of observers is not empty of turtles.
 \item otherwise \code{"kept"}.
 }
+
+The second condition is the effect size. With hundreds of searched units the binomial tail
+alone rejects any region where the species is merely scarcer than in its stronghold: on the
+published OBIS models it dropped the whole US Pacific for the loggerhead (139 occupied blocks
+of 978 searched, against 23 \% elsewhere) and for the green turtle, Hawaii included. A region
+is contradicted only when records are both significantly AND materially fewer. \code{ratio = 1}
+is the test without the guard.
 
 A dropped region with at least one record of the species (\code{n_records > 0}) is labelled
 \code{"documented occurrence only"}: the vagrant is on the record, the region is not range.
