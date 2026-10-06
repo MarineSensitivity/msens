@@ -22,7 +22,7 @@ how surprising this few are."><script async src="https://www.googletagmanager.co
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.53.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.54.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -66,7 +66,8 @@ how surprising this few are.</p>
 <span>  <span class="va">n_searched_all</span>,</span>
 <span>  <span class="va">n_occupied_all</span>,</span>
 <span>  n_records <span class="op">=</span> <span class="va">n_occupied</span>,</span>
-<span>  alpha <span class="op">=</span> <span class="fl">0.05</span></span>
+<span>  alpha <span class="op">=</span> <span class="fl">0.05</span>,</span>
+<span>  ratio <span class="op">=</span> <span class="fl">0.25</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -95,19 +96,31 @@ model calls them present (decides the label only)</p></dd>
 <dt id="arg-alpha">alpha<a class="anchor" aria-label="anchor" href="#arg-alpha"></a></dt>
 <dd><p>rejection level</p></dd>
 
+
+<dt id="arg-ratio">ratio<a class="anchor" aria-label="anchor" href="#arg-ratio"></a></dt>
+<dd><p>a region is dropped only if its record rate is below this share of <code>p_core</code>
+(in (0, 1]; 1 = significance alone)</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>a data frame, one row per region: <code>p_core, n_min, p_value, verdict, label</code></p>
+    <p>a data frame, one row per region: <code>p_core, rate, n_min, p_value, verdict, label</code></p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
 
-<ul><li><p><code>p_value &lt; alpha</code> -&gt; <code>"dropped"</code>: searched, and the species is not there.</p></li>
+<ul><li><p><code>p_value &lt; alpha</code> <strong>and</strong> the region's own record rate (<code>n_occupied / n_searched</code>) is below
+<code>ratio</code> times <code>p_core</code> -&gt; <code>"dropped"</code>: searched, and the species is not there.</p></li>
 <li><p>fewer searched units than <code>n_min</code>, the smallest number at which even <strong>zero</strong> records could
 reach <code>alpha</code> -&gt; <code>"unsearched"</code>: kept, and flagged. Empty of observers is not empty of turtles.</p></li>
 <li><p>otherwise <code>"kept"</code>.</p></li>
-</ul><p>A dropped region with at least one record of the species (<code>n_records &gt; 0</code>) is labelled
+</ul><p>The second condition is the effect size. With hundreds of searched units the binomial tail
+alone rejects any region where the species is merely scarcer than in its stronghold: on the
+published OBIS models it dropped the whole US Pacific for the loggerhead (139 occupied blocks
+of 978 searched, against 23 % elsewhere) and for the green turtle, Hawaii included. A region
+is contradicted only when records are both significantly AND materially fewer. <code>ratio = 1</code>
+is the test without the guard.</p>
+<p>A dropped region with at least one record of the species (<code>n_records &gt; 0</code>) is labelled
 <code>"documented occurrence only"</code>: the vagrant is on the record, the region is not range.</p>
 <p>Leaving the tested region out of <code>p_core</code> is what lets the test see a region at all: a species'
 stronghold is compared with the rest of its range, not with itself.</p>
@@ -117,8 +130,8 @@ stronghold is compared with the rest of its range, not with itself.</p>
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># 400 searched units and 2 records, where the rest of the range shows 1 record in 10</span></span></span>
 <span class="r-in"><span><span class="fu">region_effort_test</span><span class="op">(</span>n_searched <span class="op">=</span> <span class="fl">400</span>, n_occupied <span class="op">=</span> <span class="fl">2</span>, n_searched_all <span class="op">=</span> <span class="fl">5400</span>, n_occupied_all <span class="op">=</span> <span class="fl">502</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   p_core n_min     p_value verdict                      label</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1    0.1    29 5.12987e-16 dropped documented occurrence only</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   p_core  rate n_min     p_value verdict                      label</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1    0.1 0.005    29 5.12987e-16 dropped documented occurrence only</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
