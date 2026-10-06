@@ -1,3 +1,24 @@
+# msens 0.53.0
+
+**A range-constraint rule: trim a model surface with the model's own error rates.**
+
+* New `R/range.R` (concept `range`), the rule the OBIS-method turtle and right whale pilot (`og`) is scored against in
+  `workflows/obis_range_constraint.qmd`. Three tests, the same for every species:
+  * `sens_threshold()` -- the threshold that keeps a share of presences (0.90 = "P10"; reproduces OBIS's published P10 exactly);
+    `heldout_threshold()` -- the same from HELD-OUT cross-validation predictions, with per-fold confusion counts taken at a
+    threshold fixed on the training rows; `confusion_at()` -- the counts themselves.
+  * `range_region_sql()` + `region_effort_test()` -- a confusion matrix per region, with search effort: among the units the
+    model calls present and somebody searched, are there too few records for the precision the model shows everywhere else?
+    Verdicts `kept` / `dropped` / `unsearched` (too few searched units to tell: kept and flagged); a dropped region holding a
+    record is labelled `documented occurrence only`.
+  * `range_constrain_sql()` -- applies it per cell (value minus one bootstrap spread clears the threshold; not an extrapolation;
+    region not dropped) and returns a `status` for EVERY cell, so nothing is dropped silently. Critical habitat is never trimmed
+    (`kept_ch`).
+* `range_hull()` -- convex hull of occurrence points in the longitude frame that fits them, cut at the antimeridian.
+* `inst/gates/fresh_install.R` (the install gate `test-install.R` runs) keeps the session's libraries behind the throwaway one
+  and asserts where the namespace was loaded from. It used to keep only the system library, so on a machine whose packages live
+  in the user library (the Mac mini) the fresh copy failed to load for want of a dependency.
+
 # msens 0.52.0
 
 **STAC dataset Items link the per-model pointer table, not directories that do not answer.**

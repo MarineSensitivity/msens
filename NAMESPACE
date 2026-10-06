@@ -96,6 +96,7 @@ export(cog_point_value)
 export(cog_store_index)
 export(cog_tile_url)
 export(compute_er_score)
+export(confusion_at)
 export(content_hash_encoded)
 export(content_hash_sql)
 export(content_hashes)
@@ -125,6 +126,7 @@ export(grid_spec)
 export(grid_spec_for)
 export(hash_parquet)
 export(hash_query)
+export(heldout_threshold)
 export(hex_add_membership)
 export(hex_centroids)
 export(hex_grid_weights)
@@ -191,7 +193,11 @@ export(publish_cog)
 export(publish_pmtiles)
 export(publish_pmtiles_from_gpkg)
 export(publish_pmtiles_models)
+export(range_constrain_sql)
+export(range_hull)
+export(range_region_sql)
 export(rarity_class)
+export(region_effort_test)
 export(registry_merge)
 export(report_parquet_summary)
 export(report_table)
@@ -206,6 +212,7 @@ export(sdm_db_con)
 export(sdm_db_path)
 export(sdm_sql_b64)
 export(sdm_val_col)
+export(sens_threshold)
 export(sfc_geojson)
 export(sp_cat_from_taxonomy)
 export(species_for_cells)
@@ -408,6 +415,7 @@ importFrom(sf,
   st_as_sfc,
   st_bbox,
   st_cast,
+  st_convex_hull,
   st_coordinates,
   st_covered_by,
   st_crs,
@@ -418,6 +426,7 @@ importFrom(sf,
   st_is_empty,
   st_layers,
   st_make_valid,
+  st_multipoint,
   st_multipolygon,
   st_polygon,
   st_read,
@@ -433,6 +442,7 @@ importFrom(stats,
   aggregate,
   ecdf,
   na.omit,
+  pbinom,
   quantile
 )
 importFrom(stringr,
