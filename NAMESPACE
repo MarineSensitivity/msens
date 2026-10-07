@@ -288,10 +288,6 @@ importFrom(DT,
   formatSignif
 )
 importFrom(RColorBrewer,brewer.pal)
-importFrom(arrow,
-  read_parquet,
-  write_parquet
-)
 importFrom(base64enc,base64encode)
 importFrom(digest,digest)
 importFrom(dplyr,

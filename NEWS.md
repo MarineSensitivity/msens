@@ -1,3 +1,9 @@
+# msens 0.55.1
+
+* Installing msens no longer requires **arrow**: `asset_catalog_write()` / `asset_catalog_read()` call it
+  namespace-qualified (it stays in Suggests). 0.55.0 had imported it, so every docs CI build failed with
+  "there is no package called 'arrow'" (2026-10-07).
+
 # msens 0.55.0
 
 **Publishing into the asset store (M5): a release owns pointers, never files.**

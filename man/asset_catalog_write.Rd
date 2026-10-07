@@ -17,4 +17,8 @@ asset_catalog_write(x, path)
 \description{
 Write the catalog as Parquet (zstd), validated
 }
+\note{
+arrow is a Suggests dependency, called namespace-qualified: an \verb{@importFrom arrow} made
+installing msens require arrow, which the docs CI runner lacks (every build failed 2026-10-07).
+}
 \concept{cog_store}

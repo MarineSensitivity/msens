@@ -320,7 +320,8 @@ asset_catalog_add <- function(catalog, new) {
 #' @param x catalog data frame
 #' @param path output `.parquet`
 #' @return `path`, invisibly
-#' @importFrom arrow write_parquet
+#' @note arrow is a Suggests dependency, called namespace-qualified: an `@importFrom arrow` made
+#'   installing msens require arrow, which the docs CI runner lacks (every build failed 2026-10-07).
 #' @export
 #' @concept cog_store
 asset_catalog_write <- function(x, path) {
@@ -336,7 +337,6 @@ asset_catalog_write <- function(x, path) {
 #'
 #' @param base atlas base URL ([atlas_base_url()]) or a local directory
 #' @return the validated catalog
-#' @importFrom arrow read_parquet
 #' @export
 #' @concept cog_store
 asset_catalog_read <- function(base = atlas_base_url()) {
