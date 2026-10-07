@@ -543,7 +543,12 @@ manifest_build <- function(con, ver, status = "released",
                   logical(1))))
     stop("`app$capabilities` values must be single non-NA logicals; ",
          "an unknown capability is FALSE, never absent and never NA", call. = FALSE)
-  want <- c("cell", "cell_model", "taxonomy", "alias")   # pmtiles_s3 retired in 0.56.0 (the probed path was pruned)
+  # a capability retired in a later msens is DROPPED from a manifest built before it, never an error:
+  # this validates every manifest a READER opens (atlas_manifest()), and 0.56.0's strict list broke
+  # reading all nine published manifests (docs CI 2026-10-07; pmtiles_s3 retired, probed path pruned)
+  retired <- c("pmtiles_s3")
+  caps <- caps[setdiff(names(caps), retired)]
+  want <- c("cell", "cell_model", "taxonomy", "alias")
   if (length(miss <- setdiff(want, names(caps))))
     stop(sprintf("`app$capabilities` is missing: %s", paste(miss, collapse = ", ")),
          call. = FALSE)

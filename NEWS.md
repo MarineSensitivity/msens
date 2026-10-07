@@ -1,3 +1,10 @@
+# msens 0.56.1
+
+* Reading a manifest built before 0.56.0 works again: a retired capability (`pmtiles_s3`) is dropped by
+  `.manifest_app_block()` instead of rejected as an unknown key. 0.56.0's strict list sat in the path every
+  reader takes (`atlas_manifest()` → `validate_manifest_app()`), so all nine published manifests failed to read
+  and every docs CI render died (2026-10-07).
+
 # msens 0.56.0
 
 * `app_capabilities()` no longer probes `pmtiles_s3` (`{ver}/native/pmtiles/index.json`, the pre-store PMTiles

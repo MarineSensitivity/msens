@@ -722,6 +722,20 @@ test_that("boot.json tables carry an href, byte size and content digest", {
 
 CAPS <- list(cell = TRUE, cell_model = FALSE, taxonomy = TRUE, alias = TRUE)
 
+test_that("a manifest built before 0.56.0 (pmtiles_s3 present) still reads: the retired key is dropped, never an error", {
+  # regression: 0.56.0 made the known list strict in the function every READER goes through
+  # (atlas_manifest -> validate_manifest_app -> .manifest_app_block), so all nine published manifests
+  # failed to read and every docs CI render died (2026-10-07)
+  old <- list(capabilities = c(CAPS, list(pmtiles_s3 = FALSE)),
+              probed = list(pmtiles_s3 = list(url = "https://example.invalid/v7/native/pmtiles/index.json", status = 403L)))
+  blk <- msens:::.manifest_app_block(old, "v7", "https://example.invalid")
+  expect_setequal(names(blk$capabilities), names(CAPS))
+  expect_false("pmtiles_s3" %in% names(blk$capabilities))
+  # an unknown key that is NOT retired is still an error
+  expect_error(msens:::.manifest_app_block(list(capabilities = c(CAPS, list(bogus = TRUE))), "v7", "https://example.invalid"),
+               "unknown key")
+})
+
 test_that("a manifest with no `app` argument has NO `app` key at all", {
   for (gen in gens) with_synth(gen, function(con) {
     m <- synth_manifest(con, gen, BASE)
