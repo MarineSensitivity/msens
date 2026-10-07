@@ -543,7 +543,7 @@ manifest_build <- function(con, ver, status = "released",
                   logical(1))))
     stop("`app$capabilities` values must be single non-NA logicals; ",
          "an unknown capability is FALSE, never absent and never NA", call. = FALSE)
-  want <- c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3")
+  want <- c("cell", "cell_model", "taxonomy", "alias")   # pmtiles_s3 retired in 0.56.0 (the probed path was pruned)
   if (length(miss <- setdiff(want, names(caps))))
     stop(sprintf("`app$capabilities` is missing: %s", paste(miss, collapse = ", ")),
          call. = FALSE)

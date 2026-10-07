@@ -1,3 +1,11 @@
+# msens 0.56.0
+
+* `app_capabilities()` no longer probes `pmtiles_s3` (`{ver}/native/pmtiles/index.json`, the pre-store PMTiles
+  index): per-model PMTiles are store objects named by `native_asset`, and the path was pruned with the asset
+  store's M6 (2026-10-07). The manifest `app.capabilities` block has four keys (`cell`, `cell_model`, `taxonomy`,
+  `alias`); `app_manifest_block()` requires exactly those, and `inst/schema/app_manifest.schema.json` keeps
+  `pmtiles_s3` as an optional boolean so manifests built before 0.56.0 still validate.
+
 # msens 0.55.1
 
 * Installing msens no longer requires **arrow**: `asset_catalog_write()` / `asset_catalog_read()` call it

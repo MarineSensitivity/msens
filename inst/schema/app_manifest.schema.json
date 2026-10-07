@@ -13,14 +13,14 @@
     "built_at": { "type": "string" },
     "capabilities": {
       "type": "object",
-      "required": ["cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"],
+      "required": ["cell", "cell_model", "taxonomy", "alias"],
       "additionalProperties": { "type": "boolean" },
       "properties": {
         "cell":       { "type": "boolean" },
         "cell_model": { "type": "boolean" },
         "taxonomy":   { "type": "boolean" },
         "alias":      { "type": "boolean" },
-        "pmtiles_s3": { "type": "boolean" }
+        "pmtiles_s3": { "type": "boolean", "description": "retired in msens 0.56.0 (its probed path was pruned 2026-10-07); manifests built before then still carry it as false" }
       }
     },
     "probed": {

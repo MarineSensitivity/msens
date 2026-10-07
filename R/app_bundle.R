@@ -1931,8 +1931,10 @@ app_capabilities <- function(ver, base = atlas_base_url(), sample = list(), time
     cell_model = sprintf("serve/cell_model/tile=%s/data_0.parquet",
                          if (is.null(cell_model_tile)) "0" else cell_model_tile),
     taxonomy   = "app/taxonomy.parquet",
-    alias      = "app/alias/00.json",
-    pmtiles_s3 = "native/pmtiles/index.json")
+    alias      = "app/alias/00.json")
+  # `pmtiles_s3` (HEAD of `{ver}/native/pmtiles/index.json`, the pre-store PMTiles index) was retired in
+  # 0.56.0: per-model PMTiles are store objects named by `native_asset`, and the path it probed was
+  # pruned on 2026-10-07 (M6), so the probe could only ever answer FALSE
   def <- utils::modifyList(def, sample)
   probed <- list(); caps <- list()
   for (nm in names(def)) {

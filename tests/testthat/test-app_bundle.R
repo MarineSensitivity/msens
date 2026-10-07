@@ -658,7 +658,10 @@ test_that("app capabilities are PROBED, never copied from manifest$capabilities"
     p <- app_capabilities("v7", base = BASE, timeout = 2)
     expect_false(any(unlist(p$capabilities)))
     expect_setequal(names(p$capabilities),
-                    c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"))
+                    c("cell", "cell_model", "taxonomy", "alias"))
+    # pmtiles_s3 is gone (0.56.0): its probed path was pruned with the asset store's M6, a probe that
+    # could only answer FALSE is not a capability
+    expect_false("pmtiles_s3" %in% names(p$capabilities))
     # the probed URL and status are kept so a FALSE can be explained
     expect_true(grepl("^https://", p$probed$cell$url))
 
@@ -685,7 +688,7 @@ test_that("cell_tile/cell_model_tile override the never-real tile=0 default", {
   # this test is the URL constructed, not a live 200 (no bucket to hit here)
   expect_false(any(unlist(p1$capabilities)))
   expect_setequal(names(p1$capabilities),
-                  c("cell", "cell_model", "taxonomy", "alias", "pmtiles_s3"))
+                  c("cell", "cell_model", "taxonomy", "alias"))
 
   # `sample=` still overrides a whole relative path directly, taking priority
   # over cell_tile/cell_model_tile for that one capability
@@ -717,8 +720,7 @@ test_that("boot.json tables carry an href, byte size and content digest", {
 # where `methods` went. So the `app` block has to be an argument of manifest_build()
 # itself, not something a second notebook bolts on afterwards.
 
-CAPS <- list(cell = TRUE, cell_model = FALSE, taxonomy = TRUE,
-             alias = TRUE, pmtiles_s3 = FALSE)
+CAPS <- list(cell = TRUE, cell_model = FALSE, taxonomy = TRUE, alias = TRUE)
 
 test_that("a manifest with no `app` argument has NO `app` key at all", {
   for (gen in gens) with_synth(gen, function(con) {
