@@ -1,3 +1,11 @@
+# msens 0.58.0
+
+* New `native_asset_carry_forward()`: a patch release (v7b, v7c) of a v1-v7 parent keeps the parent's models and
+  source datasets, so its `native_asset` pointer table is the parent's published one with only the `model` (gridded
+  COG) rows re-pointed at the patch's own `model_asset`; the `native` originals are carried over untouched. Errors on a
+  model set that differs from the parent's rather than dropping or inventing rows. Used by `backfill_versions.qmd`
+  (`BACKFILL_NATIVE_FROM`) to give v7c the pointer table v7 and v7b have.
+
 # msens 0.57.0
 
 * New `zone_exclude_sql()` (v7c, "v7.2"): SQL selecting the `(mdl_seq, cell_id)` rows of a model-cell

@@ -252,3 +252,22 @@ test_that("source_key: a backfilled PMTiles row carries the feature key of the r
   o2 <- native_asset_backfill(fx_ma, fx_xw, ref2, fx_store, base = B)
   expect_equal(o2$source_key[o2$mdl_key == "20" & o2$representation == "native"], "bl|777-tile")
 })
+
+test_that("native_asset_carry_forward re-points ONLY the model rows at the patch's model_asset, keeps every original, and refuses a different model set", {
+  na <- rbind(ref_row("10", "cog", "model", url = paste0(B, "/cog/usa05/", H16, ".tif")),
+              ref_row("10", "cog", "native", url = paste0(B, "/native/am/", H16b, ".tif")),
+              ref_row("20", "pmtiles", "native", url = paste0(B, "/native/bl/", H16, ".pmtiles"), layer = "bl"),
+              ref_row("20", "cog", "model", url = paste0(B, "/cog/usa05/", H16b, ".tif")))
+  na$content_hash <- c(H16, H16b, H16, H16b); na$source_key <- c(NA, NA, "bl|777", NA)
+  H3 <- "aaaaaaaaaaaaaaaa"
+  ma <- data.frame(mdl_seq = c(20L, 10L), cog_url = c(paste0(B, "/cog/usa05/", H16b, ".tif"), paste0(B, "/cog/usa05/", H3, ".tif")))
+  o <- native_asset_carry_forward(na, ma)
+  expect_identical(names(o), names(na)); expect_equal(nrow(o), 4L)
+  expect_equal(o$asset_url[1], paste0(B, "/cog/usa05/", H3, ".tif"))             # model 10 repainted: new url ...
+  expect_equal(o$content_hash[1], H3)                                            # ... and the hash its store key carries
+  expect_equal(o[2:4, ], na[2:4, ], ignore_attr = TRUE)                          # model 20 unchanged, both originals untouched (incl. source_key)
+  ma$content_hash <- c(H16, H16b)                                                # an explicit hash wins over the one parsed from the URL
+  expect_equal(native_asset_carry_forward(na, ma)$content_hash[1], H16b)
+  expect_error(native_asset_carry_forward(na, rbind(ma, data.frame(mdl_seq = 30L, cog_url = "x", content_hash = H3))), "no `model` row")
+  expect_error(native_asset_carry_forward(na, ma[1, ]), "patch lacks")
+})

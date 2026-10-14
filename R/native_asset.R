@@ -335,3 +335,48 @@ native_asset_restore_model <- function(native_asset, model_urls) {
   rownames(out) <- NULL
   out
 }
+
+#' Carry a patch release's `native_asset` forward from the release it patches
+#'
+#' A patch of a v1-v7 release (v7b, v7c) keeps the SAME models (same `mdl_seq`, same `mdl_key`) and the same
+#' source datasets as its parent; it only repaints a few merged surfaces. Its pointer table is therefore the
+#' parent's published `native_asset` with the `model` (gridded COG) rows re-pointed at the patch's own
+#' `model_asset`: the `native` rows (the original PMTiles / 0.5 degree COG surfaces) are the parent's, untouched.
+#' v1-v7 `native_asset` keys a row by `mdl_key = as.character(mdl_seq)`.
+#'
+#' Refuses (error, never a silent drop or invention) when the two releases are not the same model set: a model
+#' of `model_asset` with no `model` row in `native_prev` (a new model has no reviewed original to reuse), or a
+#' `model` row of `native_prev` whose model the patch no longer has. `content_hash` is the 16-hex hash in the
+#' new URL's store key when `model_asset` carries none.
+#'
+#' @param native_prev the parent release's published `native_asset`
+#' @param model_asset the patch release's `model_asset` (`mdl_seq`, `cog_url`, optional `content_hash`)
+#' @return `native_asset` in `native_prev`'s row and column order, `model` rows re-pointed
+#' @export
+#' @concept app
+native_asset_carry_forward <- function(native_prev, model_asset) {
+  stopifnot(is.data.frame(native_prev), is.data.frame(model_asset),
+            all(c("mdl_key", "representation", "asset_url", "content_hash") %in% names(native_prev)),
+            all(c("mdl_seq", "cog_url") %in% names(model_asset)),
+            !anyDuplicated(model_asset$mdl_seq))
+  is_mod <- native_prev$representation == "model"
+  seq_p  <- as.character(native_prev$mdl_key[is_mod])
+  seq_m  <- as.character(model_asset$mdl_seq)
+  if (anyDuplicated(seq_p)) stop("native_asset_carry_forward(): native_prev has two `model` rows for one model", call. = FALSE)
+  new_m <- setdiff(seq_m, seq_p); gone <- setdiff(seq_p, seq_m)
+  if (length(new_m))
+    stop(sprintf("native_asset_carry_forward(): %d model(s) have no `model` row in native_prev (e.g. mdl_seq %s): not the same model set",
+                 length(new_m), paste(utils::head(new_m, 3), collapse = ", ")), call. = FALSE)
+  if (length(gone))
+    stop(sprintf("native_asset_carry_forward(): %d `model` row(s) of native_prev name a model the patch lacks (e.g. mdl_seq %s)",
+                 length(gone), paste(utils::head(gone, 3), collapse = ", ")), call. = FALSE)
+  i <- match(seq_p, seq_m)
+  url <- as.character(model_asset$cog_url[i])
+  hash <- if ("content_hash" %in% names(model_asset)) as.character(model_asset$content_hash[i]) else rep(NA_character_, length(url))
+  from_key <- sub("^.*/([0-9a-f]{16})\\.[a-z]+$", "\\1", sub("\\?.*$", "", url))
+  hash <- ifelse(is.na(hash), ifelse(grepl("^[0-9a-f]{16}$", from_key), from_key, NA_character_), hash)
+  out <- native_prev
+  out$asset_url[is_mod]    <- url
+  out$content_hash[is_mod] <- hash
+  out
+}
