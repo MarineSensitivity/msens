@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.57.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.58.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -266,10 +266,24 @@
 
         <dt>
 
+          <code><a href="asset_catalog_missing.html">asset_catalog_missing()</a></code>
+
+        </dt>
+        <dd>Store keys a release points at that the catalog does not list</dd>
+
+        <dt>
+
           <code><a href="asset_catalog_read.html">asset_catalog_read()</a></code>
 
         </dt>
         <dd>Read the public catalog</dd>
+
+        <dt>
+
+          <code><a href="asset_catalog_register.html">asset_catalog_register()</a></code>
+
+        </dt>
+        <dd>Catalog every store object a release points at (idempotent)</dd>
 
         <dt>
 
@@ -1920,6 +1934,13 @@
 
         </dt>
         <dd>Backfill a v8-shaped <code>native_asset</code> for a <code>model_asset</code>-only release</dd>
+
+        <dt>
+
+          <code><a href="native_asset_carry_forward.html">native_asset_carry_forward()</a></code>
+
+        </dt>
+        <dd>Carry a patch release's <code>native_asset</code> forward from the release it patches</dd>
 
         <dt>
 
