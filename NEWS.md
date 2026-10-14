@@ -1,3 +1,16 @@
+# msens 0.57.0
+
+* New `zone_exclude_sql()` (v7c, "v7.2"): SQL selecting the `(mdl_seq, cell_id)` rows of a model-cell
+  relation to delete under a **taxon x zone exclusion** backed by an evidence table — sea turtles dropped
+  from the ecoregions where they have never been recorded, the North Atlantic right whale from the Gulf of
+  America. Exclusions are a data frame `(mdl_seq | mdl_key, zone_key)` inlined as a `VALUES` list; a model
+  with no exclusion row is never touched, and cells listed in `ch_src` (critical habitat) are never excluded.
+  Apply as `DELETE FROM model_cell WHERE (mdl_seq, cell_id) IN (<zone_exclude_sql(...)>)`.
+* New `cell_zone_major_sql()`: SQL assigning each cell to its single majority zone of a `zone.fld`
+  (default `ecoregion_key`) by `zone_cell.pct_covered`; a tie goes to the zone key that sorts first, so the
+  assignment is deterministic. A cell straddling two ecoregions is excluded only with its majority zone.
+* `grid_for_ver("v7c")` returns `"usa05"` (v7c is a second patch of public v7).
+
 # msens 0.56.1
 
 * Reading a manifest built before 0.56.0 works again: a retired capability (`pmtiles_s3`) is dropped by

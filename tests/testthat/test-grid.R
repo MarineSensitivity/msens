@@ -13,8 +13,9 @@ test_that("the registry knows both grids and their sizes", {
 })
 
 test_that("each release maps to the grid its cell_id actually indexes", {
-  for (v in c("v1", "v2", "v3", "v4", "v4b", "v5", "v6", "v7", "v7b"))
+  for (v in c("v1", "v2", "v3", "v4", "v4b", "v5", "v6", "v7", "v7b", "v7c"))
     expect_equal(grid_for_ver(v), "usa05", info = v)
+  expect_equal(grid_for_ver("v7c"), "usa05")      # v7.2: a second patch of public v7
   expect_equal(grid_for_ver("v8"), "global05")
   expect_equal(grid_for_ver("v9"), "global05")   # AquaX: same grid, position-mapped
   # never guess: an unregistered version must fail rather than inherit the newest grid
