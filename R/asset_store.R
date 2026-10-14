@@ -510,3 +510,54 @@ store_publish_gate <- function(urls, catalog, ver, listed = NULL, legacy_ok = FA
   }
   invisible(list(n_urls = length(urls), n_keys = length(unique(key)), legacy = legacy))
 }
+
+#' Store keys a release points at that the catalog does not list
+#'
+#' @param catalog the store catalog ([asset_catalog_read()])
+#' @param urls pointer URLs of one release (`model_asset$cog_url`, `score_cog$cog_url`, ...)
+#' @return the distinct store keys named by `urls` and absent from `catalog$key`; an error when a URL is not
+#'   a store object at all (a versioned path or a VM host cannot be catalogued)
+#' @export
+#' @concept cog_store
+asset_catalog_missing <- function(catalog, urls) {
+  asset_catalog_check(catalog)
+  k <- asset_key_from_url(urls)
+  if (anyNA(k))
+    stop(sprintf("asset_catalog_missing(): %d URL(s) are not store objects (e.g. %s)",
+                 sum(is.na(k)), urls[is.na(k)][1]), call. = FALSE)
+  setdiff(unique(k), catalog$key)
+}
+
+#' Catalog every store object a release points at (idempotent)
+#'
+#' A release that lands must catalog what it published: a pointer at an object the catalog lacks fails
+#' [store_publish_gate()] and leaves the object invisible to `verify_asset_store.R` and the garbage collector.
+#' Finds the keys of `urls` missing from `catalog` ([asset_catalog_missing()]), asks `fetch` for a local copy of
+#' each (bytes and md5 come from the file), builds their rows with [asset_catalog_rows()] and appends them with
+#' [asset_catalog_add()]. A second call finds nothing missing and returns `catalog` unchanged.
+#'
+#' `payload_hash` / `enc` are what the key was made from. [asset_catalog_check()] verifies that
+#' `content_hash_encoded(payload_hash, enc)` is the key's hash, so a wrong encoding tag stops here; give
+#' `NA` for both when the payload is unknown (the legacy convention of the existing `usa05` rows).
+#'
+#' @param catalog the current catalog
+#' @param urls pointer URLs of the release
+#' @param payload_hash payload hash of each URL's object (`NA` when unknown), length of `urls`
+#' @param enc encoding tag of each URL's object (`NA` when unknown), length of `urls`
+#' @param first_ver the release registering the objects
+#' @param fetch `function(keys)` returning one local file path per key
+#' @return the catalog with the new rows; the keys added are in `attr(, "added")`
+#' @export
+#' @concept cog_store
+asset_catalog_register <- function(catalog, urls, payload_hash, enc, first_ver, fetch) {
+  stopifnot(length(payload_hash) == length(urls), length(enc) == length(urls),
+            length(first_ver) == 1L, is.function(fetch))
+  miss <- asset_catalog_missing(catalog, urls)
+  if (!length(miss)) { attr(catalog, "added") <- character(); return(catalog) }
+  k <- asset_key_from_url(urls)
+  i <- match(miss, k)
+  files <- fetch(miss)
+  stopifnot("fetch() must return one file per key" = length(files) == length(miss))
+  rows <- asset_catalog_rows(miss, as.character(payload_hash[i]), as.character(enc[i]), files, first_ver = first_ver)
+  asset_catalog_add(catalog, rows)
+}

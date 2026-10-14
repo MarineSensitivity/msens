@@ -5,6 +5,12 @@
   COG) rows re-pointed at the patch's own `model_asset`; the `native` originals are carried over untouched. Errors on a
   model set that differs from the parent's rather than dropping or inventing rows. Used by `backfill_versions.qmd`
   (`BACKFILL_NATIVE_FROM`) to give v7c the pointer table v7 and v7b have.
+* New `asset_catalog_missing()` and `asset_catalog_register()`: a release that lands catalogs what it
+  published. Given a release's pointer URLs (`model_asset`, `score_cog`), `asset_catalog_register()` finds the
+  store keys the catalog lacks, builds their rows from the objects' files (bytes, md5, `first_ver` = the
+  release; the payload hash and encoding tag are verified against the key) and appends them; a second call finds
+  nothing missing. `backfill_versions.qmd` and `publish_score_cogs.qmd` call it after uploading COGs, so a
+  patch release's repainted `usa05` COGs no longer sit in the bucket uncatalogued.
 
 # msens 0.57.0
 

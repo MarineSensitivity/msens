@@ -271,3 +271,35 @@ test_that("native_asset_carry_forward re-points ONLY the model rows at the patch
   expect_error(native_asset_carry_forward(na, rbind(ma, data.frame(mdl_seq = 30L, cog_url = "x", content_hash = H3))), "no `model` row")
   expect_error(native_asset_carry_forward(na, ma[1, ]), "patch lacks")
 })
+
+# asset_catalog_missing() / asset_catalog_register(): a release that lands catalogs what it points at ----
+test_that("asset_catalog_register catalogs exactly the missing usa05 COGs, from the files, keeps first_ver, and is idempotent", {
+  mk <- function(payload, enc = "int1u-nd0-noovr") content_hash_encoded(payload, enc)
+  p1 <- "0123456789abcdef"; p2 <- "fedcba9876543210"; p3 <- "aaaaaaaaaaaaaaaa"
+  k1 <- mk(p1); k2 <- mk(p2); k3 <- mk(p3, "flt4s-nd9999-noovr")
+  u <- function(k) paste0(B, "/cog/usa05/", k, ".tif")
+  d <- tempfile(); dir.create(d)
+  writeBin(as.raw(1:10), file.path(d, paste0(k2, ".tif"))); writeBin(as.raw(1:30), file.path(d, paste0(k3, ".tif")))
+  old <- asset_catalog_rows(paste0("cog/usa05/", k1, ".tif"), p1, "int1u-nd0-noovr",
+                            { f <- file.path(d, paste0(k1, ".tif")); writeBin(as.raw(1:5), f); f }, first_ver = "v7")
+  urls <- c(u(k1), u(k2), u(k3), u(k2))                                  # one catalogued, two missing, one repeated
+  pay <- c(p1, p2, p3, p2); enc <- c("int1u-nd0-noovr", "int1u-nd0-noovr", "flt4s-nd9999-noovr", "int1u-nd0-noovr")
+  expect_setequal(asset_catalog_missing(old, urls), paste0("cog/usa05/", c(k2, k3), ".tif"))
+  asked <- NULL
+  fetch <- function(keys) { asked <<- keys; file.path(d, basename(keys)) }
+  o <- asset_catalog_register(old, urls, pay, enc, "v7c", fetch)
+  expect_setequal(asked, paste0("cog/usa05/", c(k2, k3), ".tif"))         # k1 was already catalogued: never fetched
+  expect_equal(nrow(o), 3L)
+  n <- o[o$key == paste0("cog/usa05/", k3, ".tif"), ]
+  expect_equal(c(n$store, n$grid_id, n$asset_type, n$first_ver, n$enc, n$content_hash), c("cog", "usa05", "cog", "v7c", "flt4s-nd9999-noovr", p3))
+  expect_equal(n$bytes, 30)                                               # from the file
+  expect_equal(o$first_ver[o$key == paste0("cog/usa05/", k1, ".tif")], "v7")   # an existing row is untouched
+  again <- asset_catalog_register(o, urls, pay, enc, "v7c", function(keys) stop("must not fetch"))
+  expect_equal(nrow(again), 3L); expect_length(attr(again, "added"), 0L)  # idempotent: a second run finds 0 missing
+  expect_length(asset_catalog_missing(o, urls), 0L)
+  # unknown payload (legacy convention): NA hash / enc are accepted
+  expect_equal(nrow(asset_catalog_register(old, u(k2), NA_character_, NA_character_, "v7c", fetch)), 2L)
+  # a wrong encoding tag, or a URL that is not a store object, stops here
+  expect_error(asset_catalog_register(old, u(k2), p2, "flt4s-nd9999-noovr", "v7c", fetch), "content_hash_encoded")
+  expect_error(asset_catalog_missing(old, "https://x.invalid/v7/native/am/x.tif"), "not store objects")
+})
