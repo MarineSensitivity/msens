@@ -211,3 +211,120 @@ cells_from_aligned_raster <- function(x, cellid_tif, band = 1, scale = 1, min_va
   idx <- which(!is.na(v) & v >= min_value & !is.na(ids))
   tibble::tibble(cell_id = as.integer(ids[idx]), val = round(v[idx], digits))
 }
+
+#' Exact overlap of polygons with the cells of a grid, in km²
+#'
+#' The weights of an area-weighted regrid: for every polygon of `x` and every grid cell it
+#' overlaps, the area (km²) of their intersection. Built from `exactextractr` coverage
+#' fractions (exact, sub-cell) times each cell's area on the WGS84 ellipsoid
+#' (`terra::cellSize()`, latitude-dependent), over a window of the cell-id raster cropped to
+#' `x` on the grid's OWN cell edges (`snap = "out"`), so the cell ids are the grid's.
+#'
+#' The table depends on geometry only, so one call serves every layer that shares it (the
+#' 13 SWFSC CCE species carry identical 0.1° cells); pass it to [cells_area_mean()] once per
+#' layer. Coverage is planar within a cell (a 0.05° cell's area varies by < 0.01 % across its
+#' height), so `area_km2` is exact to that order.
+#'
+#' @param x an `sf`/`sfc` of (multi)polygons in the grid's CRS (EPSG:4326)
+#' @param cellid_tif path to the grid's cell-id COG (pixel value = `cell_id`)
+#' @return a tibble `(poly_i integer, cell_id integer, area_km2 double, cell_km2 double)`, one
+#'   row per (polygon, cell) with positive overlap: `poly_i` is the row of `x`, `area_km2` the
+#'   overlap area and `cell_km2` the whole cell's area. Cells whose id is `NA` are dropped.
+#' @seealso [cells_area_mean()]
+#' @examples
+#' \dontrun{
+#' w <- poly_cell_overlap(ply_cells, cellid_tif)                  # once per geometry
+#' d <- cells_area_mean(w, sf::st_drop_geometry(ply_cells)[c("DENSITY", "UNCERTAINTY")])
+#' }
+#' @export
+#' @concept ingest
+#' @importFrom terra rast crop ext cellSize
+#' @importFrom sf st_as_sf st_bbox
+#' @importFrom tibble tibble
+poly_cell_overlap <- function(x, cellid_tif) {
+  stopifnot(file.exists(cellid_tif))
+  if (!requireNamespace("exactextractr", quietly = TRUE))
+    stop("poly_cell_overlap() needs the exactextractr package", call. = FALSE)
+  empty <- tibble::tibble(poly_i = integer(), cell_id = integer(),
+                          area_km2 = double(), cell_km2 = double())
+  x <- sf::st_as_sf(x)
+  if (!nrow(x)) return(empty)
+
+  # window of the cell-id raster on the grid's own edges, plus each cell's ellipsoidal area
+  bb   <- sf::st_bbox(x)
+  r_id <- terra::crop(
+    terra::rast(cellid_tif),
+    terra::ext(bb[["xmin"]], bb[["xmax"]], bb[["ymin"]], bb[["ymax"]]), snap = "out")
+  r_a  <- terra::cellSize(r_id, mask = FALSE, unit = "km")
+  s    <- c(r_id, r_a); names(s) <- c("cell_id", "cell_km2")
+
+  # per polygon: the cells it touches with their exact covered fraction
+  d <- exactextractr::exact_extract(s, x, progress = FALSE)
+  n <- vapply(d, nrow, integer(1))
+  d <- do.call(rbind, d)
+  if (is.null(d) || !nrow(d)) return(empty)
+  d$poly_i <- rep(seq_along(n), n)
+  d <- d[!is.na(d$cell_id) & d$coverage_fraction > 0, , drop = FALSE]
+  tibble::tibble(
+    poly_i   = as.integer(d$poly_i),
+    cell_id  = as.integer(d$cell_id),
+    area_km2 = d$coverage_fraction * d$cell_km2,
+    cell_km2 = d$cell_km2)
+}
+
+#' Area-weighted mean of polygon attributes per grid cell
+#'
+#' Regrids polygon attributes onto grid cells by overlap area, using the table from
+#' [poly_cell_overlap()]. For each attribute `v` and cell `c`:
+#' \deqn{v_c = \sum_p v_p A(p \cap c) / \sum_p A(p \cap c)}
+#' over the polygons `p` overlapping `c`; a polygon whose `v` is `NA` drops out of that
+#' attribute's weights only. Also returns the covered area of each cell,
+#' `area_km2` \eqn{= \sum_p A(p \cap c)}, and its covered fraction `frac = area_km2 / cell area`.
+#'
+#' For an intensive quantity such as a density (animals km^-2) the mean conserves the total:
+#' `sum(v * area_km2)` over cells equals `sum(v_p * A_p)` over polygons, which is how an
+#' ingest checks a regridded abundance against the source. Weighting a CV the same way is
+#' only an approximation (CVs of overlapping parts do not average linearly).
+#'
+#' @param overlap tibble from [poly_cell_overlap()] (`poly_i`, `cell_id`, `area_km2`, `cell_km2`)
+#' @param values data frame of numeric attributes, one row per polygon of the `x` given to
+#'   [poly_cell_overlap()] (row `i` is `poly_i == i`)
+#' @return a tibble `(cell_id, <one column per attribute of values>, area_km2, frac)` sorted by
+#'   `cell_id`; an attribute is `NA` in a cell where every overlapping polygon has it `NA`
+#' @seealso [poly_cell_overlap()]
+#' @export
+#' @concept ingest
+#' @importFrom tibble tibble
+cells_area_mean <- function(overlap, values) {
+  values <- as.data.frame(values)
+  stopifnot(
+    all(c("poly_i", "cell_id", "area_km2", "cell_km2") %in% names(overlap)),
+    ncol(values) > 0,
+    all(vapply(values, is.numeric, logical(1))),
+    !any(c("cell_id", "area_km2", "frac") %in% names(values)),
+    nrow(overlap) == 0 || max(overlap$poly_i) <= nrow(values))
+
+  if (!nrow(overlap)) {
+    out <- tibble::tibble(cell_id = integer())
+    for (k in names(values)) out[[k]] <- double()
+    out$area_km2 <- double(); out$frac <- double()
+    return(out)
+  }
+
+  ids    <- sort(unique(overlap$cell_id))
+  gi     <- match(overlap$cell_id, ids)                       # group index 1..k, in id order
+  sum_by <- function(v) as.vector(rowsum(v, gi, reorder = TRUE))
+  a      <- overlap$area_km2
+
+  out <- tibble::tibble(cell_id = as.integer(ids))
+  for (k in names(values)) {
+    v   <- values[[k]][overlap$poly_i]
+    ok  <- !is.na(v)
+    den <- sum_by(ifelse(ok, a, 0))
+    num <- sum_by(ifelse(ok, v * a, 0))
+    out[[k]] <- ifelse(den > 0, num / den, NA_real_)
+  }
+  out$area_km2 <- sum_by(a)
+  out$frac     <- out$area_km2 / overlap$cell_km2[match(ids, overlap$cell_id)]
+  out
+}

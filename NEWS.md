@@ -1,3 +1,14 @@
+# msens 0.59.0
+
+* New `poly_cell_overlap()` and `cells_area_mean()`: an area-weighted regrid of polygon attributes onto the
+  cell grid. `poly_cell_overlap(x, cellid_tif)` returns, per (polygon, cell), the exact overlap area in km²
+  (`exactextractr` coverage fraction x the cell's WGS84 ellipsoidal area from `terra::cellSize()`, on a window of
+  the cell-id raster snapped to the grid's own edges); `cells_area_mean(overlap, values)` turns it into the
+  overlap-area-weighted mean of each attribute per cell (a polygon's `NA` drops out of that attribute only), plus
+  the covered `area_km2` and `frac` of each cell. A density regridded this way conserves abundance
+  (`sum(density * area_km2)` over cells equals the source total). Used by `workflows/ingest_swfsc_cce.qmd` for the
+  SWFSC California Current cetacean densities (0.1° cells -> 0.05° grid).
+
 # msens 0.58.0
 
 * New `native_asset_carry_forward()`: a patch release (v7b, v7c) of a v1-v7 parent keeps the parent's models and
