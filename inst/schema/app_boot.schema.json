@@ -93,6 +93,7 @@
           "metric_key":   { "type": "string" },
           "label":        { "type": "string" },
           "category":     { "type": "string" },
+          "scope":        { "type": ["string", "null"], "enum": ["ecoregion", "nation", null] },
           "order":        { "type": "integer" },
           "colormap":     { "type": ["string", "null"] },
           "by_subregion": {

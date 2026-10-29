@@ -1,3 +1,14 @@
+# msens 0.60.2
+
+* App bundle (`app_bundle_build()`): the v10 "across the nation" headline family is classified for the Atlas
+  picker -- `score_v10_equalweights_global` is a `composite`, `extrisk_{cat}_v10_global` and `primprod_v10`
+  are `component`s (they were all `raw`, so the Atlas showed no national components and no flower); every
+  `boot.json` layer carries a new `scope` (`"ecoregion"` for the v1-v9 rescaled family, `"nation"` for
+  the v10 headline, `null` otherwise) so the app can offer the two scoring modes side by side. The other
+  denominators (`_usa`, `_pooled`, `_global_strip`), `score_v10_n_components_*` and the companions
+  (`_share_`, `_pct_world`, `_coverage`, `_n_species`) stay `raw`. `inst/schema/app_boot.schema.json`
+  admits `scope`.
+
 # msens 0.60.1
 
 * `.metric_short_label()` labels the v10 across-the-nation metric keys (`extrisk_{cat}_v10_{denom}`,
