@@ -449,3 +449,58 @@ test_that("TURTLE_SUIT=ogm: our og model supersedes am (and ax) for a turtle ins
   d <- d[order(d$cell_id), ]
   expect_equal(d$val, c(80, 20, 30))                    # og at 1-2, the surviving am at 3
 })
+
+# v11 Q6: density replaces suitability INSIDE each species' own survey domain (supersede_sql(by_taxon = TRUE)),
+# the domain is admitted to the footprint, and the taxon merges through dps_sql with a constant per-cell ER
+# (er_mode = 'cell') so the survey shows for an Endangered species too (max(er 100, suit) would hide it).
+
+test_that("supersede_sql(by_taxon = TRUE): a per-taxon mask drops am only inside THAT taxon's domain", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mc <- data.frame(
+    ms_merge_key = c(rep("T_shelf", 4), rep("T_ocean", 4), rep("T_nodens", 2)),
+    ds_key  = c("am", "am", "gm", "gm",   "am", "am", "gm", "gm",   "am", "am"),
+    cell_id = c(1L, 2L, 1L, 3L,          1L, 2L, 2L, 3L,           1L, 2L),
+    val     = c(50, 40, 90, 10,          50, 40, 70, 30,           50, 40), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  # the domains differ per taxon: shelf model covers cells 1,3; oceanic covers 2,3; T_nodens has none
+  DBI::dbWriteTable(con, "dens_dom", data.frame(ms_merge_key = c("T_shelf", "T_shelf", "T_ocean", "T_ocean"),
+                                                cell_id = c(1L, 3L, 2L, 3L)))
+  DBI::dbWriteTable(con, "dens_taxa", data.frame(ms_merge_key = c("T_shelf", "T_ocean")))
+  kept <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql("am", "dens_taxa", "dens_dom", "mc", by_taxon = TRUE)))
+  kept$mdl_key <- kept$ms_merge_key   # key_set() reads mdl_key (the merged output's name)
+  # T_shelf: am at cell 1 gone (inside its domain), am at 2 kept (outside its domain, though inside T_ocean's)
+  expect_equal(key_set(kept[kept$ds_key == "am", ], "T_shelf"), "2:40")
+  # T_ocean: am at cell 2 gone, am at 1 kept
+  expect_equal(key_set(kept[kept$ds_key == "am", ], "T_ocean"), "1:50")
+  # a taxon with no density keeps everything; density rows are never touched
+  expect_equal(key_set(kept, "T_nodens"), c("1:50", "2:40"))
+  expect_equal(sum(kept$ds_key == "gm"), 4L)
+  # the one-mask-for-all form would have dropped T_shelf's am at cell 2 as well (cell 2 is in SOME domain)
+  DBI::dbExecute(con, "CREATE TABLE dens_any AS SELECT DISTINCT cell_id FROM dens_dom")
+  kept_global <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql("am", "dens_taxa", "dens_any", "mc")))
+  expect_equal(nrow(kept_global[kept_global$ds_key == "am" & kept_global$ms_merge_key == "T_shelf", ]), 0L)
+})
+
+test_that("density + ER: through dps_sql the survey value shows under a constant per-cell ER, inside and outside the domain", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # an Endangered whale (er 100): range cells 1-4 at the ER; am at 1,2,3; survey (gm) domain = cells 2,3,4 with
+  # density-suitability 80, 5, 0 (0 = surveyed, none seen); cell 4 is in the domain but outside the am
+  mc <- data.frame(
+    ms_merge_key = "T_whale",
+    ds_key  = c("er_range", "er_range", "er_range", "er_range", "am", "am", "am", "gm", "gm", "gm"),
+    cell_id = c(1L, 2L, 3L, 4L,                                  1L, 2L, 3L,   2L, 3L, 4L),
+    val     = c(100, 100, 100, 100,                              60, 70, 50,   80, 5, 0), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  DBI::dbWriteTable(con, "dens_dom",  data.frame(ms_merge_key = "T_whale", cell_id = c(2L, 3L, 4L)))
+  DBI::dbWriteTable(con, "dens_taxa", data.frame(ms_merge_key = "T_whale"))
+  DBI::dbExecute(con, paste("CREATE TABLE dps_src AS SELECT * FROM mc WHERE",
+                            supersede_sql("am", "dens_taxa", "dens_dom", "mc", by_taxon = TRUE)))
+  res <- DBI::dbGetQuery(con, dps_sql("er_range", c("am", "gm"), src = "dps_src"))
+  # cell 1: outside the domain -> am 60; cells 2,3,4: the survey (80, 5, 0), am replaced; ER = 100 beside every cell
+  expect_equal(key_set(res, "T_whale"), c("1:60", "2:80", "3:5", "4:0"))
+  expect_equal(unique(res$er), 100)
+  # the old max(er, suit) rule would have painted the whale a flat 100 and hidden the survey entirely
+  flat <- DBI::dbGetQuery(con, "SELECT cell_id, max(val) val FROM dps_src GROUP BY 1 ORDER BY 1")
+  expect_equal(unique(flat$val), 100)
+})

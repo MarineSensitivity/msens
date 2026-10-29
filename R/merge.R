@@ -128,19 +128,32 @@ merge_sql <- function(suit_ds = "am") {
 #' @param taxa relation holding `ms_merge_key` of the taxa to supersede (default `"supersede"`)
 #' @param mask relation holding the `cell_id`s of the superseding dataset's extent (default `"ax_mask"`)
 #' @param src alias of the relation being filtered, with `ds_key`, `ms_merge_key`, `cell_id`
+#' @param by_taxon logical; `FALSE` (default) = one mask for every superseded taxon (AquaX: one US
+#'   footprint; `mask` holds `cell_id`); `TRUE` = the mask is PER TAXON (`mask` holds `ms_merge_key,
+#'   cell_id`) and a row is dropped only inside ITS taxon's cells -- a density survey domain (v11 Q6:
+#'   a Gulf shelf model and an oceanic model cover different cells, Kogia's months differ), the og
+#'   turtle footprints. With `by_taxon = TRUE` the `taxa` relation is still consulted, so a taxon
+#'   with a domain but no supersession keeps its rows.
 #' @return a SQL predicate (no leading `WHERE`) that is TRUE for rows to KEEP
 #' @concept merge
 #' @export
 #' @examples
 #' supersede_sql()
+#' supersede_sql("am", taxa = "dens_taxa", mask = "dens_dom", by_taxon = TRUE)
 #' \dontrun{ DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql(src = "mc"))) }
-supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask", src = "mc") {
-  stopifnot(is.character(superseded), length(superseded) == 1, nzchar(superseded))
+supersede_sql <- function(superseded = "am", taxa = "supersede", mask = "ax_mask", src = "mc",
+                          by_taxon = FALSE) {
+  stopifnot(is.character(superseded), length(superseded) == 1, nzchar(superseded),
+            is.logical(by_taxon), length(by_taxon) == 1, !is.na(by_taxon))
+  cell_pred <- if (by_taxon)
+    sprintf("(%s.ms_merge_key, %s.cell_id) IN (SELECT ms_merge_key, cell_id FROM %s)", src, src, mask)
+  else
+    sprintf("%s.cell_id IN (SELECT cell_id FROM %s)", src, mask)
   sprintf(paste(
     "NOT (%s.ds_key = '%s'",
     "AND %s.ms_merge_key IN (SELECT ms_merge_key FROM %s)",
-    "AND %s.cell_id IN (SELECT cell_id FROM %s))"),
-    src, superseded, src, taxa, src, mask)
+    "AND %s)"),
+    src, superseded, src, taxa, cell_pred)
 }
 
 #' Spatial-ER (turtle) multiplicative merge rule

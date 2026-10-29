@@ -1,3 +1,12 @@
+# msens 0.63.1
+
+* `supersede_sql(by_taxon = TRUE)`: the mask can be PER TAXON (`ms_merge_key, cell_id`), so a dataset
+  supersedes another only inside each species' own footprint -- a density survey domain (v11 Q6: a Gulf
+  shelf model and an oceanic model cover different cells), the og turtle footprints. Default unchanged
+  (one `cell_id` mask for every superseded taxon, AquaX). `test-merge.R`: a per-taxon replace fixture
+  (the one-mask form over-drops, asserted) and a density + ER fixture through `dps_sql()` (an Endangered
+  whale's survey shows beside a constant per-cell ER; `max(er, suit)` would paint it a flat 100).
+
 # msens 0.63.0
 
 * `occurrence_rule(baseline = c("zones", "range"))`: what a zone's record rate is judged against. The new

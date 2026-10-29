@@ -8,7 +8,8 @@ supersede_sql(
   superseded = "am",
   taxa = "supersede",
   mask = "ax_mask",
-  src = "mc"
+  src = "mc",
+  by_taxon = FALSE
 )
 }
 \arguments{
@@ -19,6 +20,12 @@ supersede_sql(
 \item{mask}{relation holding the \code{cell_id}s of the superseding dataset's extent (default \code{"ax_mask"})}
 
 \item{src}{alias of the relation being filtered, with \code{ds_key}, \code{ms_merge_key}, \code{cell_id}}
+
+\item{by_taxon}{logical; \code{FALSE} (default) = one mask for every superseded taxon (AquaX: one US
+footprint; \code{mask} holds \code{cell_id}); \code{TRUE} = the mask is PER TAXON (\code{mask} holds \verb{ms_merge_key, cell_id}) and a row is dropped only inside ITS taxon's cells -- a density survey domain (v11 Q6:
+a Gulf shelf model and an oceanic model cover different cells, Kogia's months differ), the og
+turtle footprints. With \code{by_taxon = TRUE} the \code{taxa} relation is still consulted, so a taxon
+with a domain but no supersession keeps its rows.}
 }
 \value{
 a SQL predicate (no leading \code{WHERE}) that is TRUE for rows to KEEP
@@ -45,6 +52,7 @@ AquaX run that predicted \emph{no} US presence also supersede? (v9: no, \code{AX
 }
 \examples{
 supersede_sql()
+supersede_sql("am", taxa = "dens_taxa", mask = "dens_dom", by_taxon = TRUE)
 \dontrun{ DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql(src = "mc"))) }
 }
 \concept{merge}
