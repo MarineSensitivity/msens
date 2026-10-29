@@ -1,3 +1,7 @@
+# msens 0.60.2
+
+* `grid_for_ver("v11")` is registered on `global05` (v11, the robust national release, bootstraps from v10).
+
 # msens 0.60.1
 
 * `.metric_short_label()` labels the v10 across-the-nation metric keys (`extrisk_{cat}_v10_{denom}`,
