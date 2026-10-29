@@ -1,3 +1,14 @@
+# msens 0.61.0
+
+* New `vgpm_annual_integrate(monthly, year)` (+ `vgpm_days_in_months()`): the v11 primary-productivity rule.
+  Twelve monthly VGPM mean daily rates become one annual mean daily rate by the day-weighted integral over
+  the whole year, a month without a retrieval (polar night, ice) contributing ZERO rather than being
+  averaged away; a cell never observed stays `NA`; leap years use 366; `n_valid` counts the observed
+  months. Replaces the `mean(na.rm = TRUE)` of observed months that made a Bering/Arctic "year" the mean
+  of its bloom months (Hope Basin 875 vs ~470 g C m-2 yr-1 in situ; Mike Rasser's v1 review C76). Used by
+  `workflows/ingest_productivity.qmd` under `VGPM_INTEGRATED=1`. `test-productivity.R`: twelve months =
+  the day-weighted mean, six of twelve = 100 x days/365 (the regression), land stays NA, leap year.
+
 # msens 0.60.2
 
 * `grid_for_ver("v11")` is registered on `global05` (v11, the robust national release, bootstraps from v10).
