@@ -887,12 +887,39 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 #'   long-label helper `.metric_label()` already uses)
 #' @keywords internal
 .metric_short_label <- function(key) {
+  # the v10 "across the nation" family (workflows/score_share_metrics.qmd): the denominator
+  # suffix names which total each species' share is a share of
+  DENOM <- c(global = "global range", usa = "US range", pooled = "pooled",
+             global_strip = "global range, floor stripped", global_keep = "global range, floor kept")
+  denom_lab <- function(d) if (is.na(d) || !nzchar(d)) "" else paste0(" (", if (d %in% names(DENOM)) DENOM[[d]] else d, ")")
+  cat_lab <- function(sp) {
+    lab <- unname(.SP_CAT_LABEL[sp])
+    if (is.na(lab)) lab <- sub("_", " ", paste0(toupper(substring(sp, 1, 1)), substring(sp, 2)))
+    lab
+  }
   vapply(key, function(k) {
     if (is.na(k)) return(NA_character_)
+    m <- regmatches(k, regexec("^score_v10_(equalweights|n_components)_([a-z_]+)$", k))[[1]]
+    if (length(m) == 3)
+      return(if (m[2] == "equalweights") paste0("Overall score, across the nation", denom_lab(m[3]))
+             else paste0("Components in the overall score", denom_lab(m[3])))
     if (grepl("^score_", k)) return("Overall score")
     if (identical(k, "primprod")) return("Primary productivity")
     if (identical(k, "primprod_ecoregion_rescaled"))
       return("Primary productivity (ecoregion-rescaled)")
+    if (identical(k, "primprod_v10")) return("Primary productivity, across the nation")
+    if (identical(k, "primprod_coverage")) return("Primary productivity: coverage")
+    m <- regmatches(k, regexec("^extrisk_([a-z_]+?)_(v10|share|pct_nation|mean_share)_([a-z_]+)$", k))[[1]]
+    if (length(m) == 4) {
+      what <- c(v10 = "across the nation", share = "share of range", pct_nation = "percent of the nation",
+                mean_share = "mean share per species")[[m[3]]]
+      return(paste0(cat_lab(m[2]), ": ", what, denom_lab(m[4])))
+    }
+    m <- regmatches(k, regexec("^extrisk_([a-z_]+?)_(pct_world|coverage|n_species)$", k))[[1]]
+    if (length(m) == 3) {
+      what <- c(pct_world = "percent of the world", coverage = "coverage", n_species = "species present")[[m[3]]]
+      return(paste0(cat_lab(m[2]), ": ", what))
+    }
     m <- regmatches(k, regexec("^extrisk_([a-z_]+?)(_ecoregion_rescaled)?$", k))[[1]]
     if (length(m) == 3 && nzchar(m[2])) {
       lab <- unname(.SP_CAT_LABEL[m[2]])
