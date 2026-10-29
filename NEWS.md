@@ -1,3 +1,8 @@
+# msens 0.59.1
+
+* `grid_for_ver("v10")` is registered on `global05`: v10 (the distribution-share score) is bootstrapped from the v8
+  build on the same grid (`workflows/bootstrap_version.qmd`, `BOOTSTRAP_CLONE_MERGE=1`).
+
 # msens 0.59.0
 
 * New `poly_cell_overlap()` and `cells_area_mean()`: an area-weighted regrid of polygon attributes onto the
