@@ -1,3 +1,13 @@
+# msens 0.65.0
+
+* `zone_weight_sql()` and `zone_adjust_sql()` (v11 Q2, D11 "gate + weight"): the weight sibling of
+  `zone_exclude_sql()` resolves `(model, zone, w)` to `(model, cell, w)` by the cell's majority zone with
+  critical habitat carved out, and the adjuster wraps a merged surface so `val` is multiplied by the
+  weight (1 where none) and gated rows (`w = 0`) drop; an empty relation is the identity (asserted),
+  and `er` passes through untouched. `cell_zone_major_sql(zone = NULL)` reads the flat shared
+  `zone_cell.parquet` (`zone_key, cell_id, pct_covered`) the v8+ merge has. `merge_models.qmd` applies
+  both behind `OCC_RULE=1` / `REGION_WEIGHT=1`.
+
 # msens 0.64.1
 
 * `occurrence_exclusions(gate = c("zero", "all"))`: by default only a zone with NO record under adequate

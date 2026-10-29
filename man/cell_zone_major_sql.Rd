@@ -15,7 +15,8 @@ cell_zone_major_sql(
 
 \item{zone_cell}{character; name of the zone-cell relation, default \code{"zone_cell"}.}
 
-\item{zone}{character; name of the zone relation, default \code{"zone"}.}
+\item{zone}{character; name of the zone relation, default \code{"zone"}; \code{NULL} when \code{zone_cell} is the
+FLAT shared extraction (\code{zones/{zone_set}/{grid}/zone_cell.parquet}: \verb{zone_key, cell_id, pct_covered}, no \code{zone_seq}), which the v8+ merge reads directly.}
 }
 \value{
 SQL string selecting \verb{(cell_id, zone_key)}, one row per cell, ordered by \code{cell_id}.
