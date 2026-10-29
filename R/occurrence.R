@@ -193,10 +193,21 @@ occurrence_rule <- function(
 #' @return a data frame `(mdl_key, zone_key)` of the dropped (model, zone) pairs, the shape
 #'   [zone_exclude_sql()] takes (`id_col = "mdl_key"`); zero rows when nothing is dropped.
 #' @concept range
+#' @param gate which dropped rows become exclusions: `"zero"` (default; D11 "gate where zero records"):
+#'   only zones with NO record under adequate effort -- the v7c anchors (four turtles x East Bering
+#'   Sea) and the 3,817 zero-record pairs of the v11 run; a zone whose species IS recorded but well
+#'   below its rate elsewhere (1,904 pairs incl. bowhead x Bering Sea at 23 of 458 blocks, beluga x
+#'   Bering Sea at 51 of 604 -- seasonal / coastal stocks the block rate cannot tell from absence) is
+#'   NOT excluded but downweighted by [encounter_weight()]; `"all"`: every dropped row (the rule as
+#'   first written).
 #' @export
-occurrence_exclusions <- function(d) {
-  stopifnot(is.data.frame(d), all(c("mdl_key", "zone_key", "verdict") %in% names(d)))
-  x <- d[d$verdict == "dropped", c("mdl_key", "zone_key"), drop = FALSE]
+occurrence_exclusions <- function(d, gate = c("zero", "all")) {
+  gate <- match.arg(gate)
+  stopifnot(is.data.frame(d), all(c("mdl_key", "zone_key", "verdict") %in% names(d)),
+            gate == "all" || "n_occupied" %in% names(d))
+  keep <- d$verdict == "dropped"
+  if (gate == "zero") keep <- keep & d$n_occupied == 0
+  x <- d[keep, c("mdl_key", "zone_key"), drop = FALSE]
   rownames(x) <- NULL
   x
 }

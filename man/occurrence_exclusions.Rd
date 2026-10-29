@@ -4,10 +4,18 @@
 \alias{occurrence_exclusions}
 \title{The exclusion rows the occurrence rule hands to the merge}
 \usage{
-occurrence_exclusions(d)
+occurrence_exclusions(d, gate = c("zero", "all"))
 }
 \arguments{
 \item{d}{the result of \code{\link[=occurrence_rule]{occurrence_rule()}}.}
+
+\item{gate}{which dropped rows become exclusions: \code{"zero"} (default; D11 "gate where zero records"):
+only zones with NO record under adequate effort -- the v7c anchors (four turtles x East Bering
+Sea) and the 3,817 zero-record pairs of the v11 run; a zone whose species IS recorded but well
+below its rate elsewhere (1,904 pairs incl. bowhead x Bering Sea at 23 of 458 blocks, beluga x
+Bering Sea at 51 of 604 -- seasonal / coastal stocks the block rate cannot tell from absence) is
+NOT excluded but downweighted by \code{\link[=encounter_weight]{encounter_weight()}}; \code{"all"}: every dropped row (the rule as
+first written).}
 }
 \value{
 a data frame \verb{(mdl_key, zone_key)} of the dropped (model, zone) pairs, the shape

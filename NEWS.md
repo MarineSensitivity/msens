@@ -1,3 +1,12 @@
+# msens 0.64.1
+
+* `occurrence_exclusions(gate = c("zero", "all"))`: by default only a zone with NO record under adequate
+  effort becomes an exclusion (D11 "gate where zero records"); a zone whose species is recorded but at a
+  rate well below its rate elsewhere stays and is downweighted by `encounter_weight()` instead. The v11
+  run at the D10 defaults dropped 5,721 species x ecoregion pairs, 1,904 of them with records -- bowhead
+  x Bering Sea (23 of 458 blocks), beluga x Bering Sea (51 of 604), sperm whale x Bering Sea, common eider
+  x Bering Sea: seasonal or coastal stocks whose 0.5-degree block rate the test cannot tell from absence.
+
 # msens 0.64.0
 
 * New `encounter_weight()` (v11 Q3b, D11 "gate + weight"): per species x zone, `w = min(1, rate / p_core)`

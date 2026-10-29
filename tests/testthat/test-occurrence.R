@@ -193,3 +193,15 @@ test_that("baseline: a wide, sparsely recorded range abroad cannot drop a zone u
   # the default is the zones baseline
   d_def <- run(con); expect_equal(unique(d_def$baseline), "zones")
 })
+
+test_that("occurrence_exclusions(gate = 'zero') gates only zero-record drops; 'all' every dropped row", {
+  d <- data.frame(mdl_key = c("a", "a", "b", "c"), zone_key = c("EBS", "GOA", "EBS", "EBS"),
+                  verdict = c("dropped", "dropped", "kept", "dropped"), n_occupied = c(0L, 23L, 0L, 0L),
+                  stringsAsFactors = FALSE)
+  z <- occurrence_exclusions(d)                     # default = zero
+  expect_equal(paste(z$mdl_key, z$zone_key), c("a EBS", "c EBS"))
+  a <- occurrence_exclusions(d, gate = "all")
+  expect_equal(paste(a$mdl_key, a$zone_key), c("a EBS", "a GOA", "c EBS"))
+  expect_error(occurrence_exclusions(d[, c("mdl_key", "zone_key", "verdict")]), "n_occupied")
+  expect_equal(nrow(occurrence_exclusions(d[, c("mdl_key", "zone_key", "verdict")], gate = "all")), 3L)
+})
