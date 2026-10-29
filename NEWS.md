@@ -1,3 +1,12 @@
+# msens 0.62.1
+
+* New `cells_within_sql()` and `cell_id_of()`: the cells within `d` km of a set of source cells by cell-id
+  arithmetic on a regular global grid (haversine on cell centres; the column index wraps so the antimeridian
+  needs no special case; every column when the cap holds a pole) -- the buffered-record range dataset `rng_occ`
+  (`ingest_obis-occurrence.qmd`) and the occurrence rule's zone dilation. `test-cells_within.R` checks the
+  windowed search against a brute-force scan of every cell at both sides of the antimeridian, the equator,
+  75 N, both poles and a 1-km buffer, plus the grouping.
+
 # msens 0.62.0
 
 * New `occurrence_counts_sql()`, `occurrence_rule()` and `occurrence_exclusions()` (`R/occurrence.R`): the v11
