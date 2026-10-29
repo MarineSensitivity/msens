@@ -1392,6 +1392,27 @@ test_that("REGRESSION (M1): the walrus's REAL v7 registry rows resolve as the Sh
 
 # ---- metric short labels ------------------------------------------------------
 
+test_that(".metric_short_label(): the v10 across-the-nation keys get labels, not the raw key", {
+  expect_equal(.metric_short_label("extrisk_bird_v10_global"), "Seabirds: across the nation (global range)")
+  expect_equal(.metric_short_label("extrisk_turtle_v10_usa"), "Sea Turtles: across the nation (US range)")
+  expect_equal(.metric_short_label("extrisk_fish_v10_global_strip"), "Fish: across the nation (global range, floor stripped)")
+  expect_equal(.metric_short_label("extrisk_coral_share_global"), "Corals: share of range (global range)")
+  expect_equal(.metric_short_label("extrisk_mammal_pct_nation_pooled"), "Marine Mammals: percent of the nation (pooled)")
+  expect_equal(.metric_short_label("extrisk_mammal_mean_share_global"), "Marine Mammals: mean share per species (global range)")
+  expect_equal(.metric_short_label("extrisk_invertebrate_pct_world"), "Invertebrates: percent of the world")
+  expect_equal(.metric_short_label("extrisk_primary_producer_coverage"), "Primary Producers: coverage")
+  expect_equal(.metric_short_label("extrisk_bird_n_species"), "Seabirds: species present")
+  expect_equal(.metric_short_label("primprod_v10"), "Primary productivity, across the nation")
+  expect_equal(.metric_short_label("primprod_coverage"), "Primary productivity: coverage")
+  expect_equal(.metric_short_label("score_v10_equalweights_global"), "Overall score, across the nation (global range)")
+  expect_equal(.metric_short_label("score_v10_equalweights_usa"), "Overall score, across the nation (US range)")
+  expect_equal(.metric_short_label("score_v10_n_components_global"), "Components in the overall score (global range)")
+  # the within-ecoregion keys are untouched
+  expect_equal(.metric_short_label("score_extriskspcat_primprod_ecoregionrescaled_equalweights"), "Overall score")
+  expect_equal(.metric_short_label("extrisk_bird_ecoregion_rescaled"), "Seabirds: extinction risk (ecoregion-rescaled)")
+  expect_equal(.metric_short_label("extrisk_bird"), "Seabirds: extinction risk")
+})
+
 test_that(".metric_short_label(): the composite and every species category get a human label", {
   expect_equal(.metric_short_label("score_extriskspcat_primprod_ecoregionrescaled_equalweights"),
               "Overall score")

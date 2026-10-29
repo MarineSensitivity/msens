@@ -1,3 +1,11 @@
+# msens 0.60.1
+
+* `.metric_short_label()` labels the v10 across-the-nation metric keys (`extrisk_{cat}_v10_{denom}`,
+  `_share_`, `_pct_nation_`, `_mean_share_`, `_pct_world`, `_coverage`, `_n_species`, `primprod_v10`,
+  `primprod_coverage`, `score_v10_equalweights_{denom}`, `score_v10_n_components_{denom}`), so a v10
+  manifest carries "Seabirds: across the nation (global range)" rather than the raw key; the
+  within-ecoregion labels are unchanged.
+
 # msens 0.60.0
 
 * New `share_sql()`, `share_run()` and `denom_sql()` (`R/share.R`): the v10 **distribution-share score** of the
