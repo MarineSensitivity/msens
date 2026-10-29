@@ -16,7 +16,8 @@ occurrence_rule(
   block = 10L,
   alpha = 0.05,
   ratio = 0.25,
-  min_cells = 20L
+  min_cells = 20L,
+  baseline = c("zones", "range")
 )
 }
 \arguments{
@@ -33,6 +34,14 @@ occurrence_rule(
 \item{alpha, ratio}{passed to \code{\link[=region_effort_test]{region_effort_test()}}.}
 
 \item{min_cells}{integer; species with fewer present cells (worldwide) are never dropped.}
+
+\item{baseline}{what a zone is judged against: \code{"zones"} (default) -- the species' record rate over
+the OTHER zones of the set (the study area's other ecoregions), the comparison Tim White's
+anchors need: the North Atlantic right whale's whole modelled range spans the North Atlantic,
+most of it unsurveyed in OBIS, so against the whole range (7,099 blocks, 352 with a record)
+its Gulf of America pairs are not significantly fewer (p 0.4), while against its other US
+ecoregions (41 \% of blocks on the Northeast shelf) they are (p 1e-7); \code{"range"} -- the whole
+modelled range, the original rule E, kept as the sensitivity.}
 }
 \value{
 a data frame, one row per (model, zone): the counts, \verb{p_core, rate, n_min, p_value},

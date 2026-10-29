@@ -3,8 +3,9 @@
 #
 # Toy grid: nc = 10 columns, block = 2 cells -> 0.5-degree-like blocks of 2 x 2 cells; cell ids
 # 1..100 (10 rows). Zones (majority): EBS = rows 1-2 (cells 1-20), GOA = rows 3-4 (21-40),
-# GULF = rows 5-6 (41-60); rows 7-10 (61-100) are "elsewhere" (no zone row). Blocks: 25 of them,
-# five per 2-row band.
+# GULF = rows 5-6 (41-60), ATL = rows 7-10 (61-100, the stronghold -- a zone, as the Northeast shelf
+# is for the right whale). Blocks: 25 of them, five per 2-row band. With every present cell inside a
+# zone the two baselines (whole range / other zones) coincide; the whale test removes ATL to split them.
 #
 # Species:
 #   turtle   present in every cell 1-100 (a wide suitability surface). Records: none in EBS (rows 1-2),
@@ -31,7 +32,8 @@ occ_fixture_con <- function() {
   region <- rbind(
     data.frame(zone_key = "EBS",  cell_id = cells_in_rows(1:2)),
     data.frame(zone_key = "GOA",  cell_id = cells_in_rows(3:4)),
-    data.frame(zone_key = "GULF", cell_id = cells_in_rows(5:6)))
+    data.frame(zone_key = "GULF", cell_id = cells_in_rows(5:6)),
+    data.frame(zone_key = "ATL",  cell_id = cells_in_rows(7:10)))   # the stronghold IS a zone (as NECS is)
   strong_cells <- setdiff(cells_in_rows(7:10), c(99, 100))   # every stronghold block holds a record (99-100 share block 24 with 89-90)
   present <- rbind(
     data.frame(mdl_key = "lonely",   cell_id = cells_in_rows(5:6)),   # GULF only, where nobody looked ...
@@ -64,7 +66,7 @@ test_that("counts: blocks, searched-by-record, records and totals are what the t
   con <- occ_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   d <- DBI::dbGetQuery(con, occurrence_counts_sql("occ_present", "occ_occ", "occ_effort", "occ_region", nc = NC, block = BLOCK))
   t <- d[d$mdl_key == "turtle", ]
-  expect_equal(nrow(t), 3)                                   # EBS, GOA, GULF (elsewhere has no zone)
+  expect_equal(nrow(t), 4)                                   # EBS, GOA, GULF, ATL
   expect_equal(row_of(t, "turtle", "EBS")$n_cells, 20)
   expect_equal(row_of(t, "turtle", "EBS")$n_searched, 5); expect_equal(row_of(t, "turtle", "EBS")$n_occupied, 0)
   expect_equal(row_of(t, "turtle", "GOA")$n_searched, 5); expect_equal(row_of(t, "turtle", "GOA")$n_occupied, 1)
@@ -156,4 +158,38 @@ test_that("a species present nowhere in a zone gets no row; bad arguments error"
   expect_error(occurrence_counts_sql(nc = 0), "nc")
   expect_error(occurrence_rule(con, ch = ""), "ch")
   expect_error(occurrence_exclusions(data.frame(a = 1)), "mdl_key")
+})
+
+test_that("baseline: a wide, sparsely recorded range abroad cannot drop a zone under 'range' but does under 'zones' (the right whale)", {
+  con <- occ_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "DELETE FROM occ_region WHERE zone_key = 'ATL'")   # rows 7-10 are abroad again
+  # whale: present in every zone cell (rows 1-6) AND over a huge range abroad (rows 7-10 here stand in
+  # for the North Atlantic): searched everywhere, but records only in GOA (4 of 5 blocks) and
+  # in 1 of the 10 blocks abroad. EBS: 0 of 5.
+  DBI::dbExecute(con, "INSERT INTO occ_present SELECT 'whale', cell_id FROM (SELECT unnest(range(1, 101)) AS cell_id)")
+  DBI::dbExecute(con, "INSERT INTO occ_effort  SELECT 'whale', cell_id FROM (SELECT unnest(range(1, 101)) AS cell_id)")
+  DBI::dbExecute(con, "INSERT INTO occ_occ SELECT 'whale', cell_id, 1 FROM (SELECT unnest([21,23,25,27, 61]) AS cell_id)")
+  d_range <- occurrence_rule(con, present = "occ_present", occ = "occ_occ", effort = "occ_effort", region = "occ_region",
+                             nc = NC, block = BLOCK, baseline = "range")
+  d_zones <- occurrence_rule(con, present = "occ_present", occ = "occ_occ", effort = "occ_effort", region = "occ_region",
+                             nc = NC, block = BLOCK, baseline = "zones")
+  ebs_r <- row_of(d_range, "whale", "EBS"); ebs_z <- row_of(d_zones, "whale", "EBS")
+  # range baseline: (5 - 0) / (25 - 5) = 0.25 -> five blocks cannot even reject at 0.25 (n_min 11):
+  # unsearched, never dropped
+  expect_equal(ebs_r$p_core, 0.25); expect_equal(ebs_r$verdict, "unsearched")
+  # zones baseline: the other zones hold 4 of 10 searched blocks -> P(0 of 5 | 0.4) = 0.078 ... make it bite:
+  expect_equal(ebs_z$p_core, 0.4)
+  expect_equal(ebs_z$n_searched_zones, 15); expect_equal(ebs_z$n_occupied_zones, 4)
+  # with one more Gulf record (5 of 5) the zones baseline is 0.5 -> P(0 of 5 | 0.5) = 0.031 < 0.05 -> dropped,
+  # while the range baseline (6/20 = 0.3, n_min 9) still cannot judge it
+  DBI::dbExecute(con, "INSERT INTO occ_occ VALUES ('whale', 29, 1)")
+  d_range <- occurrence_rule(con, present = "occ_present", occ = "occ_occ", effort = "occ_effort", region = "occ_region",
+                             nc = NC, block = BLOCK, baseline = "range")
+  d_zones <- occurrence_rule(con, present = "occ_present", occ = "occ_occ", effort = "occ_effort", region = "occ_region",
+                             nc = NC, block = BLOCK, baseline = "zones")
+  expect_equal(row_of(d_range, "whale", "EBS")$verdict, "unsearched")
+  expect_equal(row_of(d_zones, "whale", "EBS")$verdict, "dropped")
+  expect_equal(unique(d_zones$baseline), "zones")
+  # the default is the zones baseline
+  d_def <- run(con); expect_equal(unique(d_def$baseline), "zones")
 })

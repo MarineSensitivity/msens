@@ -1,3 +1,16 @@
+# msens 0.63.0
+
+* `occurrence_rule(baseline = c("zones", "range"))`: what a zone's record rate is judged against. The new
+  default `"zones"` is the species' rate over the OTHER zones of the set (the study area's other
+  ecoregions); `"range"` is the whole modelled range (rule E as first written, kept as the sensitivity).
+  Found by the v11 exploration: the North Atlantic right whale's modelled range spans the North Atlantic,
+  most of it unsurveyed in OBIS (7,099 blocks, 352 with a record), so against the whole range its Gulf of
+  America pairs were not significantly fewer (p 0.4) and the Tim-White anchor did not fall out; against
+  its other US ecoregions (41 % of blocks on the Northeast shelf) they are (p 1e-7).
+  `occurrence_counts_sql()` adds `n_searched_zones` / `n_occupied_zones`; the result carries `baseline`.
+  `test-occurrence.R`: the fixture's stronghold is now a zone (as the Northeast shelf is) and a whale
+  fixture separates the two baselines.
+
 # msens 0.62.1
 
 * New `cells_within_sql()` and `cell_id_of()`: the cells within `d` km of a set of source cells by cell-id

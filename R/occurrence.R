@@ -35,7 +35,9 @@
 #' @param nc integer; the grid's number of columns (7200 for `global05`).
 #' @param block integer; cells per block side (10 = 0.5 degrees).
 #' @return SQL selecting `mdl_key, zone_key, n_cells, n_searched, n_occupied, n_records,
-#'   n_searched_all, n_occupied_all`, one row per (model, zone) where the model is present.
+#'   n_searched_all, n_occupied_all` (over the whole modelled range) and `n_searched_zones,
+#'   n_occupied_zones` (over every zone of the set), one row per (model, zone) where the model is
+#'   present.
 #' @concept range
 #' @importFrom glue glue
 #' @export
@@ -86,14 +88,22 @@ occurrence_counts_sql <- function(
     rec AS (
       SELECT o.mdl_key, zr.zone_key, count(DISTINCT o.unit_id) AS n_records
       FROM o JOIN zr USING (unit_id)
-      GROUP BY o.mdl_key, zr.zone_key)
+      GROUP BY o.mdl_key, zr.zone_key),
+    -- the zone-set baseline: the species' searched / occupied units over ALL zones of the set
+    -- (a unit straddling two zones counts once per zone it is present in)
+    totz AS (
+      SELECT mdl_key, sum(n_searched) AS n_searched_zones, sum(n_occupied) AS n_occupied_zones
+      FROM reg GROUP BY mdl_key)
     SELECT reg.mdl_key, reg.zone_key, reg.n_cells, reg.n_searched, reg.n_occupied,
-           COALESCE(rec.n_records, 0)      AS n_records,
-           COALESCE(tot.n_searched_all, 0) AS n_searched_all,
-           COALESCE(tot.n_occupied_all, 0) AS n_occupied_all
+           COALESCE(rec.n_records, 0)        AS n_records,
+           COALESCE(tot.n_searched_all, 0)   AS n_searched_all,
+           COALESCE(tot.n_occupied_all, 0)   AS n_occupied_all,
+           COALESCE(totz.n_searched_zones, 0) AS n_searched_zones,
+           COALESCE(totz.n_occupied_zones, 0) AS n_occupied_zones
     FROM reg
-    LEFT JOIN rec USING (mdl_key, zone_key)
-    LEFT JOIN tot USING (mdl_key)
+    LEFT JOIN rec  USING (mdl_key, zone_key)
+    LEFT JOIN tot  USING (mdl_key)
+    LEFT JOIN totz USING (mdl_key)
     ORDER BY reg.mdl_key, reg.zone_key", .trim = TRUE)
 }
 
@@ -121,6 +131,13 @@ occurrence_counts_sql <- function(
 #' @param ch character or `NULL`; a relation `(mdl_key, cell_id)` of protected cells per model.
 #' @param alpha,ratio passed to [region_effort_test()].
 #' @param min_cells integer; species with fewer present cells (worldwide) are never dropped.
+#' @param baseline what a zone is judged against: `"zones"` (default) -- the species' record rate over
+#'   the OTHER zones of the set (the study area's other ecoregions), the comparison Tim White's
+#'   anchors need: the North Atlantic right whale's whole modelled range spans the North Atlantic,
+#'   most of it unsurveyed in OBIS, so against the whole range (7,099 blocks, 352 with a record)
+#'   its Gulf of America pairs are not significantly fewer (p 0.4), while against its other US
+#'   ecoregions (41 % of blocks on the Northeast shelf) they are (p 1e-7); `"range"` -- the whole
+#'   modelled range, the original rule E, kept as the sensitivity.
 #' @return a data frame, one row per (model, zone): the counts, `p_core, rate, n_min, p_value`,
 #'   `verdict` (`kept | dropped | unsearched`), `label`, `override` (`NA | protected | narrow range`),
 #'   and `verdict_raw` (the test's verdict before overrides).
@@ -131,19 +148,24 @@ occurrence_rule <- function(
   con,
   present = "occ_present", occ = "occ_records", effort = "occ_effort",
   region = "occ_region", region_rec = region, ch = NULL,
-  nc = 7200L, block = 10L, alpha = 0.05, ratio = 0.25, min_cells = 20L) {
+  nc = 7200L, block = 10L, alpha = 0.05, ratio = 0.25, min_cells = 20L,
+  baseline = c("zones", "range")) {
 
+  baseline <- match.arg(baseline)
   stopifnot(
     is.null(ch) || (is.character(ch) && length(ch) == 1L && nzchar(ch)),
     is.numeric(min_cells), length(min_cells) == 1L, min_cells >= 0)
   d <- DBI::dbGetQuery(con, occurrence_counts_sql(present, occ, effort, region, region_rec, nc, block))
+  d$baseline <- baseline
   if (nrow(d) == 0L) {
     out <- cbind(d, data.frame(p_core = numeric(), rate = numeric(), n_min = numeric(), p_value = numeric(),
                                verdict_raw = character(), verdict = character(), label = character(),
                                override = character(), stringsAsFactors = FALSE))
     return(out)
   }
-  t <- region_effort_test(d$n_searched, d$n_occupied, d$n_searched_all, d$n_occupied_all,
+  base_s <- if (baseline == "zones") d$n_searched_zones else d$n_searched_all
+  base_o <- if (baseline == "zones") d$n_occupied_zones else d$n_occupied_all
+  t <- region_effort_test(d$n_searched, d$n_occupied, base_s, base_o,
                           n_records = d$n_records, alpha = alpha, ratio = ratio)
   d$p_core <- t$p_core; d$rate <- t$rate; d$n_min <- t$n_min; d$p_value <- t$p_value
   d$verdict_raw <- t$verdict; d$label <- t$label

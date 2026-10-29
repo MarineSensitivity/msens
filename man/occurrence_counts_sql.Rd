@@ -22,7 +22,8 @@ occurrence_counts_sql(
 \item{block}{integer; cells per block side (10 = 0.5 degrees).}
 }
 \value{
-SQL selecting \verb{mdl_key, zone_key, n_cells, n_searched, n_occupied, n_records, n_searched_all, n_occupied_all}, one row per (model, zone) where the model is present.
+SQL selecting \verb{mdl_key, zone_key, n_cells, n_searched, n_occupied, n_records, n_searched_all, n_occupied_all} (over the whole modelled range) and \verb{n_searched_zones, n_occupied_zones} (over every zone of the set), one row per (model, zone) where the model is
+present.
 }
 \description{
 One row per (model, zone) with the counts \code{\link[=region_effort_test]{region_effort_test()}} takes, on \code{block}-wide units
