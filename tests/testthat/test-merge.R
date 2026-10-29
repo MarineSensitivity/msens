@@ -395,3 +395,57 @@ test_that("turtle_sql validates its arguments", {
   expect_error(turtle_sql(character(0), "am", "ch"))
   expect_error(turtle_sql("turtles", "am", "ch", src = c("a", "b")))
 })
+
+# v11 Q3 (plan 2026-10-29 §4.2, D8, D9): the sea turtles leave their carve-out. TURTLE_RULE=dps merges
+# them like every DPS-listed species (dps_sql: the value is the SUITABILITY masked to the ER footprint,
+# the per-cell ER rides beside it) with the critical-habitat datasets EXTENDING the footprint at their
+# own ER (D8: "CH extends the footprint and keeps the ER value, fill = ER"); TURTLE_SUIT=ogm swaps the
+# turtles' suitability source to our own OBIS-method models (`og`) by superseding am (and ax) inside
+# the og footprint -- the same supersede_sql() mechanism AquaX uses, applied twice.
+test_that("TURTLE_RULE=dps: a turtle through dps_sql with critical habitat extending the ER footprint", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a leatherback-like taxon: SWOT DPS ER 100 at cells 1-2 (an Endangered DPS), 50 at cell 3 (Threatened);
+  # critical habitat (species-level ER 100) at cells 3 and 4 -- cell 4 is OUTSIDE the DPS footprint;
+  # suitability 80 / 0 / 40 / 60 at cells 1-4 and 70 at cell 5 (no ER at all: outside the range)
+  src <- data.frame(
+    ms_merge_key = "T_turtle",
+    ds_key  = c("rng_turtle_swot_dps","rng_turtle_swot_dps","rng_turtle_swot_dps", "ch_nmfs","ch_nmfs", "am","am","am","am"),
+    cell_id = c(1L, 2L, 3L, 3L, 4L, 1L, 3L, 4L, 5L),
+    val     = c(100, 100, 50, 100, 100, 80, 40, 60, 70), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  d <- DBI::dbGetQuery(con, dps_sql(c("rng_turtle_swot_dps", "ch_nmfs"), "am", src = "dps_src"))
+  d <- d[order(d$cell_id), ]
+  expect_equal(d$cell_id, 1:4)                          # cell 5 (no ER, no CH) is outside the footprint
+  expect_equal(d$val, c(80, 100, 40, 60))               # suitability where modelled; fill = ER where not (cell 2)
+  expect_equal(d$er,  c(100, 100, 100, 100))            # cell 3: max(DPS 50, CH 100) -- CH keeps its ER; cell 4 extends the footprint
+  # the old turtle rule on the same input is a different surface (ER multiplied in, floored at 1)
+  t <- DBI::dbGetQuery(con, turtle_sql("rng_turtle_swot_dps", "am", "ch_nmfs", src = "dps_src"))
+  expect_false(isTRUE(all.equal(sort(t$val), sort(d$val))))
+})
+
+test_that("TURTLE_SUIT=ogm: our og model supersedes am (and ax) for a turtle inside the og footprint only", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mc <- data.frame(
+    ms_merge_key = c(rep("T_turtle", 7), rep("T_fish", 3)),
+    ds_key  = c("am","am","am", "ax","ax", "og","og",  "am","am","og"),
+    cell_id = c(1L, 2L, 3L,    1L, 2L,    1L, 2L,     1L, 2L, 1L),
+    val     = c(50, 40, 30,    55, 45,    80, 20,     60, 70, 90), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  DBI::dbWriteTable(con, "og_mask", data.frame(cell_id = 1:2))          # where the og ensemble has a value
+  DBI::dbWriteTable(con, "turtle_og", data.frame(ms_merge_key = "T_turtle"))
+  keep <- paste(supersede_sql("am", taxa = "turtle_og", mask = "og_mask", src = "mc"),
+                "AND", supersede_sql("ax", taxa = "turtle_og", mask = "og_mask", src = "mc"))
+  b <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", keep, "ORDER BY ms_merge_key, ds_key, cell_id"))
+  tt <- b[b$ms_merge_key == "T_turtle", ]
+  # inside the og footprint (cells 1-2) am and ax are gone; am survives at cell 3 (outside); og stays
+  expect_equal(paste(tt$ds_key, tt$cell_id), c("am 3", "og 1", "og 2"))
+  # a taxon not in the turtle list keeps everything, og included (it would merge by max -- which is why
+  # merge_models_prep excludes og entirely when TURTLE_SUIT=am)
+  expect_equal(nrow(b[b$ms_merge_key == "T_fish", ]), 3)
+  # with the og rows superseding, the DPS turtle merge reads og as the suitability
+  DBI::dbExecute(con, paste0("CREATE TABLE dps_src AS SELECT * FROM mc WHERE ms_merge_key = 'T_turtle' AND (", keep, ")
+    UNION ALL SELECT 'T_turtle', 'rng_turtle_swot_dps', cell_id, 100 FROM (SELECT unnest([1, 2, 3]) AS cell_id)"))
+  d <- DBI::dbGetQuery(con, dps_sql("rng_turtle_swot_dps", c("am", "ax", "og"), src = "dps_src"))
+  d <- d[order(d$cell_id), ]
+  expect_equal(d$val, c(80, 20, 30))                    # og at 1-2, the surviving am at 3
+})
