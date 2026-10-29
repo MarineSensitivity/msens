@@ -1,3 +1,18 @@
+# msens 0.62.0
+
+* New `occurrence_counts_sql()`, `occurrence_rule()` and `occurrence_exclusions()` (`R/occurrence.R`): the v11
+  occurrence (vagrant) rule, one rule for every species (plan 2026-10-29 §4.3; Tim White 2026-10-21). Per species
+  x zone, on 0.5-degree blocks: the model's present units that were searched (a record of the species' effort
+  group, or of the species itself) against those holding a record of the species, judged by
+  `region_effort_test()` against the species' rate everywhere else (its whole modelled range), with a buffer
+  (`region_rec`: a record just outside the zone counts) and the overrides as data -- protected cells (critical
+  habitat, core areas) keep a zone, a narrow-range species is never dropped, an unsearched zone is kept and
+  flagged ("unsampled is unknown, not absent"); a dropped zone with a record on file is labelled "documented
+  occurrence only". `occurrence_exclusions()` hands the dropped pairs to `zone_exclude_sql()`. `test-occurrence.R`:
+  the East Bering Sea anchor falls out of the rule, the material guard keeps a sparse zone, the buffer, each
+  override, a record counting as search effort, and the block arithmetic (cell ids cast to BIGINT: DuckDB's
+  `//` on a DOUBLE column is not integer division).
+
 # msens 0.61.1
 
 * New `components_registry(path = NULL)` and `component_label(key, v11 = FALSE)`: ONE table of the scored
