@@ -1,3 +1,11 @@
+# msens 0.64.0
+
+* New `encounter_weight()` (v11 Q3b, D11 "gate + weight"): per species x zone, `w = min(1, rate / p_core)`
+  from the occurrence rule's counts -- a zone where a species is kept but recorded well below its rate
+  elsewhere is DOWNWEIGHTED (Tim White's "downweight, not drop"); `dropped` -> 0 (the gate), an override
+  or `unsearched` -> 1 (unsampled is unknown), no reference -> 1, never above 1, optional `floor`.
+  `merge_models.qmd` applies it as a multiplier behind `REGION_WEIGHT=1`. `test-encounter_weight.R`.
+
 # msens 0.63.1
 
 * `supersede_sql(by_taxon = TRUE)`: the mask can be PER TAXON (`ms_merge_key, cell_id`), so a dataset
