@@ -1,3 +1,32 @@
+# msens 0.60.0
+
+* New `share_sql()`, `share_run()` and `denom_sql()` (`R/share.R`): the v10 **distribution-share score** of the
+  method page "Sensitivity Across Regions" (2026-09-11, rev 14) and plan 2026-10-29. Each scored species' value
+  in a cell is divided by its total over its whole modelled range (`taxon_denom`, built by `denom_sql()`:
+  merged global surface, else AquaMaps outside the US plus the merged surface inside, a curated fallback
+  fraction taking precedence; the whole range INCLUDES land -- a bird's inland range counts, so a cell absent
+  from the ocean-only `cell` table takes its latitude row's area; national-only taxa without a fallback are
+  flagged `national_only_unresolved` and refused), weighted by its governing `er_score` (100 pass-through for
+  the premultiplied sea turtles; the per-cell ER of an `er_mode = 'cell'` DPS species on the share of its plain
+  suitability total, so a uniform-ER DPS species weighs exactly like a taxon-mode one), summed per category and
+  zone with `zone_cell.pct_covered` and `cell.area_km2`, and expressed as a location quotient against the
+  nation (`v10 = 100 * (share_z / share_USA) / (A_z / A_USA)`; 100 = the national average concentration) beside
+  the percent of the world's (`pct_world`) and the nation's (`pct_nation`) importance. The national reference
+  is the study area itself (`cell.in_usa`), not v8's `USA` pseudo-zone, which misses 10,996 coastal cells.
+  One `denom` flag: `global` (headline), `usa` (every species sums to 1 inside the country = the global score
+  with species weight `w` instead of `w * f_us`), `pooled` (no per-species normalization). `kappa` coverage
+  floor (area-weighted, `coverage_floor()`): below it a component is not reportable (`v10 = NA`, row kept),
+  never zero, and the equal-weight composite skips it; `floor_strip` removes the floored (`val = 1`) cells of
+  premultiplied taxa from every sum on both sides; `primprod_v10 = 100 * mean_z / mean_USA` from a
+  `primprod_cell` relation. `share_run()` builds the one heavy `model_cell x zone_cell` pass once and reuses it
+  across denominators, and asserts the rule's invariants (an accepted, positive denominator for every species
+  with `f_us <= 1`, every scored cell inside the nation, every cell-mode cell with its ER, one row per species).
+  `tests/testthat/test-share.R`: one fixture per rule (endemic, half-covered zone, the species filter, 0.5 %
+  sliver, 1 % in the study area, multi-model duplicates counted once, sums to 1 per denominator incl. land
+  cells, equal intensity vs unequal area, the percent-of-world divisor, national average = 100 under every
+  denominator, literature fraction, 4.9 % vs 5.0 % coverage, floored turtle cell kept / removed, DPS per-cell
+  ER, pooled, primprod, the nation as the study area, refused denominators, base reuse, `denom_sql()` sources).
+
 # msens 0.59.1
 
 * `grid_for_ver("v10")` is registered on `global05`: v10 (the distribution-share score) is bootstrapped from the v8
