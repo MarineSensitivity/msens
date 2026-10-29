@@ -1,3 +1,14 @@
+# msens 0.61.1
+
+* New `components_registry(path = NULL)` and `component_label(key, v11 = FALSE)`: ONE table of the scored
+  components (`inst/extdata/components.csv`, identical to `workflows/data/components.csv`: key, label, short,
+  order, colour, icon, kind, `label_v10`), validated on read (unique keys and orders, kind in species /
+  environment, no empty labels). The score notebooks take their species categories from it instead of a
+  hardcoded vector (keys do not change, so v10's digests cannot move).
+* `.metric_short_label(key, v11 = FALSE)` reads its component names from the registry; the default is
+  unchanged (v1-v10 wording), `v11 = TRUE` gives the v11 names (`primary_producer` is "Flora", `primprod` is
+  "Productivity"). `.SP_CAT_LABEL` is gone.
+
 # msens 0.61.0
 
 * New `vgpm_annual_integrate(monthly, year)` (+ `vgpm_days_in_months()`): the v11 primary-productivity rule.

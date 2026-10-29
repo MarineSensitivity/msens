@@ -848,25 +848,13 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   "raw"
 }
 
-# sp_cat -> the docs' own heading text (docs repo receptors.qmd: "Corals",
-# "Invertebrates", "Fish", "Marine Mammals", "Seabirds", "Sea Turtles"). `other`
-# (v1-v7's pre-taxonomy-rewrite bucket), `primary_producer` (v8+'s species
-# category -- a SPECIES category, distinct from the `primprod` ENVIRONMENTAL metric
-# below), `all` (v1's whole-taxon composite-adjacent bucket) and `reptile` (v1's
-# turtle bucket, before the v3 taxonomy rewrite split turtles out on their own)
-# have no docs heading of their own and get one coined in the same style (parity
-# review 2026-09-24, edit E6).
-.SP_CAT_LABEL <- c(
-  bird             = "Seabirds",
-  coral            = "Corals",
-  fish             = "Fish",
-  invertebrate     = "Invertebrates",
-  mammal           = "Marine Mammals",
-  turtle           = "Sea Turtles",
-  other            = "Other Species",
-  primary_producer = "Primary Producers",
-  all              = "All",
-  reptile          = "Reptile")
+# sp_cat -> display label comes from the components registry
+# (`inst/extdata/components.csv` == `workflows/data/components.csv`; see components.R):
+# `label_v10` is the docs' own heading text ("Corals", "Marine Mammals", "Seabirds", ...),
+# `label` the v11 name. `other` (v1-v7's pre-taxonomy-rewrite bucket) is in the registry;
+# `all` (v1's whole-taxon bucket) and `reptile` (v1's turtle bucket) are not and get a
+# label coined in the same style by the fallback in `.metric_short_label()` (parity
+# review 2026-09-24, edit E6). `primprod`, the ENVIRONMENTAL metric, is a registry row too.
 
 #' A human short label for a metric key
 #'
@@ -882,18 +870,21 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 #' leaves a cell-scored metric unlabelled.
 #'
 #' @param key one or more `metric_key` values
+#' @param v11 logical; label the components with their v11 names (`Flora`, `Productivity`)
+#'   instead of the v1-v10 ones ([component_label()]); default `FALSE`
 #' @return a character vector of the same length, one short label per key (the key
 #'   itself for a shape this function does not recognise — the same fallback the
 #'   long-label helper `.metric_label()` already uses)
 #' @keywords internal
-.metric_short_label <- function(key) {
+.metric_short_label <- function(key, v11 = FALSE) {
+  comp_lab <- function(k) component_label(k, v11 = v11)
   # the v10 "across the nation" family (workflows/score_share_metrics.qmd): the denominator
   # suffix names which total each species' share is a share of
   DENOM <- c(global = "global range", usa = "US range", pooled = "pooled",
              global_strip = "global range, floor stripped", global_keep = "global range, floor kept")
   denom_lab <- function(d) if (is.na(d) || !nzchar(d)) "" else paste0(" (", if (d %in% names(DENOM)) DENOM[[d]] else d, ")")
   cat_lab <- function(sp) {
-    lab <- unname(.SP_CAT_LABEL[sp])
+    lab <- comp_lab(sp)
     if (is.na(lab)) lab <- sub("_", " ", paste0(toupper(substring(sp, 1, 1)), substring(sp, 2)))
     lab
   }
@@ -904,11 +895,11 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
       return(if (m[2] == "equalweights") paste0("Overall score, across the nation", denom_lab(m[3]))
              else paste0("Components in the overall score", denom_lab(m[3])))
     if (grepl("^score_", k)) return("Overall score")
-    if (identical(k, "primprod")) return("Primary productivity")
+    if (identical(k, "primprod")) return(comp_lab("primprod"))
     if (identical(k, "primprod_ecoregion_rescaled"))
-      return("Primary productivity (ecoregion-rescaled)")
-    if (identical(k, "primprod_v10")) return("Primary productivity, across the nation")
-    if (identical(k, "primprod_coverage")) return("Primary productivity: coverage")
+      return(paste0(comp_lab("primprod"), " (ecoregion-rescaled)"))
+    if (identical(k, "primprod_v10")) return(paste0(comp_lab("primprod"), ", across the nation"))
+    if (identical(k, "primprod_coverage")) return(paste0(comp_lab("primprod"), ": coverage"))
     m <- regmatches(k, regexec("^extrisk_([a-z_]+?)_(v10|share|pct_nation|mean_share)_([a-z_]+)$", k))[[1]]
     if (length(m) == 4) {
       what <- c(v10 = "across the nation", share = "share of range", pct_nation = "percent of the nation",
@@ -922,7 +913,7 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     }
     m <- regmatches(k, regexec("^extrisk_([a-z_]+?)(_ecoregion_rescaled)?$", k))[[1]]
     if (length(m) == 3 && nzchar(m[2])) {
-      lab <- unname(.SP_CAT_LABEL[m[2]])
+      lab <- comp_lab(m[2])
       if (is.na(lab))    # an sp_cat this table does not (yet) know: coin one rather
         lab <- sub("_", " ", paste0(toupper(substring(m[2], 1, 1)), substring(m[2], 2)))
       return(if (nzchar(m[3])) paste0(lab, ": extinction risk (ecoregion-rescaled)")

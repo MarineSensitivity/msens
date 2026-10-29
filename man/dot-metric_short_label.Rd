@@ -4,10 +4,13 @@
 \alias{.metric_short_label}
 \title{A human short label for a metric key}
 \usage{
-.metric_short_label(key)
+.metric_short_label(key, v11 = FALSE)
 }
 \arguments{
 \item{key}{one or more \code{metric_key} values}
+
+\item{v11}{logical; label the components with their v11 names (\code{Flora}, \code{Productivity})
+instead of the v1-v10 ones (\code{\link[=component_label]{component_label()}}); default \code{FALSE}}
 }
 \value{
 a character vector of the same length, one short label per key (the key
