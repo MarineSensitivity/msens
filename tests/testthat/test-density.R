@@ -91,3 +91,20 @@ test_that("density_annual counts an absent interval as zero (the v8 present-only
   y <- data.frame(cell_id = 9L, ssn = c("a", "b", "c", "d"), dens = c(1, 2, 3, 4))
   expect_equal(density_annual(y, n_intervals = 4)$dens, 2.5)
 })
+
+test_that("density_annual(weights): the day-weighted year; an absent interval counts as zero over its weight; equal weights == the plain mean", {
+  x <- data.frame(cell_id = c(1L, 1L, 2L), interval = c("a", "b", "a"), dens = c(10, 2, 4))
+  w <- c(a = 1, b = 3)
+  s <- density_annual(x, n_intervals = 2, interval = "interval", weights = w)
+  expect_equal(s$dens[s$cell_id == 1L], (10 * 1 + 2 * 3) / 4)          # 4
+  expect_equal(s$dens[s$cell_id == 2L], (4 * 1 + 0 * 3) / 4)           # absent b = 0 over its weight -> 1
+  eq <- density_annual(x, n_intervals = 2, interval = "interval", weights = c(a = 5, b = 5))
+  expect_equal(eq$dens, density_annual(x, n_intervals = 2)$dens)
+  # months: a species present only in April-November (Kogia) under day weights
+  m <- data.frame(cell_id = 1L, interval = sprintf("%02d", 4:11), dens = 1)
+  wd <- month_day_weights(); expect_equal(sum(wd), 365); expect_equal(names(wd)[2], "02")
+  expect_equal(density_annual(m, 12, interval = "interval", weights = wd)$dens, sum(wd[sprintf("%02d", 4:11)]) / 365)
+  expect_error(density_annual(x, 2, interval = "interval", weights = c(a = 1)), "n_intervals")
+  expect_error(density_annual(x, 2, interval = "interval", weights = c(a = 1, c = 1)), "weight")
+  expect_error(density_annual(x, 2, weights = w), "interval")
+})

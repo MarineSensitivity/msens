@@ -4,7 +4,7 @@
 \alias{density_annual}
 \title{Annual mean density from interval (monthly / seasonal) surfaces}
 \usage{
-density_annual(x, n_intervals, value = "dens")
+density_annual(x, n_intervals, value = "dens", interval = NULL, weights = NULL)
 }
 \arguments{
 \item{x}{a data frame with columns \code{cell_id}, an interval column and a density column; one
@@ -13,6 +13,12 @@ row per (cell, interval) where the cell has a value.}
 \item{n_intervals}{integer; the number of intervals in the year (12 months, 4 seasons).}
 
 \item{value}{name of the density column (default \code{"dens"}).}
+
+\item{interval}{name of the column holding the interval label (\code{"01"}..\code{"12"}, a season); required with \code{weights}.}
+
+\item{weights}{named numeric vector, one weight per interval (e.g. \code{\link[=month_day_weights]{month_day_weights()}}): the annual is the
+WEIGHTED mean over all \code{n_intervals}, an interval without a surface contributing zero over its weight.
+\code{NULL} (default) = the plain mean (\code{sum / n_intervals}), every interval weighing the same.}
 }
 \value{
 a data frame \verb{(cell_id, dens)} — \code{dens} = Σ interval density / \code{n_intervals}.

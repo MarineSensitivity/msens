@@ -124,6 +124,10 @@ density_to_suit <- function(d, method = c("cap", "log", "ud", "qmap"),
 #'   row per (cell, interval) where the cell has a value.
 #' @param n_intervals integer; the number of intervals in the year (12 months, 4 seasons).
 #' @param value name of the density column (default `"dens"`).
+#' @param interval name of the column holding the interval label (`"01"`..`"12"`, a season); required with `weights`.
+#' @param weights named numeric vector, one weight per interval (e.g. [month_day_weights()]): the annual is the
+#'   WEIGHTED mean over all `n_intervals`, an interval without a surface contributing zero over its weight.
+#'   `NULL` (default) = the plain mean (`sum / n_intervals`), every interval weighing the same.
 #' @return a data frame `(cell_id, dens)` — `dens` = Σ interval density / `n_intervals`.
 #' @examples
 #' x <- data.frame(cell_id = c(1, 1, 2), interval = c("01", "02", "01"), dens = c(1, 1, 3))
@@ -131,10 +135,35 @@ density_to_suit <- function(d, method = c("cap", "log", "ud", "qmap"),
 #' @concept ingest
 #' @importFrom stats aggregate
 #' @export
-density_annual <- function(x, n_intervals, value = "dens") {
+density_annual <- function(x, n_intervals, value = "dens", interval = NULL, weights = NULL) {
   stopifnot(is.data.frame(x), "cell_id" %in% names(x), value %in% names(x),
             is.numeric(n_intervals), length(n_intervals) == 1, n_intervals >= 1)
-  s <- stats::aggregate(list(dens = x[[value]]), by = list(cell_id = x$cell_id), FUN = sum)
-  s$dens <- s$dens / n_intervals
+  if (is.null(weights)) {
+    s <- stats::aggregate(list(dens = x[[value]]), by = list(cell_id = x$cell_id), FUN = sum)
+    s$dens <- s$dens / n_intervals
+    return(s[order(s$cell_id), , drop = FALSE])
+  }
+  # weighted: the year is the WEIGHTED mean of the intervals (days per month), an interval with no surface
+  # contributing 0 over its weight -- the day-weighted annual the MDAT v3 package delivers (equal to it to 6e-8)
+  stopifnot("`interval` names the column holding the interval label when `weights` are given" =
+              is.character(interval) && length(interval) == 1L && interval %in% names(x),
+            "`weights` must be a named numeric vector, one positive weight per interval" =
+              is.numeric(weights) && !is.null(names(weights)) && all(weights > 0) && !anyDuplicated(names(weights)),
+            "`weights` must have exactly n_intervals entries" = length(weights) == n_intervals,
+            "every interval label in `x` must have a weight" = all(as.character(x[[interval]]) %in% names(weights)))
+  w <- weights[as.character(x[[interval]])]
+  s <- stats::aggregate(list(dens = x[[value]] * w), by = list(cell_id = x$cell_id), FUN = sum)
+  s$dens <- s$dens / sum(weights)
   s[order(s$cell_id), , drop = FALSE]
+}
+
+#' Days in each calendar month, as weights for [density_annual()]
+#'
+#' A climatological (non-leap) year: `c("01" = 31, "02" = 28, ...)`, names = zero-padded months, the labels the
+#' density ingests use. Sums to 365.
+#' @return a named numeric vector of 12.
+#' @concept ingest
+#' @export
+month_day_weights <- function() {
+  stats::setNames(c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31), sprintf("%02d", 1:12))
 }

@@ -1,3 +1,11 @@
+# msens 0.65.1
+
+* `density_annual(interval =, weights =)`: the year as the WEIGHTED mean of the intervals (days per month via the
+  new `month_day_weights()`), an interval without a surface contributing zero over its weight. The MDAT v3
+  Atlantic bird package (BOEM 2023-060) delivers a day-weighted annual (ours equals it to 6e-8 on the native
+  grid; the plain mean differs by up to 8 % in a cell), and the Gulf cetacean months take the same weights.
+  Default unchanged (plain mean). `test-density.R`.
+
 # msens 0.65.0
 
 * `zone_weight_sql()` and `zone_adjust_sql()` (v11 Q2, D11 "gate + weight"): the weight sibling of
