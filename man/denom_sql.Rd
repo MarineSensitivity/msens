@@ -42,8 +42,10 @@ dedup -- as the US am-only branch keeps duplicates) plus the merged US surface i
 A taxon whose datasets are ALL national (\code{national_ds}) and that has no fallback row gets
 \code{source = 'national_only_unresolved'} with its US-range total as a placeholder, so the caller
 can refuse or curate it (\code{data/us_share_fallback.csv}) rather than score a species at share 1.
-An \code{er_mode = 'cell'} taxon is flagged \code{cell_er_unsupported} until its treatment is settled
-(see the header of \code{R/share.R}; no v10 taxon is in that mode).
+An \code{er_mode = 'cell'} taxon (NMFS DPS species; v11's turtles and density taxa) resolves like any other: its
+totals are PLAIN suitability totals and the per-cell ER weights its share in \code{\link[=share_sql]{share_sql()}} (the header of
+\code{R/share.R}; settled 2026-10-30 when the first full v11 run met 100+ such taxa -- \code{cell_er_unsupported} was
+the placeholder until then).
 }
 \details{
 \strong{The whole range includes land.} The merged global surfaces carry a bird's entire range (the

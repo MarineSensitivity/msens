@@ -325,7 +325,7 @@ share_sql <- function(
 #'
 #' Hard stops (the rule's own assertions): under `global`, every scored species must have a positive
 #' denominator from an accepted source (`merged_global`, `aquamaps`, `fallback:*`; a
-#' `national_only_unresolved`, `cell_er_unsupported` or `none` row is refused -- curate
+#' `national_only_unresolved` or `none` row is refused -- curate
 #' `data/us_share_fallback.csv` or fix the totals) and `f_us <= 1`; every scored species must have a
 #' positive US total; every scored cell must lie in the national reference; every scored cell of a
 #' `cell`-mode taxon must have its per-cell ER and `model_cell_er` no duplicate row; a species may
@@ -467,8 +467,10 @@ share_run <- function(
 #' A taxon whose datasets are ALL national (`national_ds`) and that has no fallback row gets
 #' `source = 'national_only_unresolved'` with its US-range total as a placeholder, so the caller
 #' can refuse or curate it (`data/us_share_fallback.csv`) rather than score a species at share 1.
-#' An `er_mode = 'cell'` taxon is flagged `cell_er_unsupported` until its treatment is settled
-#' (see the header of `R/share.R`; no v10 taxon is in that mode).
+#' An `er_mode = 'cell'` taxon (NMFS DPS species; v11's turtles and density taxa) resolves like any other: its
+#' totals are PLAIN suitability totals and the per-cell ER weights its share in [share_sql()] (the header of
+#' `R/share.R`; settled 2026-10-30 when the first full v11 run met 100+ such taxa -- `cell_er_unsupported` was
+#' the placeholder until then).
 #'
 #' **The whole range includes land.** The merged global surfaces carry a bird's entire range (the
 #' ingests apply no land mask, by design), while `cell` holds ocean cells only (17.1 M of the
@@ -562,8 +564,7 @@ denom_sql <- function(
            WHEN am_out.am_outside IS NOT NULL THEN am_out.am_outside_strip + us.total_usa_strip
            END AS total_global_strip,
       gl.n_cells_global, coalesce(gl.n_cells_no_area, 0) AS n_cells_no_area,
-      CASE WHEN us.er_mode = 'cell' THEN 'cell_er_unsupported'
-           WHEN fb.fraction IS NOT NULL THEN 'fallback:' || fb.method
+      CASE WHEN fb.fraction IS NOT NULL THEN 'fallback:' || fb.method
            WHEN coalesce(nat.national_only, FALSE) THEN 'national_only_unresolved'
            WHEN gl.total_global IS NOT NULL THEN 'merged_global'
            WHEN am_out.am_outside IS NOT NULL THEN 'aquamaps'

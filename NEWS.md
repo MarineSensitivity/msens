@@ -1,3 +1,10 @@
+# msens 0.65.2
+
+* `denom_sql()` resolves an `er_mode = 'cell'` taxon like any other (plain suitability totals; the per-cell
+  ER weights its share in `share_sql()`, as the header of `R/share.R` states) -- the `cell_er_unsupported`
+  placeholder is gone. v11's first full run put the six sea turtles (DPS rule) and ~100 density taxa in that
+  mode and the global-total stage refused them.
+
 # msens 0.65.1
 
 * `density_annual(interval =, weights =)`: the year as the WEIGHTED mean of the intervals (days per month via the
