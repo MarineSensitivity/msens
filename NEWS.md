@@ -1,3 +1,15 @@
+# msens 0.66.0
+
+* New `density_cal_factors_sql()` / `density_calibrate_sql()`: the mass-preserving calibration of a folded-in
+  density survey (v11 Q6). Per taxon the survey values inside its domain are scaled by the ratio of the mean
+  replaced value (AquaMaps / AquaX suitability where it existed, the governing er_score where only a range
+  covered the cell) to the mean survey value over the same cells, capped at 100; cells with no prior value
+  keep the survey's pattern at that scale; a taxon with no prior value anywhere is left at 1 and flagged. The
+  v11 attribution showed the uncalibrated fold-in tripling California bird scores and halving Alaska's by
+  proportion; none of the 72 NCCOS bird species has an AquaMaps model, so a quantile map onto AquaMaps
+  (`density_to_suit("qmap")`, kept as an ingest option) cannot reach them. `merge_models.qmd` applies this
+  behind `FOLD_DENSITY_CAL=mass`. `test-density_cal.R`.
+
 # msens 0.65.2
 
 * `denom_sql()` resolves an `er_mode = 'cell'` taxon like any other (plain suitability totals; the per-cell
