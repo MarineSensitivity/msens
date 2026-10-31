@@ -58,3 +58,22 @@ test_that("bad arguments error", {
   expect_error(density_calibrate_sql("SELECT 1", character(0)))
   expect_error(density_cal_factors_sql(""))
 })
+
+test_that("density_prior_sql(): 'value' = the control's max(er, suit); 'suit' = suitability where modeled, er elsewhere", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # taxon T (er 100): cell 1 am 30 + range; cell 2 range only; cell 3 am 50 only; cell 4 is survey-only (not in src);
+  # cell 9 has a prior but is outside the survey domain (ignored); a density row (nc) at cell 1 must be excluded
+  DBI::dbWriteTable(con, "src", data.frame(
+    mdl_key = c("am|1", "rng_iucn|1", "rng_iucn|1", "am|1", "am|1", "nc|9"),
+    cell_id = c(1L, 1L, 2L, 3L, 9L, 1L), val = c(30, 100, 100, 50, 70, 99)))
+  DBI::dbWriteTable(con, "taxon_model", data.frame(mdl_key = c("am|1", "rng_iucn|1", "nc|9"), ms_merge_key = "T"))
+  DBI::dbWriteTable(con, "taxon", data.frame(ms_merge_key = "T", er_score = 100))
+  DBI::dbWriteTable(con, "dens_dom", data.frame(ms_merge_key = "T", cell_id = 1:4))
+  get <- function(mode) {
+    r <- DBI::dbGetQuery(con, paste(density_prior_sql("src", c("am", "ax"), c("gm", "nc", "cce"), mode), "ORDER BY cell_id"))
+    setNames(r$val, r$cell_id)
+  }
+  expect_equal(get("value"), c(`1` = 100, `2` = 100, `3` = 50))
+  expect_equal(get("suit"),  c(`1` = 30,  `2` = 100, `3` = 50))
+  expect_error(density_prior_sql("src", "am", "nc", mode = "mean"))
+})

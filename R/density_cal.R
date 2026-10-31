@@ -71,3 +71,44 @@ density_calibrate_sql <- function(sql, dens_ds, factors = "dens_cal") {
     SELECT m.* REPLACE (CASE WHEN m.ds_key IN ({ds}) THEN least(100.0, m.val * coalesce(c.f, 1.0)) ELSE m.val END AS val)
     FROM ({sql}) m LEFT JOIN {factors} c ON c.ms_merge_key = m.ms_merge_key", .trim = TRUE)
 }
+
+#' SQL building the "replaced surface" a folded-in density survey is calibrated against
+#'
+#' One row per (taxon, domain cell) that had a prior value in the merge input: what the control merge gave
+#' that cell before the survey replaced it. Two readings of "what it gave":
+#' * `mode = "value"`: the control's merged VALUE, `max(suitability, er_score)` -- a range row counts at the
+#'   taxon's governing `er_score`, so an Endangered species' prior is ~100 wherever a range covers it and the
+#'   calibrated survey saturates at the cap (the pattern is lost again where ER is high).
+#' * `mode = "suit"`: the suitability where any suitability dataset models the cell, the `er_score` only where
+#'   nothing does (what `dps_sql()` gives an er_mode = 'cell' taxon, which is how a density taxon merges under
+#'   FOLD_DENSITY) -- the ER rides beside the value, so the survey pattern survives for high-ER species.
+#' Density rows themselves are excluded; the survey domain is `dens_dom` (`ms_merge_key, cell_id`).
+#'
+#' @param src character; the merge-input relation or SQL source (`mdl_key, cell_id, val`), e.g.
+#'   `"read_parquet('.../dist/*/*.parquet')"`.
+#' @param prior_ds character vector; the suitability dataset keys (`am`, `ax`, `og`).
+#' @param dens_ds character vector; the density dataset keys to exclude.
+#' @param mode `"value"` or `"suit"` (see above).
+#' @param dens_dom,taxon_model,taxon character; relation names (`ms_merge_key, cell_id`; `mdl_key,
+#'   ms_merge_key`; `ms_merge_key, er_score`).
+#' @return SQL selecting `ms_merge_key, cell_id, val`.
+#' @concept merge
+#' @importFrom glue glue
+#' @export
+density_prior_sql <- function(src, prior_ds, dens_ds, mode = c("value", "suit"),
+                              dens_dom = "dens_dom", taxon_model = "taxon_model", taxon = "taxon") {
+  mode <- match.arg(mode)
+  stopifnot(is.character(src), length(src) == 1L, nzchar(src),
+            is.character(prior_ds), length(prior_ds) >= 1L, is.character(dens_ds), length(dens_ds) >= 1L)
+  q <- function(x) paste(sprintf("'%s'", x), collapse = ", ")
+  rows <- glue::glue("
+      SELECT tm.ms_merge_key, mc.cell_id,
+             CASE WHEN split_part(mc.mdl_key, '|', 1) IN ({q(prior_ds)}) THEN mc.val END AS suit,
+             t.er_score::DOUBLE AS er
+      FROM {src} mc JOIN {taxon_model} tm USING (mdl_key)
+      JOIN {dens_dom} d ON d.ms_merge_key = tm.ms_merge_key AND d.cell_id = mc.cell_id
+      JOIN {taxon} t ON t.ms_merge_key = tm.ms_merge_key
+      WHERE split_part(mc.mdl_key, '|', 1) NOT IN ({q(dens_ds)})")
+  val <- if (mode == "value") "max(coalesce(suit, er))" else "coalesce(max(suit), max(er))"   # value: a suitability row counts at its value, a range row at er
+  glue::glue("SELECT ms_merge_key, cell_id, {val} AS val FROM ({rows}) GROUP BY 1, 2", .trim = TRUE)
+}

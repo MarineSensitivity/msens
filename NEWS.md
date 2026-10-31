@@ -1,3 +1,12 @@
+# msens 0.66.1
+
+* New `density_prior_sql()`: the "replaced surface" a folded-in density survey is calibrated against, in two
+  readings -- `mode = "value"` (the control's merged `max(er, suit)`, so a high-ER species' prior is ~100 and
+  the calibrated survey saturates) or `mode = "suit"` (the suitability where any suitability dataset models
+  the cell, the `er_score` only where nothing does, as `dps_sql()` values an er_mode = 'cell' taxon -- the
+  survey pattern survives for high-ER species). `merge_models.qmd`'s `FOLD_DENSITY_CAL=mass` uses `"value"`,
+  `FOLD_DENSITY_CAL=suit` the second. `test-density_cal.R`.
+
 # msens 0.66.0
 
 * New `density_cal_factors_sql()` / `density_calibrate_sql()`: the mass-preserving calibration of a folded-in
