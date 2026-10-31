@@ -1,3 +1,13 @@
+# msens 0.66.2
+
+* `dps_sql()` gains `er_floor`: a floor under the per-cell ER for a taxon that merges through the dps rule
+  without being a listed-entity species (v11 FOLD_DENSITY's density taxa). Their ER rows carry what the
+  ingest wrote -- a BirdLife range row the IUCN category alone -- so a LC murre with a governing `er_score`
+  of 10 (MBTA floor) was merged at 1 everywhere outside its survey domain, and every MMPA / MBTA floor and
+  US listing was lost for the 92 density taxa: most of the v11 attribution's "bird / mammal reshuffle"
+  (2026-10-31) was this, not the survey's percentile scale. `merge_models.qmd` passes each density taxon's
+  governing `er_score`. Regression fixture in `test-merge.R`.
+
 # msens 0.66.1
 
 * New `density_prior_sql()`: the "replaced surface" a folded-in density survey is calibrated against, in two

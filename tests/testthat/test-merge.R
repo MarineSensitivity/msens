@@ -504,3 +504,22 @@ test_that("density + ER: through dps_sql the survey value shows under a constant
   flat <- DBI::dbGetQuery(con, "SELECT cell_id, max(val) val FROM dps_src GROUP BY 1 ORDER BY 1")
   expect_equal(unique(flat$val), 100)
 })
+
+test_that("dps_sql(er_floor): a non-listed taxon merged through the dps rule keeps its governing er_score outside its per-cell ER rows (v11 fold-in regression)", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a LC murre (IUCN 1) whose governing er_score is 10 (MBTA floor): BirdLife range rows carry 1 at cells 1-3,
+  # the survey domain row (dens_dom, written at the governing er_score) carries 10 at cell 3, the survey (nc) 40 at cell 3
+  DBI::dbWriteTable(con, "dps_src", data.frame(
+    ms_merge_key = "T", ds_key = c("bl", "bl", "bl", "dens_dom", "nc"), cell_id = c(1L, 2L, 3L, 3L, 3L), val = c(1, 1, 1, 10, 40)))
+  g <- function(...) DBI::dbGetQuery(con, paste(dps_sql(c("bl", "dens_dom"), c("am", "nc"), ...), "ORDER BY cell_id"))
+  no_floor <- g()
+  expect_equal(no_floor$er,  c(1, 1, 10))        # the bug: cells 1-2 at the IUCN value, the floor only where dens_dom covers
+  expect_equal(no_floor$val, c(1, 1, 40))
+  floored <- g(er_floor = 10)
+  expect_equal(floored$er,  c(10, 10, 10))       # the governing er_score everywhere
+  expect_equal(floored$val, c(10, 10, 40))       # a range-only cell is valued at the ER; the survey cell keeps the survey
+  higher <- DBI::dbGetQuery(con, paste(dps_sql(c("bl", "dens_dom"), c("am", "nc"), er_floor = 5), "ORDER BY cell_id"))
+  expect_equal(higher$er, c(5, 5, 10))           # a per-cell ER above the floor is kept (critical habitat, a listed DPS)
+  expect_error(dps_sql("bl", "am", er_floor = -1))
+  expect_error(dps_sql("bl", "am", er_floor = c(1, 2)))
+})

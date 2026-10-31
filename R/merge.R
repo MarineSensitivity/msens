@@ -283,6 +283,14 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #' @param dps_ds character vector; ds_key(s) of the per-cell extinction-risk dataset(s) (`"dps_nmfs"`).
 #' @param suit_ds character vector; suitability ds_key(s) (`c("am", "ax")` from v9).
 #' @param src character; name of the source relation `(ms_merge_key, ds_key, cell_id, val)`.
+#' @param er_floor numeric or NULL; a FLOOR under the per-cell ER -- the taxon's governing `er_score`
+#'   (`merge_models_prep`: most protective across datasets, MMPA / MBTA floors, US listings over IUCN) for a
+#'   taxon that is NOT a listed-entity species but merges through this rule anyway (v11 FOLD_DENSITY: the
+#'   density taxa). The ER rows of the per-cell datasets carry whatever their ingest wrote (a BirdLife range
+#'   row carries the IUCN category alone, 1 for a LC murre whose governing er_score is 10 by the MBTA floor);
+#'   without the floor such a taxon would lose every national floor outside the cells its other ER rows cover
+#'   -- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. `NULL` (the default, the
+#'   dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.
 #' @return SQL string selecting `(mdl_key, cell_id, val, er)` — the whole-range surface with its
 #'   per-cell extinction risk.
 #' @examples
@@ -290,13 +298,15 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #' @concept merge
 #' @importFrom glue glue
 #' @export
-dps_sql <- function(dps_ds, suit_ds, src = "dps_src") {
+dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL) {
   stopifnot(is.character(dps_ds),  length(dps_ds)  >= 1, all(nzchar(dps_ds)),
-            is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)))
+            is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)),
+            is.null(er_floor) || (is.numeric(er_floor) && length(er_floor) == 1L && !is.na(er_floor) && er_floor >= 0))
   er_sql   <- paste(sprintf("'%s'", dps_ds),  collapse = ", ")
   suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
+  er_val   <- if (is.null(er_floor)) "max(val)" else sprintf("greatest(max(val), %s)", format(er_floor, scientific = FALSE))
   glue::glue(
-    "WITH er   AS (SELECT ms_merge_key, cell_id, max(val) er_value   FROM {src} WHERE ds_key IN ({er_sql})   GROUP BY 1, 2),\n",
+    "WITH er   AS (SELECT ms_merge_key, cell_id, {er_val} er_value   FROM {src} WHERE ds_key IN ({er_sql})   GROUP BY 1, 2),\n",
     "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2)\n",
     "SELECT er.ms_merge_key AS mdl_key, er.cell_id,\n",
     "       CAST(coalesce(suit.suit_value, er.er_value) AS DOUBLE) AS val,\n",

@@ -4,7 +4,7 @@
 \alias{dps_sql}
 \title{Merge rule for NMFS DPS-listed species: the model stays the distribution, ER rides beside it}
 \usage{
-dps_sql(dps_ds, suit_ds, src = "dps_src")
+dps_sql(dps_ds, suit_ds, src = "dps_src", er_floor = NULL)
 }
 \arguments{
 \item{dps_ds}{character vector; ds_key(s) of the per-cell extinction-risk dataset(s) (\code{"dps_nmfs"}).}
@@ -12,6 +12,15 @@ dps_sql(dps_ds, suit_ds, src = "dps_src")
 \item{suit_ds}{character vector; suitability ds_key(s) (\code{c("am", "ax")} from v9).}
 
 \item{src}{character; name of the source relation \verb{(ms_merge_key, ds_key, cell_id, val)}.}
+
+\item{er_floor}{numeric or NULL; a FLOOR under the per-cell ER -- the taxon's governing \code{er_score}
+(\code{merge_models_prep}: most protective across datasets, MMPA / MBTA floors, US listings over IUCN) for a
+taxon that is NOT a listed-entity species but merges through this rule anyway (v11 FOLD_DENSITY: the
+density taxa). The ER rows of the per-cell datasets carry whatever their ingest wrote (a BirdLife range
+row carries the IUCN category alone, 1 for a LC murre whose governing er_score is 10 by the MBTA floor);
+without the floor such a taxon would lose every national floor outside the cells its other ER rows cover
+-- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. \code{NULL} (the default, the
+dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.}
 }
 \value{
 SQL string selecting \verb{(mdl_key, cell_id, val, er)} — the whole-range surface with its
