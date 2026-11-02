@@ -4,7 +4,13 @@
 \alias{dps_sql}
 \title{Merge rule for NMFS DPS-listed species: the model stays the distribution, ER rides beside it}
 \usage{
-dps_sql(dps_ds, suit_ds, src = "dps_src", er_floor = NULL)
+dps_sql(
+  dps_ds,
+  suit_ds,
+  src = "dps_src",
+  er_floor = NULL,
+  fill = c("er", "presence")
+)
 }
 \arguments{
 \item{dps_ds}{character vector; ds_key(s) of the per-cell extinction-risk dataset(s) (\code{"dps_nmfs"}).}
@@ -21,6 +27,10 @@ row carries the IUCN category alone, 1 for a LC murre whose governing er_score i
 without the floor such a taxon would lose every national floor outside the cells its other ER rows cover
 -- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. \code{NULL} (the default, the
 dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.}
+
+\item{fill}{\code{"er"} (default: a footprint cell no suitability model covers is valued at its per-cell ER,
+the fitting point) or \code{"presence"} (100: the footprint as presence; v11 \code{RANGE_FILL=presence}, the
+single-counting reading where the ER enters only as the weight beside the value).}
 }
 \value{
 SQL string selecting \verb{(mdl_key, cell_id, val, er)} — the whole-range surface with its

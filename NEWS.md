@@ -1,3 +1,17 @@
+# msens 0.67.0
+
+* `merge_sql()` gains `basis` and `fill` (v11 `SHARE_BASIS` / `RANGE_FILL`): `basis = "taxon"` (default, the
+  v4-v10 rule) values a range cell `max(er, suit)`, so the governing extinction-risk score is baked into the
+  surface AND multiplied in again at scoring (a range-only cell scores er^2 / 100; the risk shapes the
+  distribution as well as weighting it). `basis = "cell"` single-counts: the merged value is the suitability
+  alone where a suitability model covers the cell and `fill` where none does (`"er"` = the governing score,
+  the fitting point; `"presence"` = 100, the range as presence). Both surfaces take the same basis; the
+  am-only branch is unchanged. Fixtures in `test-merge.R` assert both bases and that the defaults reproduce
+  the previous SQL byte for byte.
+* `dps_sql()` gains `fill` (`"er"` default, `"presence"` = 100) for footprint cells no suitability model
+  covers, the same choice for the cell-mode taxa (NMFS DPS species, turtles under TURTLE_RULE=dps, the
+  density taxa).
+
 # msens 0.66.2
 
 * `dps_sql()` gains `er_floor`: a floor under the per-cell ER for a taxon that merges through the dps rule

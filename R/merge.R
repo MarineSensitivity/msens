@@ -52,7 +52,20 @@
 #' mask) is applied \emph{before} this, on the merge input, by [supersede_sql()]: this function
 #' never sees an `am` cell it should ignore.
 #'
+#' \strong{Share basis (v11 `SHARE_BASIS`, 2026-11-02).} `basis = "taxon"` (the default, v4 to v10) values
+#' a range cell `max(er, suit)`: the governing extinction-risk score is baked into the surface, and because
+#' scoring multiplies the surface by that same score (`extrisk = er x val / 100`) a range-only cell scores
+#' `er^2 / 100` and the risk shapes the distribution as well as weighting it. `basis = "cell"` single-counts:
+#' the merged value is the suitability alone where a suitability model covers the cell and `fill` where none
+#' does (`"er"` = the governing score, the fitting point [dps_sql()] uses; `"presence"` = 100, the range as
+#' presence), so the risk enters once, as the weight. The am-only branch of `$us` is suitability already and
+#' is identical under both bases. Both surfaces take the same basis.
+#'
 #' @param suit_ds character vector of suitability dataset keys (default `"am"`)
+#' @param basis `"taxon"` (default: `max(er, suit)` on range cells) or `"cell"` (suitability alone, `fill`
+#'   where nothing models the cell). See the share-basis paragraph.
+#' @param fill with `basis = "cell"`: `"er"` (the governing er_score; default) or `"presence"` (100) for a
+#'   range cell no suitability model covers. Ignored for `basis = "taxon"`.
 #' @return named list of SQL strings: `b_range`, `b_am_rng` (CREATE OR REPLACE TABLE),
 #'   `global` and `us` (SELECT).
 #' @concept merge
@@ -64,9 +77,15 @@
 #'   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
 #'   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch
 #' }
-merge_sql <- function(suit_ds = "am") {
+merge_sql <- function(suit_ds = "am", basis = c("taxon", "cell"), fill = c("er", "presence")) {
   stopifnot(is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)))
+  basis <- match.arg(basis); fill <- match.arg(fill)
   suit <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
+  # the value of a range-footprint cell: taxon basis bakes the governing ER in (v4-v10); cell basis is the
+  # suitability alone, the fill where no suitability model covers the cell (single counting, v11 SHARE_BASIS)
+  val_expr <- switch(basis,
+    taxon = "greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
+    cell  = sprintf("coalesce(ba.am_val, %s)::DOUBLE AS val", if (fill == "er") "br.er" else "100"))
   list(
     # range footprint (non-suitability datasets) valued by the taxon's governing er_score
     b_range = paste(
@@ -87,13 +106,13 @@ merge_sql <- function(suit_ds = "am") {
     # GLOBAL viz surface = whole range footprint, masked: max(er, am-at-range)
     global = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
-      "       greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
+      paste0("       ", val_expr),
       "FROM b_range br",
       "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id"),
     # US scoring surface = (A) range∩US max(er, am-at-range) UNION (B) raw am∩US for TRUE am-only taxa
     us = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
-      "       greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
+      paste0("       ", val_expr),
       "FROM b_range br JOIN us_cells u ON br.cell_id = u.cell_id",
       "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id",
       "UNION ALL",
@@ -291,6 +310,9 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #'   without the floor such a taxon would lose every national floor outside the cells its other ER rows cover
 #'   -- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. `NULL` (the default, the
 #'   dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.
+#' @param fill `"er"` (default: a footprint cell no suitability model covers is valued at its per-cell ER,
+#'   the fitting point) or `"presence"` (100: the footprint as presence; v11 `RANGE_FILL=presence`, the
+#'   single-counting reading where the ER enters only as the weight beside the value).
 #' @return SQL string selecting `(mdl_key, cell_id, val, er)` — the whole-range surface with its
 #'   per-cell extinction risk.
 #' @examples
@@ -298,10 +320,12 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #' @concept merge
 #' @importFrom glue glue
 #' @export
-dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL) {
+dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL, fill = c("er", "presence")) {
   stopifnot(is.character(dps_ds),  length(dps_ds)  >= 1, all(nzchar(dps_ds)),
             is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)),
             is.null(er_floor) || (is.numeric(er_floor) && length(er_floor) == 1L && !is.na(er_floor) && er_floor >= 0))
+  fill     <- match.arg(fill)
+  fill_sql <- if (fill == "er") "er.er_value" else "100"
   er_sql   <- paste(sprintf("'%s'", dps_ds),  collapse = ", ")
   suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   er_val   <- if (is.null(er_floor)) "max(val)" else sprintf("greatest(max(val), %s)", format(er_floor, scientific = FALSE))
@@ -309,7 +333,7 @@ dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL) {
     "WITH er   AS (SELECT ms_merge_key, cell_id, {er_val} er_value   FROM {src} WHERE ds_key IN ({er_sql})   GROUP BY 1, 2),\n",
     "     suit AS (SELECT ms_merge_key, cell_id, max(val) suit_value FROM {src} WHERE ds_key IN ({suit_sql}) GROUP BY 1, 2)\n",
     "SELECT er.ms_merge_key AS mdl_key, er.cell_id,\n",
-    "       CAST(coalesce(suit.suit_value, er.er_value) AS DOUBLE) AS val,\n",
+    "       CAST(coalesce(suit.suit_value, {fill_sql}) AS DOUBLE) AS val,\n",
     "       CAST(er.er_value AS DOUBLE) AS er\n",
     "FROM er LEFT JOIN suit USING (ms_merge_key, cell_id)",
     .trim = FALSE)

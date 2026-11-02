@@ -523,3 +523,62 @@ test_that("dps_sql(er_floor): a non-listed taxon merged through the dps rule kee
   expect_error(dps_sql("bl", "am", er_floor = -1))
   expect_error(dps_sql("bl", "am", er_floor = c(1, 2)))
 })
+
+# v11 SHARE_BASIS / RANGE_FILL (2026-11-02): single counting. basis = "taxon" is the v4-v10 rule
+# (max(er, suit) on range cells; the risk is multiplied in again at scoring); basis = "cell" values a
+# range cell by its suitability alone and by `fill` where no suitability model covers it. The
+# discriminating fixture is T_ax_both at cell 2: er 30, suitability (ax) 20 -> taxon 30, cell 20.
+test_that("SHARE_BASIS=cell: range cells take the suitability alone, the fill where nothing models them; the defaults reproduce the taxon rule", {
+  con <- merge_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # the default IS the taxon basis, byte for byte
+  expect_identical(merge_sql(SUIT), merge_sql(SUIT, basis = "taxon"))
+  expect_identical(merge_sql(SUIT), merge_sql(SUIT, basis = "taxon", fill = "presence"))   # fill is moot
+  us_t  <- DBI::dbGetQuery(con, merge_sql(SUIT)$us)
+  us_c  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell")$us)                        # fill = er
+  us_p  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$us)
+  gl_c  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell")$global)
+  gl_p  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$global)
+  # T_ax_both (er 30): suitability 80 / 20 at cells 1-2 (ax inside the mask), 70 at cell 4 (am)
+  expect_equal(key_set(us_t, "T_ax_both"), c("1:80", "2:30", "4:70"))   # taxon: max(30, 20) = 30 at cell 2
+  expect_equal(key_set(us_c, "T_ax_both"), c("1:80", "2:20", "4:70"))   # cell: the suitability, 20
+  expect_equal(key_set(us_p, "T_ax_both"), c("1:80", "2:20", "4:70"))   # every range cell is modeled: fill moot
+  expect_equal(key_set(gl_c, "T_ax_both"), c("1:80", "2:20", "4:70", "100:95"))
+  # T_range (range-only, er 50): no suitability anywhere -> the fill decides
+  expect_equal(key_set(us_c, "T_range"), c("1:50", "2:50"))              # fill = er: as before
+  expect_equal(key_set(us_p, "T_range"), c("1:100", "2:100"))            # fill = presence
+  expect_equal(key_set(gl_p, "T_range"), c("1:100", "2:100", "100:100"))
+  # T_both_mask (er 30, am 60 / 40 at the range cells): suitability above the ER, identical under both bases;
+  # am beyond the range (cells 3, 101) stays masked under the cell basis too
+  expect_equal(key_set(us_c, "T_both_mask"), c("1:60", "2:40"))
+  expect_equal(key_set(gl_p, "T_both_mask"), c("1:60", "2:40"))
+  # the am-only branch and the no-EEZ exclusion are untouched by the basis
+  expect_equal(key_set(us_p, "T_am_single"), key_set(us_t, "T_am_single"))
+  expect_equal(nrow(us_p[us_p$mdl_key == "T_noeez", ]), 0L)
+  # single counting: scoring multiplies the governing er in ONCE. T_range under presence scores er x 100 / 100 = er
+  # per cell; under the taxon basis the same cell scored er x er / 100 (25 for er 50)
+  expect_equal(50 * us_p$val[us_p$mdl_key == "T_range"] / 100, c(50, 50))
+  expect_equal(50 * us_t$val[us_t$mdl_key == "T_range"] / 100, c(25, 25))
+  expect_error(merge_sql(SUIT, basis = "both"))
+  expect_error(merge_sql(SUIT, basis = "cell", fill = "zero"))
+})
+
+test_that("dps_sql(fill = 'presence'): a footprint cell with no suitability model is 100, not its ER; the ER beside it is unchanged", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  src <- data.frame(
+    ms_merge_key = "T_dps",
+    ds_key  = c("dps_nmfs", "dps_nmfs", "dps_nmfs", "dps_nmfs", "ax", "ax", "am", "am", "am"),
+    cell_id = c(1L, 2L, 3L, 4L, 1L, 2L, 2L, 4L, 5L),
+    val     = c(100, 50, 20, 20, 80, 40, 30, 5, 60), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  er_fill <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src"))
+  pr_fill <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", fill = "presence"))
+  expect_equal(key_set(er_fill, "T_dps"), c("1:80", "2:40", "3:20", "4:5"))    # the default, as before
+  expect_equal(key_set(pr_fill, "T_dps"), c("1:80", "2:40", "3:100", "4:5"))   # cell 3: nothing models it -> 100
+  expect_equal(pr_fill[order(pr_fill$cell_id), "er"], c(100, 50, 20, 20))      # the ER layer does not move
+  # with er_floor the floor still applies to the ER (and so to an er fill), never to a presence fill
+  fl <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", er_floor = 30, fill = "presence"))
+  expect_equal(key_set(fl, "T_dps"), c("1:80", "2:40", "3:100", "4:5"))
+  expect_equal(fl[order(fl$cell_id), "er"], c(100, 50, 30, 30))
+  expect_error(dps_sql("dps_nmfs", SUIT, fill = "none"))
+})
