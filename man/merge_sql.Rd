@@ -7,7 +7,7 @@
 merge_sql(
   suit_ds = "am",
   basis = c("taxon", "cell"),
-  fill = c("er", "presence")
+  fill = c("er", "presence", "mean")
 )
 }
 \arguments{
@@ -16,8 +16,12 @@ merge_sql(
 \item{basis}{\code{"taxon"} (default: \code{max(er, suit)} on range cells) or \code{"cell"} (suitability alone, \code{fill}
 where nothing models the cell). See the share-basis paragraph.}
 
-\item{fill}{with \code{basis = "cell"}: \code{"er"} (the governing er_score; default) or \code{"presence"} (100) for a
-range cell no suitability model covers. Ignored for \code{basis = "taxon"}.}
+\item{fill}{with \code{basis = "cell"}, the value of a range cell no suitability model covers: \code{"er"} (the
+governing er_score; default), \code{"presence"} (100), or \code{"mean"} (the mean of the taxon's modelled range
+cells -- what an average modelled cell of the species is worth -- and 100 for a taxon with no modelled
+range cell at all, the range taken as presence). \code{"mean"} is the v11 decision (Ben, 2026-11-02): it
+depends neither on the risk score (\code{"er"} tracks the risk, not the species) nor on a ceiling
+(\code{"presence"} lets unsurveyed range outweigh a survey). Ignored for \code{basis = "taxon"}.}
 }
 \value{
 named list of SQL strings: \code{b_range}, \code{b_am_rng} (CREATE OR REPLACE TABLE),

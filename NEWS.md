@@ -1,3 +1,11 @@
+# msens 0.68.0
+
+* `merge_sql(fill = "mean")` and `dps_sql(fill = "mean")`: a footprint cell no suitability model covers is
+  worth the mean of the taxon's modelled footprint cells (a window `avg()` over the taxon's joined range rows,
+  which skips the unmodelled cells' NULL), and 100 for a taxon with no modelled cell. For a density taxon that
+  is the calibrated survey mean over its domain. The v11 setting (`SHARE_BASIS=cell RANGE_FILL=mean`, decided
+  2026-11-02): the fill depends neither on the risk score (`er`) nor on a ceiling (`presence`).
+
 # msens 0.67.0
 
 * `merge_sql()` gains `basis` and `fill` (v11 `SHARE_BASIS` / `RANGE_FILL`): `basis = "taxon"` (default, the

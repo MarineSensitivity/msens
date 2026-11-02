@@ -9,7 +9,7 @@ dps_sql(
   suit_ds,
   src = "dps_src",
   er_floor = NULL,
-  fill = c("er", "presence")
+  fill = c("er", "presence", "mean")
 )
 }
 \arguments{
@@ -28,9 +28,11 @@ without the floor such a taxon would lose every national floor outside the cells
 -- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. \code{NULL} (the default, the
 dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.}
 
-\item{fill}{\code{"er"} (default: a footprint cell no suitability model covers is valued at its per-cell ER,
-the fitting point) or \code{"presence"} (100: the footprint as presence; v11 \code{RANGE_FILL=presence}, the
-single-counting reading where the ER enters only as the weight beside the value).}
+\item{fill}{the value of a footprint cell no suitability model covers: \code{"er"} (default: its per-cell ER,
+the fitting point), \code{"presence"} (100, the footprint as presence), or \code{"mean"} (the mean of the taxon's
+modelled footprint cells -- for a density taxon the calibrated survey mean over its domain, plus any
+other suitability model inside the footprint -- and 100 for a taxon with none; the v11 decision,
+\code{RANGE_FILL=mean}).}
 }
 \value{
 SQL string selecting \verb{(mdl_key, cell_id, val, er)} — the whole-range surface with its

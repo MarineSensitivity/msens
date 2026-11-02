@@ -64,8 +64,12 @@
 #' @param suit_ds character vector of suitability dataset keys (default `"am"`)
 #' @param basis `"taxon"` (default: `max(er, suit)` on range cells) or `"cell"` (suitability alone, `fill`
 #'   where nothing models the cell). See the share-basis paragraph.
-#' @param fill with `basis = "cell"`: `"er"` (the governing er_score; default) or `"presence"` (100) for a
-#'   range cell no suitability model covers. Ignored for `basis = "taxon"`.
+#' @param fill with `basis = "cell"`, the value of a range cell no suitability model covers: `"er"` (the
+#'   governing er_score; default), `"presence"` (100), or `"mean"` (the mean of the taxon's modelled range
+#'   cells -- what an average modelled cell of the species is worth -- and 100 for a taxon with no modelled
+#'   range cell at all, the range taken as presence). `"mean"` is the v11 decision (Ben, 2026-11-02): it
+#'   depends neither on the risk score (`"er"` tracks the risk, not the species) nor on a ceiling
+#'   (`"presence"` lets unsurveyed range outweigh a survey). Ignored for `basis = "taxon"`.
 #' @return named list of SQL strings: `b_range`, `b_am_rng` (CREATE OR REPLACE TABLE),
 #'   `global` and `us` (SELECT).
 #' @concept merge
@@ -77,15 +81,19 @@
 #'   us <- DBI::dbGetQuery(con, msq$us)      # US scoring surface for the batch
 #'   gl <- DBI::dbGetQuery(con, msq$global)  # global whole-range surface for the batch
 #' }
-merge_sql <- function(suit_ds = "am", basis = c("taxon", "cell"), fill = c("er", "presence")) {
+merge_sql <- function(suit_ds = "am", basis = c("taxon", "cell"), fill = c("er", "presence", "mean")) {
   stopifnot(is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)))
   basis <- match.arg(basis); fill <- match.arg(fill)
   suit <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   # the value of a range-footprint cell: taxon basis bakes the governing ER in (v4-v10); cell basis is the
   # suitability alone, the fill where no suitability model covers the cell (single counting, v11 SHARE_BASIS)
+  # the mean fill is a window over the taxon's joined range rows: avg() skips the NULL am_val of unmodelled
+  # cells, so it is the mean of the MODELLED range cells; a taxon with none falls through to presence
+  fill_expr <- switch(fill, er = "br.er", presence = "100",
+                      mean = "avg(ba.am_val) OVER (PARTITION BY br.ms_merge_key), 100")
   val_expr <- switch(basis,
     taxon = "greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
-    cell  = sprintf("coalesce(ba.am_val, %s)::DOUBLE AS val", if (fill == "er") "br.er" else "100"))
+    cell  = sprintf("coalesce(ba.am_val, %s)::DOUBLE AS val", fill_expr))
   list(
     # range footprint (non-suitability datasets) valued by the taxon's governing er_score
     b_range = paste(
@@ -310,9 +318,11 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #'   without the floor such a taxon would lose every national floor outside the cells its other ER rows cover
 #'   -- the v11 attribution's "bird / mammal reshuffle" (2026-10-31) was mostly this. `NULL` (the default, the
 #'   dps_nmfs and turtle rules whose ingests encode the per-polygon ER) applies none.
-#' @param fill `"er"` (default: a footprint cell no suitability model covers is valued at its per-cell ER,
-#'   the fitting point) or `"presence"` (100: the footprint as presence; v11 `RANGE_FILL=presence`, the
-#'   single-counting reading where the ER enters only as the weight beside the value).
+#' @param fill the value of a footprint cell no suitability model covers: `"er"` (default: its per-cell ER,
+#'   the fitting point), `"presence"` (100, the footprint as presence), or `"mean"` (the mean of the taxon's
+#'   modelled footprint cells -- for a density taxon the calibrated survey mean over its domain, plus any
+#'   other suitability model inside the footprint -- and 100 for a taxon with none; the v11 decision,
+#'   `RANGE_FILL=mean`).
 #' @return SQL string selecting `(mdl_key, cell_id, val, er)` — the whole-range surface with its
 #'   per-cell extinction risk.
 #' @examples
@@ -320,12 +330,13 @@ turtle_sql <- function(turtle_ds, suit_ds, ch_keys, src = "turtle_src",
 #' @concept merge
 #' @importFrom glue glue
 #' @export
-dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL, fill = c("er", "presence")) {
+dps_sql <- function(dps_ds, suit_ds, src = "dps_src", er_floor = NULL, fill = c("er", "presence", "mean")) {
   stopifnot(is.character(dps_ds),  length(dps_ds)  >= 1, all(nzchar(dps_ds)),
             is.character(suit_ds), length(suit_ds) >= 1, all(nzchar(suit_ds)),
             is.null(er_floor) || (is.numeric(er_floor) && length(er_floor) == 1L && !is.na(er_floor) && er_floor >= 0))
   fill     <- match.arg(fill)
-  fill_sql <- if (fill == "er") "er.er_value" else "100"
+  fill_sql <- switch(fill, er = "er.er_value", presence = "100",
+                     mean = "avg(suit.suit_value) OVER (PARTITION BY er.ms_merge_key), 100")
   er_sql   <- paste(sprintf("'%s'", dps_ds),  collapse = ", ")
   suit_sql <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   er_val   <- if (is.null(er_floor)) "max(val)" else sprintf("greatest(max(val), %s)", format(er_floor, scientific = FALSE))
