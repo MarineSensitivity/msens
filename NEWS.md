@@ -1,3 +1,9 @@
+# msens 0.68.1
+
+* `manifest_build()` declares `taxon_denom` and `release_method` under `tables` when the release carries them
+  (v10's share denominators and methods-as-data table were published but absent from `manifest.json`, so the
+  docs' table lookup reported them unpublished).
+
 # msens 0.68.0
 
 * `merge_sql(fill = "mean")` and `dps_sql(fill = "mean")`: a footprint cell no suitability model covers is

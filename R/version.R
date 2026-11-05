@@ -410,7 +410,8 @@ manifest_build <- function(con, ver, status = "released",
 
   want <- c("cell", "taxon", "model", "model_asset", "metric", "cell_metric",
             "zone", "zone_cell", "zone_metric", "zone_taxon", "dataset",
-            "taxon_model", "listing", "native_asset")
+            "taxon_model", "listing", "native_asset",
+            "taxon_denom", "release_method")   # v10+: the share denominators and the methods-as-data table
   tables <- stats::setNames(
     as.list(sprintf("%s/tables/%s.parquet", http, intersect(want, tbls))),
     intersect(want, tbls))
