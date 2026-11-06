@@ -422,7 +422,7 @@ test_that("denom_sql: land included, merged-global > AquaMaps, outside + inside,
   expect_equal(d["nat",     "total_global"], 10 / 0.25); expect_equal(d["nat", "source"], "fallback:literature")
   expect_equal(d["turtle",  "total_global"], 1.31);    expect_equal(d["turtle", "total_global_strip"], 1.30)
   expect_equal(d["turtle",  "total_usa"], 0.81);       expect_equal(d["turtle", "total_usa_strip"], 0.80)
-  expect_equal(d["dps",     "source"], "cell_er_unsupported")
+  expect_equal(d["dps", "source"], "national_only_unresolved")   # a cell-mode taxon resolves like any other (settled 2026-10-30): this one has only a national dataset
   expect_equal(d["low",     "total_global_strip"], 0.01)   # the strip is for premultiplied taxa only
   expect_equal(d$total_usa, vapply(d$ms_merge_key, function(k) DBI::dbGetQuery(con, sprintf(
     "SELECT SUM(val / 100.0 * area_km2) s FROM model_cell JOIN cell USING (cell_id) WHERE mdl_key = '%s'", k))$s, 0),

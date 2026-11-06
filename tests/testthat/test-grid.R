@@ -19,6 +19,7 @@ test_that("each release maps to the grid its cell_id actually indexes", {
   expect_equal(grid_for_ver("v8"), "global05")
   expect_equal(grid_for_ver("v9"), "global05")   # AquaX: same grid, position-mapped
   expect_equal(grid_for_ver("v10"), "global05")  # distribution share: scored on the v8 base
+  expect_equal(grid_for_ver("v11"), "global05")  # robust national release on the v10 base
   # never guess: an unregistered version must fail rather than inherit the newest grid
   expect_error(grid_for_ver("v99"), "no grid registered")
 })

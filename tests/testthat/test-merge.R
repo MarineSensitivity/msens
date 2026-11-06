@@ -94,6 +94,7 @@ merge_fixture_con <- function(supersede = TRUE) {
   msq <- merge_sql(SUIT)
   DBI::dbExecute(con, msq$b_range)
   DBI::dbExecute(con, msq$b_am_rng)
+  DBI::dbExecute(con, msq$b_fill)
   con
 }
 
@@ -394,4 +395,256 @@ test_that("turtle_sql validates its arguments", {
   expect_error(turtle_sql("turtles", "am", "ch", ch_outer = "yes"))
   expect_error(turtle_sql(character(0), "am", "ch"))
   expect_error(turtle_sql("turtles", "am", "ch", src = c("a", "b")))
+})
+
+# v11 Q3 (plan 2026-10-29 §4.2, D8, D9): the sea turtles leave their carve-out. TURTLE_RULE=dps merges
+# them like every DPS-listed species (dps_sql: the value is the SUITABILITY masked to the ER footprint,
+# the per-cell ER rides beside it) with the critical-habitat datasets EXTENDING the footprint at their
+# own ER (D8: "CH extends the footprint and keeps the ER value, fill = ER"); TURTLE_SUIT=ogm swaps the
+# turtles' suitability source to our own OBIS-method models (`og`) by superseding am (and ax) inside
+# the og footprint -- the same supersede_sql() mechanism AquaX uses, applied twice.
+test_that("TURTLE_RULE=dps: a turtle through dps_sql with critical habitat extending the ER footprint", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a leatherback-like taxon: SWOT DPS ER 100 at cells 1-2 (an Endangered DPS), 50 at cell 3 (Threatened);
+  # critical habitat (species-level ER 100) at cells 3 and 4 -- cell 4 is OUTSIDE the DPS footprint;
+  # suitability 80 / 0 / 40 / 60 at cells 1-4 and 70 at cell 5 (no ER at all: outside the range)
+  src <- data.frame(
+    ms_merge_key = "T_turtle",
+    ds_key  = c("rng_turtle_swot_dps","rng_turtle_swot_dps","rng_turtle_swot_dps", "ch_nmfs","ch_nmfs", "am","am","am","am"),
+    cell_id = c(1L, 2L, 3L, 3L, 4L, 1L, 3L, 4L, 5L),
+    val     = c(100, 100, 50, 100, 100, 80, 40, 60, 70), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  d <- DBI::dbGetQuery(con, dps_sql(c("rng_turtle_swot_dps", "ch_nmfs"), "am", src = "dps_src"))
+  d <- d[order(d$cell_id), ]
+  expect_equal(d$cell_id, 1:4)                          # cell 5 (no ER, no CH) is outside the footprint
+  expect_equal(d$val, c(80, 100, 40, 60))               # suitability where modelled; fill = ER where not (cell 2)
+  expect_equal(d$er,  c(100, 100, 100, 100))            # cell 3: max(DPS 50, CH 100) -- CH keeps its ER; cell 4 extends the footprint
+  # the old turtle rule on the same input is a different surface (ER multiplied in, floored at 1)
+  t <- DBI::dbGetQuery(con, turtle_sql("rng_turtle_swot_dps", "am", "ch_nmfs", src = "dps_src"))
+  expect_false(isTRUE(all.equal(sort(t$val), sort(d$val))))
+})
+
+test_that("TURTLE_SUIT=ogm: our og model supersedes am (and ax) for a turtle inside the og footprint only", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mc <- data.frame(
+    ms_merge_key = c(rep("T_turtle", 7), rep("T_fish", 3)),
+    ds_key  = c("am","am","am", "ax","ax", "og","og",  "am","am","og"),
+    cell_id = c(1L, 2L, 3L,    1L, 2L,    1L, 2L,     1L, 2L, 1L),
+    val     = c(50, 40, 30,    55, 45,    80, 20,     60, 70, 90), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  DBI::dbWriteTable(con, "og_mask", data.frame(cell_id = 1:2))          # where the og ensemble has a value
+  DBI::dbWriteTable(con, "turtle_og", data.frame(ms_merge_key = "T_turtle"))
+  keep <- paste(supersede_sql("am", taxa = "turtle_og", mask = "og_mask", src = "mc"),
+                "AND", supersede_sql("ax", taxa = "turtle_og", mask = "og_mask", src = "mc"))
+  b <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", keep, "ORDER BY ms_merge_key, ds_key, cell_id"))
+  tt <- b[b$ms_merge_key == "T_turtle", ]
+  # inside the og footprint (cells 1-2) am and ax are gone; am survives at cell 3 (outside); og stays
+  expect_equal(paste(tt$ds_key, tt$cell_id), c("am 3", "og 1", "og 2"))
+  # a taxon not in the turtle list keeps everything, og included (it would merge by max -- which is why
+  # merge_models_prep excludes og entirely when TURTLE_SUIT=am)
+  expect_equal(nrow(b[b$ms_merge_key == "T_fish", ]), 3)
+  # with the og rows superseding, the DPS turtle merge reads og as the suitability
+  DBI::dbExecute(con, paste0("CREATE TABLE dps_src AS SELECT * FROM mc WHERE ms_merge_key = 'T_turtle' AND (", keep, ")
+    UNION ALL SELECT 'T_turtle', 'rng_turtle_swot_dps', cell_id, 100 FROM (SELECT unnest([1, 2, 3]) AS cell_id)"))
+  d <- DBI::dbGetQuery(con, dps_sql("rng_turtle_swot_dps", c("am", "ax", "og"), src = "dps_src"))
+  d <- d[order(d$cell_id), ]
+  expect_equal(d$val, c(80, 20, 30))                    # og at 1-2, the surviving am at 3
+})
+
+# v11 Q6: density replaces suitability INSIDE each species' own survey domain (supersede_sql(by_taxon = TRUE)),
+# the domain is admitted to the footprint, and the taxon merges through dps_sql with a constant per-cell ER
+# (er_mode = 'cell') so the survey shows for an Endangered species too (max(er 100, suit) would hide it).
+
+test_that("supersede_sql(by_taxon = TRUE): a per-taxon mask drops am only inside THAT taxon's domain", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mc <- data.frame(
+    ms_merge_key = c(rep("T_shelf", 4), rep("T_ocean", 4), rep("T_nodens", 2)),
+    ds_key  = c("am", "am", "gm", "gm",   "am", "am", "gm", "gm",   "am", "am"),
+    cell_id = c(1L, 2L, 1L, 3L,          1L, 2L, 2L, 3L,           1L, 2L),
+    val     = c(50, 40, 90, 10,          50, 40, 70, 30,           50, 40), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  # the domains differ per taxon: shelf model covers cells 1,3; oceanic covers 2,3; T_nodens has none
+  DBI::dbWriteTable(con, "dens_dom", data.frame(ms_merge_key = c("T_shelf", "T_shelf", "T_ocean", "T_ocean"),
+                                                cell_id = c(1L, 3L, 2L, 3L)))
+  DBI::dbWriteTable(con, "dens_taxa", data.frame(ms_merge_key = c("T_shelf", "T_ocean")))
+  kept <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql("am", "dens_taxa", "dens_dom", "mc", by_taxon = TRUE)))
+  kept$mdl_key <- kept$ms_merge_key   # key_set() reads mdl_key (the merged output's name)
+  # T_shelf: am at cell 1 gone (inside its domain), am at 2 kept (outside its domain, though inside T_ocean's)
+  expect_equal(key_set(kept[kept$ds_key == "am", ], "T_shelf"), "2:40")
+  # T_ocean: am at cell 2 gone, am at 1 kept
+  expect_equal(key_set(kept[kept$ds_key == "am", ], "T_ocean"), "1:50")
+  # a taxon with no density keeps everything; density rows are never touched
+  expect_equal(key_set(kept, "T_nodens"), c("1:50", "2:40"))
+  expect_equal(sum(kept$ds_key == "gm"), 4L)
+  # the one-mask-for-all form would have dropped T_shelf's am at cell 2 as well (cell 2 is in SOME domain)
+  DBI::dbExecute(con, "CREATE TABLE dens_any AS SELECT DISTINCT cell_id FROM dens_dom")
+  kept_global <- DBI::dbGetQuery(con, paste("SELECT * FROM mc WHERE", supersede_sql("am", "dens_taxa", "dens_any", "mc")))
+  expect_equal(nrow(kept_global[kept_global$ds_key == "am" & kept_global$ms_merge_key == "T_shelf", ]), 0L)
+})
+
+test_that("density + ER: through dps_sql the survey value shows under a constant per-cell ER, inside and outside the domain", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # an Endangered whale (er 100): range cells 1-4 at the ER; am at 1,2,3; survey (gm) domain = cells 2,3,4 with
+  # density-suitability 80, 5, 0 (0 = surveyed, none seen); cell 4 is in the domain but outside the am
+  mc <- data.frame(
+    ms_merge_key = "T_whale",
+    ds_key  = c("er_range", "er_range", "er_range", "er_range", "am", "am", "am", "gm", "gm", "gm"),
+    cell_id = c(1L, 2L, 3L, 4L,                                  1L, 2L, 3L,   2L, 3L, 4L),
+    val     = c(100, 100, 100, 100,                              60, 70, 50,   80, 5, 0), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "mc", mc)
+  DBI::dbWriteTable(con, "dens_dom",  data.frame(ms_merge_key = "T_whale", cell_id = c(2L, 3L, 4L)))
+  DBI::dbWriteTable(con, "dens_taxa", data.frame(ms_merge_key = "T_whale"))
+  DBI::dbExecute(con, paste("CREATE TABLE dps_src AS SELECT * FROM mc WHERE",
+                            supersede_sql("am", "dens_taxa", "dens_dom", "mc", by_taxon = TRUE)))
+  res <- DBI::dbGetQuery(con, dps_sql("er_range", c("am", "gm"), src = "dps_src"))
+  # cell 1: outside the domain -> am 60; cells 2,3,4: the survey (80, 5, 0), am replaced; ER = 100 beside every cell
+  expect_equal(key_set(res, "T_whale"), c("1:60", "2:80", "3:5", "4:0"))
+  expect_equal(unique(res$er), 100)
+  # the old max(er, suit) rule would have painted the whale a flat 100 and hidden the survey entirely
+  flat <- DBI::dbGetQuery(con, "SELECT cell_id, max(val) val FROM dps_src GROUP BY 1 ORDER BY 1")
+  expect_equal(unique(flat$val), 100)
+})
+
+test_that("dps_sql(er_floor): a non-listed taxon merged through the dps rule keeps its governing er_score outside its per-cell ER rows (v11 fold-in regression)", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # a LC murre (IUCN 1) whose governing er_score is 10 (MBTA floor): BirdLife range rows carry 1 at cells 1-3,
+  # the survey domain row (dens_dom, written at the governing er_score) carries 10 at cell 3, the survey (nc) 40 at cell 3
+  DBI::dbWriteTable(con, "dps_src", data.frame(
+    ms_merge_key = "T", ds_key = c("bl", "bl", "bl", "dens_dom", "nc"), cell_id = c(1L, 2L, 3L, 3L, 3L), val = c(1, 1, 1, 10, 40)))
+  g <- function(...) DBI::dbGetQuery(con, paste(dps_sql(c("bl", "dens_dom"), c("am", "nc"), ...), "ORDER BY cell_id"))
+  no_floor <- g()
+  expect_equal(no_floor$er,  c(1, 1, 10))        # the bug: cells 1-2 at the IUCN value, the floor only where dens_dom covers
+  expect_equal(no_floor$val, c(1, 1, 40))
+  floored <- g(er_floor = 10)
+  expect_equal(floored$er,  c(10, 10, 10))       # the governing er_score everywhere
+  expect_equal(floored$val, c(10, 10, 40))       # a range-only cell is valued at the ER; the survey cell keeps the survey
+  higher <- DBI::dbGetQuery(con, paste(dps_sql(c("bl", "dens_dom"), c("am", "nc"), er_floor = 5), "ORDER BY cell_id"))
+  expect_equal(higher$er, c(5, 5, 10))           # a per-cell ER above the floor is kept (critical habitat, a listed DPS)
+  expect_error(dps_sql("bl", "am", er_floor = -1))
+  expect_error(dps_sql("bl", "am", er_floor = c(1, 2)))
+})
+
+# v11 SHARE_BASIS / RANGE_FILL (2026-11-02): single counting. basis = "taxon" is the v4-v10 rule
+# (max(er, suit) on range cells; the risk is multiplied in again at scoring); basis = "cell" values a
+# range cell by its suitability alone and by `fill` where no suitability model covers it. The
+# discriminating fixture is T_ax_both at cell 2: er 30, suitability (ax) 20 -> taxon 30, cell 20.
+test_that("SHARE_BASIS=cell: range cells take the suitability alone, the fill where nothing models them; the defaults reproduce the taxon rule", {
+  con <- merge_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  # the default IS the taxon basis, byte for byte
+  expect_identical(merge_sql(SUIT), merge_sql(SUIT, basis = "taxon"))
+  expect_identical(merge_sql(SUIT), merge_sql(SUIT, basis = "taxon", fill = "presence"))   # fill is moot
+  us_t  <- DBI::dbGetQuery(con, merge_sql(SUIT)$us)
+  us_c  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell")$us)                        # fill = er
+  us_p  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$us)
+  gl_c  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell")$global)
+  gl_p  <- DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$global)
+  # T_ax_both (er 30): suitability 80 / 20 at cells 1-2 (ax inside the mask), 70 at cell 4 (am)
+  expect_equal(key_set(us_t, "T_ax_both"), c("1:80", "2:30", "4:70"))   # taxon: max(30, 20) = 30 at cell 2
+  expect_equal(key_set(us_c, "T_ax_both"), c("1:80", "2:20", "4:70"))   # cell: the suitability, 20
+  expect_equal(key_set(us_p, "T_ax_both"), c("1:80", "2:20", "4:70"))   # every range cell is modeled: fill moot
+  expect_equal(key_set(gl_c, "T_ax_both"), c("1:80", "2:20", "4:70", "100:95"))
+  # T_range (range-only, er 50): no suitability anywhere -> the fill decides
+  expect_equal(key_set(us_c, "T_range"), c("1:50", "2:50"))              # fill = er: as before
+  expect_equal(key_set(us_p, "T_range"), c("1:100", "2:100"))            # fill = presence
+  expect_equal(key_set(gl_p, "T_range"), c("1:100", "2:100", "100:100"))
+  # T_both_mask (er 30, am 60 / 40 at the range cells): suitability above the ER, identical under both bases;
+  # am beyond the range (cells 3, 101) stays masked under the cell basis too
+  expect_equal(key_set(us_c, "T_both_mask"), c("1:60", "2:40"))
+  expect_equal(key_set(gl_p, "T_both_mask"), c("1:60", "2:40"))
+  # the am-only branch and the no-EEZ exclusion are untouched by the basis
+  expect_equal(key_set(us_p, "T_am_single"), key_set(us_t, "T_am_single"))
+  expect_equal(nrow(us_p[us_p$mdl_key == "T_noeez", ]), 0L)
+  # single counting: scoring multiplies the governing er in ONCE. T_range under presence scores er x 100 / 100 = er
+  # per cell; under the taxon basis the same cell scored er x er / 100 (25 for er 50)
+  expect_equal(50 * us_p$val[us_p$mdl_key == "T_range"] / 100, c(50, 50))
+  expect_equal(50 * us_t$val[us_t$mdl_key == "T_range"] / 100, c(25, 25))
+  expect_error(merge_sql(SUIT, basis = "both"))
+  expect_error(merge_sql(SUIT, basis = "cell", fill = "zero"))
+})
+
+test_that("dps_sql(fill = 'presence'): a footprint cell with no suitability model is 100, not its ER; the ER beside it is unchanged", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  src <- data.frame(
+    ms_merge_key = "T_dps",
+    ds_key  = c("dps_nmfs", "dps_nmfs", "dps_nmfs", "dps_nmfs", "ax", "ax", "am", "am", "am"),
+    cell_id = c(1L, 2L, 3L, 4L, 1L, 2L, 2L, 4L, 5L),
+    val     = c(100, 50, 20, 20, 80, 40, 30, 5, 60), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  er_fill <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src"))
+  pr_fill <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", fill = "presence"))
+  expect_equal(key_set(er_fill, "T_dps"), c("1:80", "2:40", "3:20", "4:5"))    # the default, as before
+  expect_equal(key_set(pr_fill, "T_dps"), c("1:80", "2:40", "3:100", "4:5"))   # cell 3: nothing models it -> 100
+  expect_equal(pr_fill[order(pr_fill$cell_id), "er"], c(100, 50, 20, 20))      # the ER layer does not move
+  # with er_floor the floor still applies to the ER (and so to an er fill), never to a presence fill
+  fl <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", er_floor = 30, fill = "presence"))
+  expect_equal(key_set(fl, "T_dps"), c("1:80", "2:40", "3:100", "4:5"))
+  expect_equal(fl[order(fl$cell_id), "er"], c(100, 50, 30, 30))
+  expect_error(dps_sql("dps_nmfs", SUIT, fill = "none"))
+})
+
+# RANGE_FILL=mean (the v11 decision, 2026-11-02): a range cell no suitability model covers is worth the mean of
+# the taxon's MODELLED range cells over the WHOLE range; a taxon with none takes presence (100). The fixture
+# taxon has a range of four cells, AquaMaps at three of them (60, 20 inside the US; 4 OUTSIDE it, cell 100;
+# mean 28), and AquaMaps beyond the range (cell 9, masked away and NOT in the mean). The US-only mean would be
+# 40: the window that produced it (2026-11-06) painted the scored surface with a different fill than the global
+# one, so this fixture is one the per-surface window FAILS.
+test_that("RANGE_FILL=mean: unmodelled range cells take the whole-range mean of the modelled range cells on BOTH surfaces; a taxon with none takes presence", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  mc <- data.frame(
+    ms_merge_key = c(rep("T_part", 8), rep("T_rngonly", 2)),
+    ds_key  = c("rng", "rng", "rng", "rng", "am", "am", "am", "am",   "rng", "rng"),
+    cell_id = c(1L, 2L, 3L, 100L, 1L, 2L, 100L, 9L,   1L, 100L),
+    val     = c(1, 1, 1, 1, 60, 20, 4, 90,   1, 1), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "b", mc)
+  DBI::dbWriteTable(con, "taxon", data.frame(ms_merge_key = c("T_part", "T_rngonly"), er_score = c(30, 50)))
+  DBI::dbWriteTable(con, "taxon_flags", data.frame(ms_merge_key = c("T_part", "T_rngonly"), has_suit = c(TRUE, FALSE), has_range = c(TRUE, TRUE)))
+  DBI::dbWriteTable(con, "us_cells", data.frame(cell_id = 1:5))
+  msq <- merge_sql(SUIT, basis = "cell", fill = "mean")
+  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng); DBI::dbExecute(con, msq$b_fill)
+  gl <- DBI::dbGetQuery(con, msq$global); us <- DBI::dbGetQuery(con, msq$us)
+  # modelled cells keep their suitability; cell 3 takes the mean of 60, 20 and 4 = 28 on BOTH surfaces (the
+  # modelled cell outside the US counts); cell 9 never enters
+  expect_equal(key_set(gl, "T_part"), c("1:60", "2:20", "3:28", "100:4"))
+  expect_equal(key_set(us, "T_part"), c("1:60", "2:20", "3:28"))
+  # a range-only taxon: no modelled cell, so presence
+  expect_equal(key_set(gl, "T_rngonly"), c("1:100", "100:100"))
+  # the same input under the er and presence fills, for contrast
+  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "er")$global), "T_part"), c("1:60", "2:20", "3:30", "100:4"))
+  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$global), "T_part"), c("1:60", "2:20", "3:100", "100:4"))
+  # the mean is per taxon: a second partially modelled taxon in the same batch does not share it
+  DBI::dbExecute(con, "INSERT INTO b VALUES ('T_part2', 'rng', 1, 1), ('T_part2', 'rng', 2, 1), ('T_part2', 'am', 1, 10)")
+  DBI::dbExecute(con, "INSERT INTO taxon VALUES ('T_part2', 20)")
+  DBI::dbExecute(con, "INSERT INTO taxon_flags VALUES ('T_part2', TRUE, TRUE)")
+  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng); DBI::dbExecute(con, msq$b_fill)
+  gl2 <- DBI::dbGetQuery(con, msq$global); us2 <- DBI::dbGetQuery(con, msq$us)
+  expect_equal(key_set(gl2, "T_part2"), c("1:10", "2:10"))
+  expect_equal(key_set(gl2, "T_part"), c("1:60", "2:20", "3:28", "100:4"))
+  expect_equal(key_set(us2, "T_part"), c("1:60", "2:20", "3:28"))
+})
+
+test_that("dps_sql(fill = 'mean'): an unmodelled footprint cell takes the mean of the modelled footprint cells, per taxon", {
+  skip_if_not_installed("glue")
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  src <- data.frame(
+    ms_merge_key = c(rep("T_dps", 9), rep("T_dps2", 3)),
+    ds_key  = c("dps_nmfs", "dps_nmfs", "dps_nmfs", "dps_nmfs", "ax", "ax", "am", "am", "am",   "dps_nmfs", "dps_nmfs", "am"),
+    cell_id = c(1L, 2L, 3L, 4L, 1L, 2L, 2L, 4L, 5L,   1L, 2L, 2L),
+    val     = c(100, 50, 20, 20, 80, 40, 30, 5, 60,   20, 20, 10), stringsAsFactors = FALSE)
+  DBI::dbWriteTable(con, "dps_src", src)
+  res <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", fill = "mean"))
+  # T_dps: modelled footprint cells 1 (80), 2 (40), 4 (5): mean 41.667 at cell 3; cell 5 (am 60) is beyond the
+  # footprint and masked away, so it is NOT in the mean
+  r1 <- res[res$mdl_key == "T_dps", ]; r1 <- r1[order(r1$cell_id), ]
+  expect_equal(r1$val, c(80, 40, (80 + 40 + 5) / 3, 5))
+  expect_equal(r1$er, c(100, 50, 20, 20))
+  # T_dps2: its own mean (10), not T_dps's
+  r2 <- res[res$mdl_key == "T_dps2", ]; r2 <- r2[order(r2$cell_id), ]
+  expect_equal(r2$val, c(10, 10))
+  # a taxon with no modelled footprint cell takes presence
+  DBI::dbExecute(con, "INSERT INTO dps_src VALUES ('T_dps3', 'dps_nmfs', 1, 50)")
+  r3 <- DBI::dbGetQuery(con, dps_sql("dps_nmfs", SUIT, src = "dps_src", fill = "mean"))
+  expect_equal(r3$val[r3$mdl_key == "T_dps3"], 100)
+  expect_error(dps_sql("dps_nmfs", SUIT, fill = "median"))
 })

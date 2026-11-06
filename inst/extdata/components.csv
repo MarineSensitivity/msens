@@ -1,0 +1,10 @@
+key,label,short,order,colour,icon,kind,label_v10
+bird,Seabirds,Seabirds,1,#7cc7f0,,species,Seabirds
+coral,Corals,Corals,2,#f08a3c,,species,Corals
+fish,Fish,Fish,3,#9f81e4,,species,Fish
+invertebrate,Invertebrates,Inverts,4,#e79ec4,,species,Invertebrates
+mammal,Marine Mammals,Mammals,5,#e6c700,,species,Marine Mammals
+primary_producer,Flora,Flora,6,#4cc9a0,,species,Primary Producers
+turtle,Sea Turtles,Turtles,7,#a1c76b,,species,Sea Turtles
+primprod,Productivity,Productivity,8,#4cc9a0,,environment,Primary productivity
+other,Other Species,Other,9,#b6bfd0,,species,Other Species

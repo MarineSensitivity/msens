@@ -4,10 +4,24 @@
 \alias{merge_sql}
 \title{v8 per-taxon merge rules (single source of truth)}
 \usage{
-merge_sql(suit_ds = "am")
+merge_sql(
+  suit_ds = "am",
+  basis = c("taxon", "cell"),
+  fill = c("er", "presence", "mean")
+)
 }
 \arguments{
 \item{suit_ds}{character vector of suitability dataset keys (default \code{"am"})}
+
+\item{basis}{\code{"taxon"} (default: \code{max(er, suit)} on range cells) or \code{"cell"} (suitability alone, \code{fill}
+where nothing models the cell). See the share-basis paragraph.}
+
+\item{fill}{with \code{basis = "cell"}, the value of a range cell no suitability model covers: \code{"er"} (the
+governing er_score; default), \code{"presence"} (100), or \code{"mean"} (the mean of the taxon's modelled range
+cells -- what an average modelled cell of the species is worth -- and 100 for a taxon with no modelled
+range cell at all, the range taken as presence). \code{"mean"} is the v11 decision (Ben, 2026-11-02): it
+depends neither on the risk score (\code{"er"} tracks the risk, not the species) nor on a ceiling
+(\code{"presence"} lets unsurveyed range outweigh a survey). Ignored for \code{basis = "taxon"}.}
 }
 \value{
 named list of SQL strings: \code{b_range}, \code{b_am_rng} (CREATE OR REPLACE TABLE),
@@ -66,6 +80,15 @@ asserts \verb{$global} has no cell outside the range footprint.
 simply \code{max()} here — which is why supersession (AquaX replacing AquaMaps inside the AquaX
 mask) is applied \emph{before} this, on the merge input, by \code{\link[=supersede_sql]{supersede_sql()}}: this function
 never sees an \code{am} cell it should ignore.
+
+\strong{Share basis (v11 \code{SHARE_BASIS}, 2026-11-02).} \code{basis = "taxon"} (the default, v4 to v10) values
+a range cell \code{max(er, suit)}: the governing extinction-risk score is baked into the surface, and because
+scoring multiplies the surface by that same score (\verb{extrisk = er x val / 100}) a range-only cell scores
+\code{er^2 / 100} and the risk shapes the distribution as well as weighting it. \code{basis = "cell"} single-counts:
+the merged value is the suitability alone where a suitability model covers the cell and \code{fill} where none
+does (\code{"er"} = the governing score, the fitting point \code{\link[=dps_sql]{dps_sql()}} uses; \code{"presence"} = 100, the range as
+presence), so the risk enters once, as the weight. The am-only branch of \verb{$us} is suitability already and
+is identical under both bases. Both surfaces take the same basis.
 }
 \examples{
 \dontrun{

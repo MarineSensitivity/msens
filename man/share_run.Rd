@@ -70,7 +70,7 @@ temporaries are dropped before returning.
 \details{
 Hard stops (the rule's own assertions): under \code{global}, every scored species must have a positive
 denominator from an accepted source (\code{merged_global}, \code{aquamaps}, \verb{fallback:*}; a
-\code{national_only_unresolved}, \code{cell_er_unsupported} or \code{none} row is refused -- curate
+\code{national_only_unresolved} or \code{none} row is refused -- curate
 \code{data/us_share_fallback.csv} or fix the totals) and \code{f_us <= 1}; every scored species must have a
 positive US total; every scored cell must lie in the national reference; every scored cell of a
 \code{cell}-mode taxon must have its per-cell ER and \code{model_cell_er} no duplicate row; a species may

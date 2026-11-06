@@ -286,6 +286,16 @@ test_that("manifest_build declares only tables the release actually has", {
   expect_equal(m$tables$taxon, "https://x/marine-atlas/v6/tables/taxon.parquet")
 })
 
+test_that("manifest_build declares the v10 share tables only when the release carries them", {
+  # v10 published taxon_denom + release_method but manifest.json never listed them (0.68.1)
+  m <- manifest_build(mk_rel(extras = c("taxon_denom", "release_method")), "v10",
+                      base = "https://x/marine-atlas")
+  expect_equal(m$tables$taxon_denom, "https://x/marine-atlas/v10/tables/taxon_denom.parquet")
+  expect_equal(m$tables$release_method, "https://x/marine-atlas/v10/tables/release_method.parquet")
+  m8 <- manifest_build(mk_rel(), "v8", base = "https://x/marine-atlas")
+  expect_false(any(c("taxon_denom", "release_method") %in% names(m8$tables)))
+})
+
 test_that("manifest_build refuses a version with no registered grid", {
   expect_error(manifest_build(mk_rel(), "v99"), "no grid registered")
 })

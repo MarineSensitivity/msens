@@ -26,7 +26,9 @@
 #'
 #' @param zone_fld character; the `zone.fld` of the zone set, default `"ecoregion_key"`.
 #' @param zone_cell character; name of the zone-cell relation, default `"zone_cell"`.
-#' @param zone character; name of the zone relation, default `"zone"`.
+#' @param zone character; name of the zone relation, default `"zone"`; `NULL` when `zone_cell` is the
+#'   FLAT shared extraction (`zones/{zone_set}/{grid}/zone_cell.parquet`: `zone_key, cell_id,
+#'   pct_covered`, no `zone_seq`), which the v8+ merge reads directly.
 #' @return SQL string selecting `(cell_id, zone_key)`, one row per cell, ordered by `cell_id`.
 #' @examples
 #' \dontrun{
@@ -44,18 +46,22 @@ cell_zone_major_sql <- function(
   stopifnot(
     is.character(zone_fld),  length(zone_fld)  == 1L, !is.na(zone_fld),  nzchar(zone_fld),
     is.character(zone_cell), length(zone_cell) == 1L, !is.na(zone_cell), nzchar(zone_cell),
-    is.character(zone),      length(zone)      == 1L, !is.na(zone),      nzchar(zone))
+    is.null(zone) || (is.character(zone) && length(zone) == 1L && !is.na(zone) && nzchar(zone)))
 
   fld_sql <- .sql_str(zone_fld)
 
   # cover per (cell, zone key), then rank: highest cover first, the first key alphabetically on a tie
-  glue::glue("
-    WITH cover AS (
+  cover_sql <- if (is.null(zone)) glue::glue("
+      SELECT zc.cell_id, zc.zone_key, max(zc.pct_covered) AS pct_covered
+      FROM {zone_cell} zc
+      GROUP BY zc.cell_id, zc.zone_key") else glue::glue("
       SELECT zc.cell_id, z.value AS zone_key, max(zc.pct_covered) AS pct_covered
       FROM {zone_cell} zc
       JOIN {zone} z ON z.zone_seq = zc.zone_seq
       WHERE z.fld = {fld_sql}
-      GROUP BY zc.cell_id, z.value
+      GROUP BY zc.cell_id, z.value")
+  glue::glue("
+    WITH cover AS ({cover_sql}
     ),
     ranked AS (
       SELECT cell_id, zone_key,
@@ -167,4 +173,89 @@ zone_exclude_sql <- function(
     JOIN ex ON ex.{id_col} = s.{id_col} AND ex.zone_key = cz.zone_key{ch_sql}
     ORDER BY s.{id_col}, s.cell_id",
     .trim = TRUE)
+}
+
+
+#' SQL selecting the model cells a taxon x zone WEIGHT touches, with the weight
+#'
+#' The sibling of [zone_exclude_sql()] for the v11 "gate + weight" tier (D11): where a species is
+#' kept in a zone but recorded well below its rate elsewhere, [encounter_weight()] gives a multiplier
+#' `w` in (0, 1) instead of a drop. This resolves the (model, zone, w) rows to (model, cell, w) over
+#' the model's cells in the zone, by the cell's majority zone, with critical habitat carved out
+#' (never downweighted) exactly as [zone_exclude_sql()] never excludes it. A weight of 0 is the gate
+#' itself, so [zone_adjust_sql()] can take one relation holding both.
+#'
+#' @param weights data frame with `id_col`, `zone_key`, `w` (numeric in [0, 1]).
+#' @inheritParams zone_exclude_sql
+#' @return SQL string selecting distinct `(id_col, cell_id, w)`, ordered by `id_col, cell_id`.
+#' @concept merge
+#' @importFrom glue glue
+#' @export
+#' @examples
+#' zone_weight_sql(data.frame(mdl_key = "ms_merge|WORMS:159023", zone_key = "EGOA", w = 0.14),
+#'                 id_col = "mdl_key")
+zone_weight_sql <- function(
+  weights,
+  src       = "model_cell",
+  cell_zone = "cell_zone",
+  ch_src    = NULL,
+  id_col    = "mdl_seq") {
+
+  stopifnot(
+    "`weights` must be a data frame with a `w` column" = is.data.frame(weights) && "w" %in% names(weights),
+    "`weights$w` must be numeric in [0, 1] without NA" =
+      is.numeric(weights$w) && !anyNA(weights$w) && all(weights$w >= 0 & weights$w <= 1),
+    "`weights` must not repeat a (model, zone) pair" =
+      !anyDuplicated(weights[c(id_col, "zone_key")]))
+  # the rows are validated (ids, zone keys, src / cell_zone / ch_src names) by the exclusion builder
+  invisible(zone_exclude_sql(weights[c(id_col, "zone_key")], src = src, cell_zone = cell_zone,
+                             ch_src = ch_src, id_col = id_col))
+  ids  <- weights[[id_col]]
+  id_lit <- if (id_col == "mdl_seq") format(as.integer(ids), scientific = FALSE, trim = TRUE)
+            else vapply(ids, .sql_str, "", USE.NAMES = FALSE)
+  rows <- paste0("(", id_lit, ", ", vapply(weights$zone_key, .sql_str, "", USE.NAMES = FALSE), ", ",
+                 format(weights$w, digits = 15, scientific = FALSE, trim = TRUE), ")")
+  values_sql <- paste(rows, collapse = ",\n  ")
+  ch_sql <- if (is.null(ch_src)) "" else paste0(
+    "\nWHERE NOT EXISTS (\n",
+    "  SELECT 1 FROM ", ch_src, " ch\n",
+    "  WHERE ch.", id_col, " = s.", id_col, " AND ch.cell_id = s.cell_id)")
+  glue::glue("
+    WITH ex({id_col}, zone_key, w) AS (
+      VALUES
+      {values_sql}
+    )
+    SELECT DISTINCT s.{id_col}, s.cell_id, ex.w
+    FROM {src} s
+    JOIN {cell_zone} cz ON cz.cell_id = s.cell_id
+    JOIN ex ON ex.{id_col} = s.{id_col} AND ex.zone_key = cz.zone_key{ch_sql}
+    ORDER BY s.{id_col}, s.cell_id",
+    .trim = TRUE)
+}
+
+#' Apply a (model, cell, w) adjustment relation to a merged surface
+#'
+#' Wraps a SELECT of `id_col, cell_id, val[, ...]` so that `val` is multiplied by the cell's weight
+#' (1 where the relation has no row) and gated rows (`w = 0`) are dropped. The relation is the union
+#' of [zone_exclude_sql()] rows at `w = 0` and [zone_weight_sql()] rows; with an EMPTY relation the
+#' result is the input, row for row and value for value (the control run), which `test-exclude.R`
+#' asserts. Columns other than `val` (e.g. the per-cell `er`) pass through untouched: a weight acts
+#' on the distribution, never on the extinction risk.
+#'
+#' @param sql character; a SELECT producing `id_col`, `cell_id`, `val` and any other columns.
+#' @param adj character; the adjustment relation (`id_col`, `cell_id`, `w`).
+#' @param id_col character; `"mdl_key"` (default) or `"mdl_seq"`.
+#' @return SQL string.
+#' @concept merge
+#' @importFrom glue glue
+#' @export
+zone_adjust_sql <- function(sql, adj = "zone_adj", id_col = "mdl_key") {
+  stopifnot(is.character(sql), length(sql) == 1L, nzchar(sql),
+            is.character(adj), length(adj) == 1L, nzchar(adj),
+            id_col %in% c("mdl_key", "mdl_seq"))
+  glue::glue("
+    SELECT m.* REPLACE (m.val * coalesce(a.w, 1) AS val)
+    FROM ({sql}) m
+    LEFT JOIN {adj} a ON a.{id_col} = m.{id_col} AND a.cell_id = m.cell_id
+    WHERE coalesce(a.w, 1) > 0", .trim = TRUE)
 }

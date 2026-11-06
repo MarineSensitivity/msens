@@ -169,3 +169,51 @@ test_that("bad arguments error", {
   expect_error(zone_exclude_sql(list(mdl_seq = 10L, zone_key = "A")),          "data frame")
   expect_error(cell_zone_major_sql(zone_fld = ""))
 })
+
+# v11 Q2 "gate + weight" (D11): zone_weight_sql resolves (model, zone, w) to (model, cell, w) the same
+# way the exclusion resolves cells (majority zone, critical habitat carved out); zone_adjust_sql applies
+# one relation of gates (w = 0) and weights to a merged surface, and an empty relation is the identity.
+
+test_that("zone_weight_sql: the weight rides on the exclusion's cell resolution, critical habitat carved out", {
+  con <- exclude_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  w <- data.frame(mdl_seq = c(10L, 20L), zone_key = c("A", "B"), w = c(0.25, 0.5))
+  d <- DBI::dbGetQuery(con, zone_weight_sql(w, ch_src = "ch_cells"))
+  ex <- DBI::dbGetQuery(con, zone_exclude_sql(w[c("mdl_seq", "zone_key")], ch_src = "ch_cells"))
+  expect_equal(d[c("mdl_seq", "cell_id")], ex[c("mdl_seq", "cell_id")])   # same cells as the gate would take
+  expect_equal(unique(d$w[d$mdl_seq == 10L]), 0.25)
+  expect_equal(unique(d$w[d$mdl_seq == 20L]), 0.5)
+  expect_false(any(d$mdl_seq == 10L & d$cell_id == 1L))                    # CH (10, 1) is never weighted
+  expect_error(zone_weight_sql(data.frame(mdl_seq = 10L, zone_key = "A", w = 1.5)), "numeric in")
+  expect_error(zone_weight_sql(rbind(w, w[1, ])), "repeat")
+})
+
+test_that("zone_adjust_sql: gates drop, weights multiply, other columns pass through, empty = identity", {
+  con <- exclude_fixture_con(); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE TABLE surf AS SELECT mdl_seq, cell_id, 80.0 AS val, 100.0 AS er FROM model_cell")
+  DBI::dbExecute(con, "CREATE TABLE zone_adj (mdl_seq INTEGER, cell_id INTEGER, w DOUBLE)")
+  base <- DBI::dbGetQuery(con, "SELECT * FROM surf ORDER BY 1, 2")
+  # empty relation: identity
+  same <- DBI::dbGetQuery(con, paste(zone_adjust_sql("SELECT * FROM surf", id_col = "mdl_seq"), "ORDER BY 1, 2"))
+  expect_equal(same, base)
+  # gate model 10 in A (cells 1,2,4 minus CH cell 1) and weight model 20 in B (cells 3, 5 minus CH 5) by 0.5
+  DBI::dbExecute(con, paste("INSERT INTO zone_adj SELECT mdl_seq, cell_id, 0 FROM (",
+    zone_exclude_sql(data.frame(mdl_seq = 10L, zone_key = "A"), ch_src = "ch_cells"), ")"))
+  DBI::dbExecute(con, paste("INSERT INTO zone_adj SELECT * FROM (",
+    zone_weight_sql(data.frame(mdl_seq = 20L, zone_key = "B", w = 0.5), ch_src = "ch_cells"), ")"))
+  d <- DBI::dbGetQuery(con, paste(zone_adjust_sql("SELECT * FROM surf", id_col = "mdl_seq"), "ORDER BY 1, 2"))
+  m10 <- d[d$mdl_seq == 10L, ]; m20 <- d[d$mdl_seq == 20L, ]; m30 <- d[d$mdl_seq == 30L, ]
+  expect_equal(m10$cell_id, c(1L, 3L, 5L, 6L, 7L))         # 2 and 4 gated; 1 is CH and stays
+  expect_equal(unique(m10$val), 80)
+  expect_equal(m20$cell_id, 1:7)                            # nothing dropped
+  expect_equal(m20$val, c(80, 80, 40, 80, 80, 80, 80))      # cell 3 halved; cell 5 is CH and stays 80
+  expect_equal(unique(c(m10$er, m20$er)), 100)              # er never touched
+  expect_equal(nrow(m30), 7L); expect_equal(unique(m30$val), 80)
+})
+
+test_that("cell_zone_major_sql(zone = NULL) reads the flat shared zone_cell (zone_key, cell_id, pct_covered)", {
+  con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "zc", data.frame(zone_key = c("A", "B", "A", "B", "C"), cell_id = c(1L, 1L, 2L, 2L, 3L),
+                                          pct_covered = c(60L, 40L, 50L, 50L, 100L)))
+  d <- DBI::dbGetQuery(con, cell_zone_major_sql(zone_cell = "zc", zone = NULL))
+  expect_equal(d$zone_key, c("A", "A", "C"))                # majority, then the alphabetical tie
+})

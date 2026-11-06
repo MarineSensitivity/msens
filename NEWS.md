@@ -1,3 +1,187 @@
+# msens 0.68.3
+
+* Merges `main`'s 0.60.2 (the Atlas picker's v10 national-family classification and the `scope` of every
+  `boot.json` layer, `.metric_scope()`) into the v11 line; `sp_cat` labels stay on the components registry
+  (`.SP_CAT_LABEL` is gone). No other behaviour change.
+
+# msens 0.68.2
+
+* `merge_sql(fill = "mean")`: the fill is one number per taxon, the mean of its modelled range cells over the
+  WHOLE range, built as a new `b_fill` table (callers run `msq$b_fill` after `msq$b_am_rng`) and joined into
+  both surfaces. It was a window over each surface's own rows, so the US scoring surface averaged only the
+  US-joined range rows and a taxon's scored fill differed from its global (denominator) fill (v11
+  `WORMS:105847`: 92.95 vs 91.59). The fixture now has a modelled range cell outside the US, which the window
+  fails.
+
+# msens 0.68.1
+
+* `manifest_build()` declares `taxon_denom` and `release_method` under `tables` when the release carries them
+  (v10's share denominators and methods-as-data table were published but absent from `manifest.json`, so the
+  docs' table lookup reported them unpublished).
+
+# msens 0.68.0
+
+* `merge_sql(fill = "mean")` and `dps_sql(fill = "mean")`: a footprint cell no suitability model covers is
+  worth the mean of the taxon's modelled footprint cells (a window `avg()` over the taxon's joined range rows,
+  which skips the unmodelled cells' NULL), and 100 for a taxon with no modelled cell. For a density taxon that
+  is the calibrated survey mean over its domain. The v11 setting (`SHARE_BASIS=cell RANGE_FILL=mean`, decided
+  2026-11-02): the fill depends neither on the risk score (`er`) nor on a ceiling (`presence`).
+
+# msens 0.67.0
+
+* `merge_sql()` gains `basis` and `fill` (v11 `SHARE_BASIS` / `RANGE_FILL`): `basis = "taxon"` (default, the
+  v4-v10 rule) values a range cell `max(er, suit)`, so the governing extinction-risk score is baked into the
+  surface AND multiplied in again at scoring (a range-only cell scores er^2 / 100; the risk shapes the
+  distribution as well as weighting it). `basis = "cell"` single-counts: the merged value is the suitability
+  alone where a suitability model covers the cell and `fill` where none does (`"er"` = the governing score,
+  the fitting point; `"presence"` = 100, the range as presence). Both surfaces take the same basis; the
+  am-only branch is unchanged. Fixtures in `test-merge.R` assert both bases and that the defaults reproduce
+  the previous SQL byte for byte.
+* `dps_sql()` gains `fill` (`"er"` default, `"presence"` = 100) for footprint cells no suitability model
+  covers, the same choice for the cell-mode taxa (NMFS DPS species, turtles under TURTLE_RULE=dps, the
+  density taxa).
+
+# msens 0.66.2
+
+* `dps_sql()` gains `er_floor`: a floor under the per-cell ER for a taxon that merges through the dps rule
+  without being a listed-entity species (v11 FOLD_DENSITY's density taxa). Their ER rows carry what the
+  ingest wrote -- a BirdLife range row the IUCN category alone -- so a LC murre with a governing `er_score`
+  of 10 (MBTA floor) was merged at 1 everywhere outside its survey domain, and every MMPA / MBTA floor and
+  US listing was lost for the 92 density taxa: most of the v11 attribution's "bird / mammal reshuffle"
+  (2026-10-31) was this, not the survey's percentile scale. `merge_models.qmd` passes each density taxon's
+  governing `er_score`. Regression fixture in `test-merge.R`.
+
+# msens 0.66.1
+
+* New `density_prior_sql()`: the "replaced surface" a folded-in density survey is calibrated against, in two
+  readings -- `mode = "value"` (the control's merged `max(er, suit)`, so a high-ER species' prior is ~100 and
+  the calibrated survey saturates) or `mode = "suit"` (the suitability where any suitability dataset models
+  the cell, the `er_score` only where nothing does, as `dps_sql()` values an er_mode = 'cell' taxon -- the
+  survey pattern survives for high-ER species). `merge_models.qmd`'s `FOLD_DENSITY_CAL=mass` uses `"value"`,
+  `FOLD_DENSITY_CAL=suit` the second. `test-density_cal.R`.
+
+# msens 0.66.0
+
+* New `density_cal_factors_sql()` / `density_calibrate_sql()`: the mass-preserving calibration of a folded-in
+  density survey (v11 Q6). Per taxon the survey values inside its domain are scaled by the ratio of the mean
+  replaced value (AquaMaps / AquaX suitability where it existed, the governing er_score where only a range
+  covered the cell) to the mean survey value over the same cells, capped at 100; cells with no prior value
+  keep the survey's pattern at that scale; a taxon with no prior value anywhere is left at 1 and flagged. The
+  v11 attribution showed the uncalibrated fold-in tripling California bird scores and halving Alaska's by
+  proportion; none of the 72 NCCOS bird species has an AquaMaps model, so a quantile map onto AquaMaps
+  (`density_to_suit("qmap")`, kept as an ingest option) cannot reach them. `merge_models.qmd` applies this
+  behind `FOLD_DENSITY_CAL=mass`. `test-density_cal.R`.
+
+# msens 0.65.2
+
+* `denom_sql()` resolves an `er_mode = 'cell'` taxon like any other (plain suitability totals; the per-cell
+  ER weights its share in `share_sql()`, as the header of `R/share.R` states) -- the `cell_er_unsupported`
+  placeholder is gone. v11's first full run put the six sea turtles (DPS rule) and ~100 density taxa in that
+  mode and the global-total stage refused them.
+
+# msens 0.65.1
+
+* `density_annual(interval =, weights =)`: the year as the WEIGHTED mean of the intervals (days per month via the
+  new `month_day_weights()`), an interval without a surface contributing zero over its weight. The MDAT v3
+  Atlantic bird package (BOEM 2023-060) delivers a day-weighted annual (ours equals it to 6e-8 on the native
+  grid; the plain mean differs by up to 8 % in a cell), and the Gulf cetacean months take the same weights.
+  Default unchanged (plain mean). `test-density.R`.
+
+# msens 0.65.0
+
+* `zone_weight_sql()` and `zone_adjust_sql()` (v11 Q2, D11 "gate + weight"): the weight sibling of
+  `zone_exclude_sql()` resolves `(model, zone, w)` to `(model, cell, w)` by the cell's majority zone with
+  critical habitat carved out, and the adjuster wraps a merged surface so `val` is multiplied by the
+  weight (1 where none) and gated rows (`w = 0`) drop; an empty relation is the identity (asserted),
+  and `er` passes through untouched. `cell_zone_major_sql(zone = NULL)` reads the flat shared
+  `zone_cell.parquet` (`zone_key, cell_id, pct_covered`) the v8+ merge has. `merge_models.qmd` applies
+  both behind `OCC_RULE=1` / `REGION_WEIGHT=1`.
+
+# msens 0.64.1
+
+* `occurrence_exclusions(gate = c("zero", "all"))`: by default only a zone with NO record under adequate
+  effort becomes an exclusion (D11 "gate where zero records"); a zone whose species is recorded but at a
+  rate well below its rate elsewhere stays and is downweighted by `encounter_weight()` instead. The v11
+  run at the D10 defaults dropped 5,721 species x ecoregion pairs, 1,904 of them with records -- bowhead
+  x Bering Sea (23 of 458 blocks), beluga x Bering Sea (51 of 604), sperm whale x Bering Sea, common eider
+  x Bering Sea: seasonal or coastal stocks whose 0.5-degree block rate the test cannot tell from absence.
+
+# msens 0.64.0
+
+* New `encounter_weight()` (v11 Q3b, D11 "gate + weight"): per species x zone, `w = min(1, rate / p_core)`
+  from the occurrence rule's counts -- a zone where a species is kept but recorded well below its rate
+  elsewhere is DOWNWEIGHTED (Tim White's "downweight, not drop"); `dropped` -> 0 (the gate), an override
+  or `unsearched` -> 1 (unsampled is unknown), no reference -> 1, never above 1, optional `floor`.
+  `merge_models.qmd` applies it as a multiplier behind `REGION_WEIGHT=1`. `test-encounter_weight.R`.
+
+# msens 0.63.1
+
+* `supersede_sql(by_taxon = TRUE)`: the mask can be PER TAXON (`ms_merge_key, cell_id`), so a dataset
+  supersedes another only inside each species' own footprint -- a density survey domain (v11 Q6: a Gulf
+  shelf model and an oceanic model cover different cells), the og turtle footprints. Default unchanged
+  (one `cell_id` mask for every superseded taxon, AquaX). `test-merge.R`: a per-taxon replace fixture
+  (the one-mask form over-drops, asserted) and a density + ER fixture through `dps_sql()` (an Endangered
+  whale's survey shows beside a constant per-cell ER; `max(er, suit)` would paint it a flat 100).
+
+# msens 0.63.0
+
+* `occurrence_rule(baseline = c("zones", "range"))`: what a zone's record rate is judged against. The new
+  default `"zones"` is the species' rate over the OTHER zones of the set (the study area's other
+  ecoregions); `"range"` is the whole modelled range (rule E as first written, kept as the sensitivity).
+  Found by the v11 exploration: the North Atlantic right whale's modelled range spans the North Atlantic,
+  most of it unsurveyed in OBIS (7,099 blocks, 352 with a record), so against the whole range its Gulf of
+  America pairs were not significantly fewer (p 0.4) and the Tim-White anchor did not fall out; against
+  its other US ecoregions (41 % of blocks on the Northeast shelf) they are (p 1e-7).
+  `occurrence_counts_sql()` adds `n_searched_zones` / `n_occupied_zones`; the result carries `baseline`.
+  `test-occurrence.R`: the fixture's stronghold is now a zone (as the Northeast shelf is) and a whale
+  fixture separates the two baselines.
+
+# msens 0.62.1
+
+* New `cells_within_sql()` and `cell_id_of()`: the cells within `d` km of a set of source cells by cell-id
+  arithmetic on a regular global grid (haversine on cell centres; the column index wraps so the antimeridian
+  needs no special case; every column when the cap holds a pole) -- the buffered-record range dataset `rng_occ`
+  (`ingest_obis-occurrence.qmd`) and the occurrence rule's zone dilation. `test-cells_within.R` checks the
+  windowed search against a brute-force scan of every cell at both sides of the antimeridian, the equator,
+  75 N, both poles and a 1-km buffer, plus the grouping.
+
+# msens 0.62.0
+
+* New `occurrence_counts_sql()`, `occurrence_rule()` and `occurrence_exclusions()` (`R/occurrence.R`): the v11
+  occurrence (vagrant) rule, one rule for every species (plan 2026-10-29 §4.3; Tim White 2026-10-21). Per species
+  x zone, on 0.5-degree blocks: the model's present units that were searched (a record of the species' effort
+  group, or of the species itself) against those holding a record of the species, judged by
+  `region_effort_test()` against the species' rate everywhere else (its whole modelled range), with a buffer
+  (`region_rec`: a record just outside the zone counts) and the overrides as data -- protected cells (critical
+  habitat, core areas) keep a zone, a narrow-range species is never dropped, an unsearched zone is kept and
+  flagged ("unsampled is unknown, not absent"); a dropped zone with a record on file is labelled "documented
+  occurrence only". `occurrence_exclusions()` hands the dropped pairs to `zone_exclude_sql()`. `test-occurrence.R`:
+  the East Bering Sea anchor falls out of the rule, the material guard keeps a sparse zone, the buffer, each
+  override, a record counting as search effort, and the block arithmetic (cell ids cast to BIGINT: DuckDB's
+  `//` on a DOUBLE column is not integer division).
+
+# msens 0.61.1
+
+* New `components_registry(path = NULL)` and `component_label(key, v11 = FALSE)`: ONE table of the scored
+  components (`inst/extdata/components.csv`, identical to `workflows/data/components.csv`: key, label, short,
+  order, colour, icon, kind, `label_v10`), validated on read (unique keys and orders, kind in species /
+  environment, no empty labels). The score notebooks take their species categories from it instead of a
+  hardcoded vector (keys do not change, so v10's digests cannot move).
+* `.metric_short_label(key, v11 = FALSE)` reads its component names from the registry; the default is
+  unchanged (v1-v10 wording), `v11 = TRUE` gives the v11 names (`primary_producer` is "Flora", `primprod` is
+  "Productivity"). `.SP_CAT_LABEL` is gone.
+
+# msens 0.61.0
+
+* New `vgpm_annual_integrate(monthly, year)` (+ `vgpm_days_in_months()`): the v11 primary-productivity rule.
+  Twelve monthly VGPM mean daily rates become one annual mean daily rate by the day-weighted integral over
+  the whole year, a month without a retrieval (polar night, ice) contributing ZERO rather than being
+  averaged away; a cell never observed stays `NA`; leap years use 366; `n_valid` counts the observed
+  months. Replaces the `mean(na.rm = TRUE)` of observed months that made a Bering/Arctic "year" the mean
+  of its bloom months (Hope Basin 875 vs ~470 g C m-2 yr-1 in situ; Mike Rasser's v1 review C76). Used by
+  `workflows/ingest_productivity.qmd` under `VGPM_INTEGRATED=1`. `test-productivity.R`: twelve months =
+  the day-weighted mean, six of twelve = 100 x days/365 (the regression), land stays NA, leap year.
+
 # msens 0.60.2
 
 * App bundle (`app_bundle_build()`): the v10 "across the nation" headline family is classified for the Atlas
@@ -8,6 +192,7 @@
   denominators (`_usa`, `_pooled`, `_global_strip`), `score_v10_n_components_*` and the companions
   (`_share_`, `_pct_world`, `_coverage`, `_n_species`) stay `raw`. `inst/schema/app_boot.schema.json`
   admits `scope`.
+* `grid_for_ver("v11")` is registered on `global05` (v11, the robust national release, bootstraps from v10).
 
 # msens 0.60.1
 
