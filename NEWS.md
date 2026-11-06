@@ -1,3 +1,9 @@
+# msens 0.68.3
+
+* Merges `main`'s 0.60.2 (the Atlas picker's v10 national-family classification and the `scope` of every
+  `boot.json` layer, `.metric_scope()`) into the v11 line; `sp_cat` labels stay on the components registry
+  (`.SP_CAT_LABEL` is gone). No other behaviour change.
+
 # msens 0.68.2
 
 * `merge_sql(fill = "mean")`: the fill is one number per taxon, the mean of its modelled range cells over the
@@ -178,6 +184,14 @@
 
 # msens 0.60.2
 
+* App bundle (`app_bundle_build()`): the v10 "across the nation" headline family is classified for the Atlas
+  picker -- `score_v10_equalweights_global` is a `composite`, `extrisk_{cat}_v10_global` and `primprod_v10`
+  are `component`s (they were all `raw`, so the Atlas showed no national components and no flower); every
+  `boot.json` layer carries a new `scope` (`"ecoregion"` for the v1-v9 rescaled family, `"nation"` for
+  the v10 headline, `null` otherwise) so the app can offer the two scoring modes side by side. The other
+  denominators (`_usa`, `_pooled`, `_global_strip`), `score_v10_n_components_*` and the companions
+  (`_share_`, `_pct_world`, `_coverage`, `_n_species`) stay `raw`. `inst/schema/app_boot.schema.json`
+  admits `scope`.
 * `grid_for_ver("v11")` is registered on `global05` (v11, the robust national release, bootstraps from v10).
 
 # msens 0.60.1

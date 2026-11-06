@@ -774,6 +774,7 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
     list(metric_key = k,
          label      = .metric_label(k, if (!is.null(r) && nrow(r)) r$description[1] else NA),
          category   = .metric_category(k),
+         scope      = .metric_scope(k),
          order      = i,
          colormap   = if (!is.null(r) && nrow(r) && "colormap" %in% names(r))
            r$colormap[1] else "spectral_r",
@@ -842,10 +843,27 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
   key
 }
 
+# `category` groups the Scores-lens layer picker (composite | component | raw); `scope` says which
+# scoring mode a composite / component belongs to -- "ecoregion" (v1-v9: rescaled 0-100 within each
+# ecoregion) or "nation" (v10, workflows/score_share_metrics.qmd: percent of each species' GLOBAL range
+# summed over the area, as a location quotient with 100 = the national average). Only the HEADLINE
+# denominator (global) is a component / composite; the usa / pooled / stripped variants and the
+# companions (share, pct_world, coverage, n_species) stay raw, reachable but not drawn by default.
 .metric_category <- function(key) {
+  if (grepl("^score_v10_equalweights_global$", key)) return("composite")
+  if (grepl("^score_v10_", key)) return("raw")                 # n_components, other denominators
   if (grepl("^score_", key)) return("composite")
   if (grepl("_ecoregion_rescaled$", key)) return("component")
+  if (grepl("^extrisk_[a-z_]+_v10_global$", key) || identical(key, "primprod_v10")) return("component")
   "raw"
+}
+
+.metric_scope <- function(key) {
+  if (grepl("^score_v10_equalweights_global$", key) || grepl("^extrisk_[a-z_]+_v10_global$", key) ||
+      identical(key, "primprod_v10")) return("nation")
+  if (grepl("^score_v10_", key)) return(NA_character_)
+  if (grepl("^score_", key) || grepl("_ecoregion_rescaled$", key)) return("ecoregion")
+  NA_character_
 }
 
 # sp_cat -> display label comes from the components registry

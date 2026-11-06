@@ -2122,3 +2122,29 @@ test_that("source_key (0.50.0): a v7-shaped shard asset names the feature key th
   sh <- app_taxon_shards(con, "v7")
   expect_error(app_validate(within(sh[[1]], taxa[[1]]$inputs[[1]]$assets[[1]]$source_key <- 5), "taxon"))
 })
+
+test_that(".metric_category() / .metric_scope(): the v10 'across the nation' headline family is component / composite, scoped 'nation'", {
+  # the ecoregion family (v1-v9) is unchanged
+  expect_equal(msens:::.metric_category("score_ecoregion_rescaled"), "composite")
+  expect_equal(msens:::.metric_category("extrisk_bird_ecoregion_rescaled"), "component")
+  expect_equal(msens:::.metric_category("extrisk_bird"), "raw")
+  expect_equal(msens:::.metric_scope("score_ecoregion_rescaled"), "ecoregion")
+  expect_equal(msens:::.metric_scope("extrisk_bird_ecoregion_rescaled"), "ecoregion")
+  expect_true(is.na(msens:::.metric_scope("extrisk_bird")))
+  # v10 headline (global denominator): one composite, one component per species category + primprod
+  expect_equal(msens:::.metric_category("score_v10_equalweights_global"), "composite")
+  expect_equal(msens:::.metric_category("extrisk_bird_v10_global"), "component")
+  expect_equal(msens:::.metric_category("extrisk_primary_producer_v10_global"), "component")
+  expect_equal(msens:::.metric_category("primprod_v10"), "component")
+  expect_equal(msens:::.metric_scope("score_v10_equalweights_global"), "nation")
+  expect_equal(msens:::.metric_scope("extrisk_bird_v10_global"), "nation")
+  expect_equal(msens:::.metric_scope("primprod_v10"), "nation")
+  # the other denominators, the stripped variant and the companions stay raw and unscoped: never a second
+  # composite the picker would default to, never a petal
+  for (k in c("score_v10_equalweights_usa", "score_v10_equalweights_pooled", "score_v10_equalweights_global_strip",
+              "score_v10_n_components_global", "extrisk_bird_v10_usa", "extrisk_bird_share_global",
+              "extrisk_bird_pct_world", "extrisk_bird_coverage", "extrisk_bird_n_species", "primprod_coverage")) {
+    expect_equal(msens:::.metric_category(k), "raw", info = k)
+    expect_true(is.na(msens:::.metric_scope(k)), info = k)
+  }
+})
