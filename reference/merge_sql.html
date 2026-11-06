@@ -20,7 +20,7 @@ being silently lost by a wrong sequence or minor tweak."><script async src="http
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.60.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,7 +57,11 @@ being silently lost by a wrong sequence or minor tweak.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">merge_sql</span><span class="op">(</span>suit_ds <span class="op">=</span> <span class="st">"am"</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">merge_sql</span><span class="op">(</span></span>
+<span>  suit_ds <span class="op">=</span> <span class="st">"am"</span>,</span>
+<span>  basis <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"taxon"</span>, <span class="st">"cell"</span><span class="op">)</span>,</span>
+<span>  fill <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"er"</span>, <span class="st">"presence"</span>, <span class="st">"mean"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -66,6 +70,20 @@ being silently lost by a wrong sequence or minor tweak.</p>
 
 <dl><dt id="arg-suit-ds">suit_ds<a class="anchor" aria-label="anchor" href="#arg-suit-ds"></a></dt>
 <dd><p>character vector of suitability dataset keys (default <code>"am"</code>)</p></dd>
+
+
+<dt id="arg-basis">basis<a class="anchor" aria-label="anchor" href="#arg-basis"></a></dt>
+<dd><p><code>"taxon"</code> (default: <code>max(er, suit)</code> on range cells) or <code>"cell"</code> (suitability alone, <code>fill</code>
+where nothing models the cell). See the share-basis paragraph.</p></dd>
+
+
+<dt id="arg-fill">fill<a class="anchor" aria-label="anchor" href="#arg-fill"></a></dt>
+<dd><p>with <code>basis = "cell"</code>, the value of a range cell no suitability model covers: <code>"er"</code> (the
+governing er_score; default), <code>"presence"</code> (100), or <code>"mean"</code> (the mean of the taxon's modelled range
+cells – what an average modelled cell of the species is worth – and 100 for a taxon with no modelled
+range cell at all, the range taken as presence). <code>"mean"</code> is the v11 decision (Ben, 2026-11-02): it
+depends neither on the risk score (<code>"er"</code> tracks the risk, not the species) nor on a ceiling
+(<code>"presence"</code> lets unsurveyed range outweigh a survey). Ignored for <code>basis = "taxon"</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -118,6 +136,14 @@ asserts <code>$global</code> has no cell outside the range footprint.</p>
 simply <code><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max()</a></code> here — which is why supersession (AquaX replacing AquaMaps inside the AquaX
 mask) is applied <em>before</em> this, on the merge input, by <code><a href="supersede_sql.html">supersede_sql()</a></code>: this function
 never sees an <code>am</code> cell it should ignore.</p>
+<p><strong>Share basis (v11 <code>SHARE_BASIS</code>, 2026-11-02).</strong> <code>basis = "taxon"</code> (the default, v4 to v10) values
+a range cell <code>max(er, suit)</code>: the governing extinction-risk score is baked into the surface, and because
+scoring multiplies the surface by that same score (<code>extrisk = er x val / 100</code>) a range-only cell scores
+<code>er^2 / 100</code> and the risk shapes the distribution as well as weighting it. <code>basis = "cell"</code> single-counts:
+the merged value is the suitability alone where a suitability model covers the cell and <code>fill</code> where none
+does (<code>"er"</code> = the governing score, the fitting point <code><a href="dps_sql.html">dps_sql()</a></code> uses; <code>"presence"</code> = 100, the range as
+presence), so the risk enters once, as the weight. The am-only branch of <code>$us</code> is suitability already and
+is identical under both bases. Both surfaces take the same basis.</p>
     </div>
 
     <div class="section level2">

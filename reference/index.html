@@ -12,7 +12,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.60.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -650,6 +650,13 @@
 
         <dt>
 
+          <code><a href="month_day_weights.html">month_day_weights()</a></code>
+
+        </dt>
+        <dd>Days in each calendar month, as weights for <code><a href="../reference/density_annual.html">density_annual()</a></code></dd>
+
+        <dt>
+
           <code><a href="poly_cell_overlap.html">poly_cell_overlap()</a></code>
 
         </dt>
@@ -657,10 +664,38 @@
 
         <dt>
 
+          <code><a href="vgpm_annual_integrate.html">vgpm_annual_integrate()</a></code>
+
+        </dt>
+        <dd>Integrate monthly productivity over a year (no-retrieval months count as zero)</dd>
+
+        <dt>
+
           <code><a href="cell_zone_major_sql.html">cell_zone_major_sql()</a></code>
 
         </dt>
         <dd>SQL assigning each cell to its single majority zone</dd>
+
+        <dt>
+
+          <code><a href="density_cal_factors_sql.html">density_cal_factors_sql()</a></code>
+
+        </dt>
+        <dd>SQL computing the per-taxon mass-preserving factor of a folded-in density survey</dd>
+
+        <dt>
+
+          <code><a href="density_calibrate_sql.html">density_calibrate_sql()</a></code>
+
+        </dt>
+        <dd>SQL applying the mass-preserving factors to a merge-input relation</dd>
+
+        <dt>
+
+          <code><a href="density_prior_sql.html">density_prior_sql()</a></code>
+
+        </dt>
+        <dd>SQL building the "replaced surface" a folded-in density survey is calibrated against</dd>
 
         <dt>
 
@@ -692,10 +727,24 @@
 
         <dt>
 
+          <code><a href="zone_adjust_sql.html">zone_adjust_sql()</a></code>
+
+        </dt>
+        <dd>Apply a (model, cell, w) adjustment relation to a merged surface</dd>
+
+        <dt>
+
           <code><a href="zone_exclude_sql.html">zone_exclude_sql()</a></code>
 
         </dt>
         <dd>SQL selecting the model cells a taxon x zone exclusion removes</dd>
+
+        <dt>
+
+          <code><a href="zone_weight_sql.html">zone_weight_sql()</a></code>
+
+        </dt>
+        <dd>SQL selecting the model cells a taxon x zone WEIGHT touches, with the weight</dd>
 
         <dt>
 
@@ -1881,6 +1930,13 @@
 
         <dt>
 
+          <code><a href="cell_id_of.html">cell_id_of()</a></code>
+
+        </dt>
+        <dd>The cell id of a longitude / latitude on a regular global grid</dd>
+
+        <dt>
+
           <code><a href="cells_in_polygon_grid.html">cells_in_polygon_grid()</a></code>
 
         </dt>
@@ -1895,6 +1951,27 @@
 
         <dt>
 
+          <code><a href="cells_within_sql.html">cells_within_sql()</a></code>
+
+        </dt>
+        <dd>SQL for the cells within <code>d_km</code> of a set of source cells</dd>
+
+        <dt>
+
+          <code><a href="component_label.html">component_label()</a></code>
+
+        </dt>
+        <dd>The display label of scored components</dd>
+
+        <dt>
+
+          <code><a href="components_registry.html">components_registry()</a></code>
+
+        </dt>
+        <dd>The scored components: one registry of keys and labels</dd>
+
+        <dt>
+
           <code><a href="confusion_at.html">confusion_at()</a></code>
 
         </dt>
@@ -1906,6 +1983,13 @@
 
         </dt>
         <dd>SQL for each species' global denominator (its value-area total over its whole modelled range)</dd>
+
+        <dt>
+
+          <code><a href="encounter_weight.html">encounter_weight()</a></code>
+
+        </dt>
+        <dd>Encounter-rate weight per species x zone, from the occurrence rule's counts</dd>
 
         <dt>
 
@@ -1983,6 +2067,27 @@
 
         </dt>
         <dd>Is a dataset the same source vintage in two releases?</dd>
+
+        <dt>
+
+          <code><a href="occurrence_counts_sql.html">occurrence_counts_sql()</a></code>
+
+        </dt>
+        <dd>SQL for the counts the occurrence rule needs, per species x zone</dd>
+
+        <dt>
+
+          <code><a href="occurrence_exclusions.html">occurrence_exclusions()</a></code>
+
+        </dt>
+        <dd>The exclusion rows the occurrence rule hands to the merge</dd>
+
+        <dt>
+
+          <code><a href="occurrence_rule.html">occurrence_rule()</a></code>
+
+        </dt>
+        <dd>The occurrence rule: per species x zone, kept / dropped / unsearched, with the overrides</dd>
 
         <dt>
 

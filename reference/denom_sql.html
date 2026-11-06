@@ -14,8 +14,10 @@ source = 'aquamaps'; a taxon with AquaMaps cells only inside the US gets D_s = t
 A taxon whose datasets are ALL national (national_ds) and that has no fallback row gets
 source = 'national_only_unresolved' with its US-range total as a placeholder, so the caller
 can refuse or curate it (data/us_share_fallback.csv) rather than score a species at share 1.
-An er_mode = 'cell' taxon is flagged cell_er_unsupported until its treatment is settled
-(see the header of R/share.R; no v10 taxon is in that mode)."><meta property="og:description" content="The share needs, per species, D_s = sum over range(s) of v * A on the same val scale as the
+An er_mode = 'cell' taxon (NMFS DPS species; v11's turtles and density taxa) resolves like any other: its
+totals are PLAIN suitability totals and the per-cell ER weights its share in share_sql() (the header of
+R/share.R; settled 2026-10-30 when the first full v11 run met 100+ such taxa – cell_er_unsupported was
+the placeholder until then)."><meta property="og:description" content="The share needs, per species, D_s = sum over range(s) of v * A on the same val scale as the
 US scoring surface. Three sources, in order of precedence (page §8 and §9b; the review page's
 scripts/v10_review/02-05 recipe):
 a curated fallback fraction f (fallback): D_s = total_usa / f, source = 'fallback:&amp;lt;method&amp;gt;' – it takes precedence because a national-only taxon's &quot;global&quot;
@@ -30,8 +32,10 @@ source = 'aquamaps'; a taxon with AquaMaps cells only inside the US gets D_s = t
 A taxon whose datasets are ALL national (national_ds) and that has no fallback row gets
 source = 'national_only_unresolved' with its US-range total as a placeholder, so the caller
 can refuse or curate it (data/us_share_fallback.csv) rather than score a species at share 1.
-An er_mode = 'cell' taxon is flagged cell_er_unsupported until its treatment is settled
-(see the header of R/share.R; no v10 taxon is in that mode)."><script async src="https://www.googletagmanager.com/gtag/js?id=G-9HW6L751XG"></script><script>
+An er_mode = 'cell' taxon (NMFS DPS species; v11's turtles and density taxa) resolves like any other: its
+totals are PLAIN suitability totals and the per-cell ER weights its share in share_sql() (the header of
+R/share.R; settled 2026-10-30 when the first full v11 run met 100+ such taxa – cell_er_unsupported was
+the placeholder until then)."><script async src="https://www.googletagmanager.com/gtag/js?id=G-9HW6L751XG"></script><script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){ dataLayer.push(arguments); }
   gtag('js', new Date());
@@ -44,7 +48,7 @@ An er_mode = 'cell' taxon is flagged cell_er_unsupported until its treatment is 
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.60.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -86,8 +90,10 @@ dedup – as the US am-only branch keeps duplicates) plus the merged US surface 
 </ol><p>A taxon whose datasets are ALL national (<code>national_ds</code>) and that has no fallback row gets
 <code>source = 'national_only_unresolved'</code> with its US-range total as a placeholder, so the caller
 can refuse or curate it (<code>data/us_share_fallback.csv</code>) rather than score a species at share 1.
-An <code>er_mode = 'cell'</code> taxon is flagged <code>cell_er_unsupported</code> until its treatment is settled
-(see the header of <code>R/share.R</code>; no v10 taxon is in that mode).</p>
+An <code>er_mode = 'cell'</code> taxon (NMFS DPS species; v11's turtles and density taxa) resolves like any other: its
+totals are PLAIN suitability totals and the per-cell ER weights its share in <code><a href="share_sql.html">share_sql()</a></code> (the header of
+<code>R/share.R</code>; settled 2026-10-30 when the first full v11 run met 100+ such taxa – <code>cell_er_unsupported</code> was
+the placeholder until then).</p>
     </div>
 
     <div class="section level2">

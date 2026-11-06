@@ -18,7 +18,7 @@ give the same assignment regardless of zone_seq order or scan order."><script as
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.60.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -74,7 +74,8 @@ give the same assignment regardless of <code>zone_seq</code> order or scan order
 
 
 <dt id="arg-zone">zone<a class="anchor" aria-label="anchor" href="#arg-zone"></a></dt>
-<dd><p>character; name of the zone relation, default <code>"zone"</code>.</p></dd>
+<dd><p>character; name of the zone relation, default <code>"zone"</code>; <code>NULL</code> when <code>zone_cell</code> is the
+FLAT shared extraction (<code>zones/{zone_set}/{grid}/zone_cell.parquet</code>: <code>zone_key, cell_id, pct_covered</code>, no <code>zone_seq</code>), which the v8+ merge reads directly.</p></dd>
 
 </dl></div>
     <div class="section level2">
