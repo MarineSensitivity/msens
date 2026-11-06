@@ -87,10 +87,11 @@ merge_sql <- function(suit_ds = "am", basis = c("taxon", "cell"), fill = c("er",
   suit <- paste(sprintf("'%s'", suit_ds), collapse = ", ")
   # the value of a range-footprint cell: taxon basis bakes the governing ER in (v4-v10); cell basis is the
   # suitability alone, the fill where no suitability model covers the cell (single counting, v11 SHARE_BASIS)
-  # the mean fill is a window over the taxon's joined range rows: avg() skips the NULL am_val of unmodelled
-  # cells, so it is the mean of the MODELLED range cells; a taxon with none falls through to presence
-  fill_expr <- switch(fill, er = "br.er", presence = "100",
-                      mean = "avg(ba.am_val) OVER (PARTITION BY br.ms_merge_key), 100")
+  # the mean fill is ONE number per taxon, the mean of its MODELLED range cells over the WHOLE range (b_fill,
+  # from b_am_rng), joined into both surfaces; a taxon with none falls through to presence. It was a window over
+  # the surface's own rows until 2026-11-06: the US surface then averaged only the US-joined range rows, so a
+  # taxon's scored fill differed from its global (denominator) fill (v11 WORMS:105847: 92.95 vs 91.59)
+  fill_expr <- switch(fill, er = "br.er", presence = "100", mean = "bf.fill_mean, 100")
   val_expr <- switch(basis,
     taxon = "greatest(br.er, coalesce(ba.am_val, 0))::DOUBLE AS val",
     cell  = sprintf("coalesce(ba.am_val, %s)::DOUBLE AS val", fill_expr))
@@ -111,18 +112,24 @@ merge_sql <- function(suit_ds = "am", basis = c("taxon", "cell"), fill = c("er",
       "SELECT b.ms_merge_key, b.cell_id, max(b.val) am_val",
       "FROM b JOIN b_range USING (ms_merge_key, cell_id)",
       sprintf("WHERE b.ds_key IN (%s) GROUP BY 1, 2", suit)),
+    # the per-taxon fill: mean suitability over the taxon's modelled range cells, whole range (one row per taxon)
+    b_fill = paste(
+      "CREATE OR REPLACE TABLE b_fill AS",
+      "SELECT ms_merge_key, avg(am_val) AS fill_mean FROM b_am_rng GROUP BY 1"),
     # GLOBAL viz surface = whole range footprint, masked: max(er, am-at-range)
     global = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
       paste0("       ", val_expr),
       "FROM b_range br",
-      "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id"),
+      "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id",
+      "LEFT JOIN b_fill bf ON bf.ms_merge_key = br.ms_merge_key"),
     # US scoring surface = (A) range∩US max(er, am-at-range) UNION (B) raw am∩US for TRUE am-only taxa
     us = paste(
       "SELECT br.ms_merge_key AS mdl_key, br.cell_id,",
       paste0("       ", val_expr),
       "FROM b_range br JOIN us_cells u ON br.cell_id = u.cell_id",
       "LEFT JOIN b_am_rng ba ON ba.ms_merge_key = br.ms_merge_key AND ba.cell_id = br.cell_id",
+      "LEFT JOIN b_fill bf ON bf.ms_merge_key = br.ms_merge_key",
       "UNION ALL",
       "SELECT b.ms_merge_key AS mdl_key, b.cell_id, b.val::DOUBLE AS val",
       "FROM b JOIN us_cells u ON b.cell_id = u.cell_id",

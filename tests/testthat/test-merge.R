@@ -94,6 +94,7 @@ merge_fixture_con <- function(supersede = TRUE) {
   msq <- merge_sql(SUIT)
   DBI::dbExecute(con, msq$b_range)
   DBI::dbExecute(con, msq$b_am_rng)
+  DBI::dbExecute(con, msq$b_fill)
   con
 }
 
@@ -584,39 +585,43 @@ test_that("dps_sql(fill = 'presence'): a footprint cell with no suitability mode
 })
 
 # RANGE_FILL=mean (the v11 decision, 2026-11-02): a range cell no suitability model covers is worth the mean of
-# the taxon's MODELLED range cells; a taxon with none takes presence (100). The fixture taxon has a range of
-# four cells, AquaMaps at two of them (60, 20; mean 40), and AquaMaps beyond the range (cell 9, masked away and
-# NOT in the mean).
-test_that("RANGE_FILL=mean: unmodelled range cells take the mean of the modelled range cells; a taxon with none takes presence", {
+# the taxon's MODELLED range cells over the WHOLE range; a taxon with none takes presence (100). The fixture
+# taxon has a range of four cells, AquaMaps at three of them (60, 20 inside the US; 4 OUTSIDE it, cell 100;
+# mean 28), and AquaMaps beyond the range (cell 9, masked away and NOT in the mean). The US-only mean would be
+# 40: the window that produced it (2026-11-06) painted the scored surface with a different fill than the global
+# one, so this fixture is one the per-surface window FAILS.
+test_that("RANGE_FILL=mean: unmodelled range cells take the whole-range mean of the modelled range cells on BOTH surfaces; a taxon with none takes presence", {
   con <- DBI::dbConnect(duckdb::duckdb()); on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   mc <- data.frame(
-    ms_merge_key = c(rep("T_part", 7), rep("T_rngonly", 2)),
-    ds_key  = c("rng", "rng", "rng", "rng", "am", "am", "am",   "rng", "rng"),
-    cell_id = c(1L, 2L, 3L, 100L, 1L, 2L, 9L,   1L, 100L),
-    val     = c(1, 1, 1, 1, 60, 20, 90,   1, 1), stringsAsFactors = FALSE)
+    ms_merge_key = c(rep("T_part", 8), rep("T_rngonly", 2)),
+    ds_key  = c("rng", "rng", "rng", "rng", "am", "am", "am", "am",   "rng", "rng"),
+    cell_id = c(1L, 2L, 3L, 100L, 1L, 2L, 100L, 9L,   1L, 100L),
+    val     = c(1, 1, 1, 1, 60, 20, 4, 90,   1, 1), stringsAsFactors = FALSE)
   DBI::dbWriteTable(con, "b", mc)
   DBI::dbWriteTable(con, "taxon", data.frame(ms_merge_key = c("T_part", "T_rngonly"), er_score = c(30, 50)))
   DBI::dbWriteTable(con, "taxon_flags", data.frame(ms_merge_key = c("T_part", "T_rngonly"), has_suit = c(TRUE, FALSE), has_range = c(TRUE, TRUE)))
   DBI::dbWriteTable(con, "us_cells", data.frame(cell_id = 1:5))
   msq <- merge_sql(SUIT, basis = "cell", fill = "mean")
-  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
+  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng); DBI::dbExecute(con, msq$b_fill)
   gl <- DBI::dbGetQuery(con, msq$global); us <- DBI::dbGetQuery(con, msq$us)
-  # modelled cells keep their suitability; cells 3 and 100 take the mean of 60 and 20 = 40; cell 9 never enters
-  expect_equal(key_set(gl, "T_part"), c("1:60", "2:20", "3:40", "100:40"))
-  expect_equal(key_set(us, "T_part"), c("1:60", "2:20", "3:40"))
+  # modelled cells keep their suitability; cell 3 takes the mean of 60, 20 and 4 = 28 on BOTH surfaces (the
+  # modelled cell outside the US counts); cell 9 never enters
+  expect_equal(key_set(gl, "T_part"), c("1:60", "2:20", "3:28", "100:4"))
+  expect_equal(key_set(us, "T_part"), c("1:60", "2:20", "3:28"))
   # a range-only taxon: no modelled cell, so presence
   expect_equal(key_set(gl, "T_rngonly"), c("1:100", "100:100"))
   # the same input under the er and presence fills, for contrast
-  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "er")$global), "T_part"), c("1:60", "2:20", "3:30", "100:30"))
-  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$global), "T_part"), c("1:60", "2:20", "3:100", "100:100"))
+  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "er")$global), "T_part"), c("1:60", "2:20", "3:30", "100:4"))
+  expect_equal(key_set(DBI::dbGetQuery(con, merge_sql(SUIT, basis = "cell", fill = "presence")$global), "T_part"), c("1:60", "2:20", "3:100", "100:4"))
   # the mean is per taxon: a second partially modelled taxon in the same batch does not share it
   DBI::dbExecute(con, "INSERT INTO b VALUES ('T_part2', 'rng', 1, 1), ('T_part2', 'rng', 2, 1), ('T_part2', 'am', 1, 10)")
   DBI::dbExecute(con, "INSERT INTO taxon VALUES ('T_part2', 20)")
   DBI::dbExecute(con, "INSERT INTO taxon_flags VALUES ('T_part2', TRUE, TRUE)")
-  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng)
-  gl2 <- DBI::dbGetQuery(con, msq$global)
+  DBI::dbExecute(con, msq$b_range); DBI::dbExecute(con, msq$b_am_rng); DBI::dbExecute(con, msq$b_fill)
+  gl2 <- DBI::dbGetQuery(con, msq$global); us2 <- DBI::dbGetQuery(con, msq$us)
   expect_equal(key_set(gl2, "T_part2"), c("1:10", "2:10"))
-  expect_equal(key_set(gl2, "T_part"), c("1:60", "2:20", "3:40", "100:40"))
+  expect_equal(key_set(gl2, "T_part"), c("1:60", "2:20", "3:28", "100:4"))
+  expect_equal(key_set(us2, "T_part"), c("1:60", "2:20", "3:28"))
 })
 
 test_that("dps_sql(fill = 'mean'): an unmodelled footprint cell takes the mean of the modelled footprint cells, per taxon", {

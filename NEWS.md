@@ -1,3 +1,12 @@
+# msens 0.68.2
+
+* `merge_sql(fill = "mean")`: the fill is one number per taxon, the mean of its modelled range cells over the
+  WHOLE range, built as a new `b_fill` table (callers run `msq$b_fill` after `msq$b_am_rng`) and joined into
+  both surfaces. It was a window over each surface's own rows, so the US scoring surface averaged only the
+  US-joined range rows and a taxon's scored fill differed from its global (denominator) fill (v11
+  `WORMS:105847`: 92.95 vs 91.59). The fixture now has a modelled range cell outside the US, which the window
+  fails.
+
 # msens 0.68.1
 
 * `manifest_build()` declares `taxon_denom` and `release_method` under `tables` when the release carries them
