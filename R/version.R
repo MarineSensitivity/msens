@@ -11,7 +11,7 @@
 #
 # `status` says where a release is in its life (prerelease / released / retired);
 # `access` says WHO may be shown it (public / restricted). They are separate
-# axes: a pre-release under review by SDM providers and BOEM/NOAA colleagues is
+# axes: a pre-release under review by SDM providers and MMA/NOAA colleagues is
 # `restricted`, reachable only through the signed-in preview host, while a
 # retired release stays `public` forever because citations point at it. See
 # atlas_allow_access() for how an app instance turns `access` into policy.

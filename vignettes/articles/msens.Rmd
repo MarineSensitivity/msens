@@ -180,11 +180,11 @@ m |> addLayersControl(
 
 ## 6. Score a Program Area
 
-`scores_for_pra()` returns the per-category marine-sensitivity scores for a BOEM Program Area —
+`scores_for_pra()` returns the per-category marine-sensitivity scores for an MMA Program Area —
 ready for a flower plot, where each petal's height is the category score.
 
 ```{r scores}
-sc <- scores_for_pra(con, "ALA")                  # ALA = a BOEM Program Area key
+sc <- scores_for_pra(con, "ALA")                  # ALA = an MMA Program Area key
 knitr::kable(sc[c("component", "score")], digits = 1)
 ```
 

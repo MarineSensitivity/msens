@@ -1,5 +1,6 @@
 # msens
-R library of functions for mapping marine sensitivities, sponsored by BOEM
+R library of functions for mapping marine sensitivities, sponsored by the Marine Minerals Administration
+(MMA), formerly the Bureau of Ocean Energy Management (BOEM)
 
 ## Install
 

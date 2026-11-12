@@ -1,3 +1,11 @@
+# msens 0.68.5
+
+* Documentation only: the sponsoring agency is the Marine Minerals Administration (MMA), formerly the
+  Bureau of Ocean Energy Management (BOEM). The package title, the README, the Get Started article and
+  the help for `stac_cfg()` and `pra_score_delta()` say MMA. The `ply_boemrgns*`, `ply_planareas*`,
+  `ply_ecorgns*` and `ply_ecoareas*` datasets keep their names and their BOEM source citations: they are
+  the products BOEM published.
+
 # msens 0.68.4
 
 * `manifest_build()` names a release's components with the names it scored under: a release whose

@@ -1,6 +1,6 @@
 # zone_set.R — spatial units as VINTAGES, independent of MST version
 #
-# BOEM's planning units keep morphing, and every release so far baked its own
+# the agency's planning units keep morphing, and every release so far baked its own
 # copy into a version-suffixed file (ply_programareas_2026_v3.gpkg ... _v8.gpkg)
 # and its own `zone_cell`. That makes the interesting question — how did THIS
 # Program Area's score change from v3 to v8? — unanswerable, because nothing

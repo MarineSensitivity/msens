@@ -161,7 +161,7 @@ mass_conservation <- function(total_source, total_hex, tol = 0.1) {
 #' query selects `fld = 'programarea_key'` from each database and trusts that the
 #' two releases meant the same polygons. Measured across every published gpkg,
 #' they do — every program-area layer from v2 through v8 is one geometry — but
-#' that is a fact about the data, not a guarantee, and BOEM's planning units keep
+#' that is a fact about the data, not a guarantee, and the agency's planning units keep
 #' changing. Naming the zone set makes the assumption explicit and checkable;
 #' databases predating the column (v1–v7) fall back to the `fld` filter.
 #'

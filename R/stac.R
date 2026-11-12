@@ -18,7 +18,7 @@ ITEM_ASSETS_EXT<- "https://stac-extensions.github.io/item-assets/v1.0.0/schema.j
 #'
 #' Mirrors the `is_prod`/`pmtiles_base_url` pattern: defaults point at the public
 #' marinesensitivity.org hosts, read from [atlas_bases()]. Override for local or
-#' BOEM-internal deployments with `options(msens.atlas_bases = ...)`.
+#' MMA-internal deployments with `options(msens.atlas_bases = ...)`.
 #'
 #' @param version data version (e.g. "v7")
 #' @return named list of base URLs + the study-area bbox
