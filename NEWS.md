@@ -1,3 +1,11 @@
+# msens 0.68.4
+
+* `manifest_build()` names a release's components with the names it scored under: a release whose
+  `release_method` records `components_labels = "v11"` gets the v11 labels (Flora, Productivity) in
+  `metrics$label`; every other release keeps Primary Producers / Primary productivity. The v11 manifest
+  had published the v10 names. `manifest_labels_backfill()` gains `v11 = FALSE` for patching a published
+  manifest the same way.
+
 # msens 0.68.3
 
 * Merges `main`'s 0.60.2 (the Atlas picker's v10 national-family classification and the `scope` of every

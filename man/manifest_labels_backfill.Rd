@@ -4,12 +4,15 @@
 \alias{manifest_labels_backfill}
 \title{Backfill blank metric short labels on a manifest}
 \usage{
-manifest_labels_backfill(m)
+manifest_labels_backfill(m, v11 = FALSE)
 }
 \arguments{
 \item{m}{a manifest list (from \code{\link[=manifest_build]{manifest_build()}}, or
 \code{jsonlite::fromJSON(simplifyVector = TRUE)} of a published \code{manifest.json})
 whose \verb{$metrics} is a data.frame with at least \code{metric_key}}
+
+\item{v11}{logical; backfill with the v11 component names (\code{Flora}, \code{Productivity};
+\code{\link[=component_label]{component_label()}}) instead of the v1-v10 ones; default \code{FALSE}}
 }
 \value{
 the same manifest, with \verb{$metrics$label} backfilled. Returned unchanged

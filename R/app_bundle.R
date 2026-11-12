@@ -946,12 +946,22 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 # canonical wording; never touch a label that is already there. `manifest_build()`
 # and the exported `manifest_labels_backfill()` both call this ONE implementation,
 # so a release built fresh and a published manifest patched later can never drift.
-.metrics_backfill_labels <- function(met) {
+.metrics_backfill_labels <- function(met, v11 = FALSE) {
   if (!NROW(met)) return(met)
   if (!"label" %in% names(met)) met$label <- NA_character_
   blank <- is.na(met$label) | !nzchar(trimws(met$label))
-  if (any(blank)) met$label[blank] <- .metric_short_label(met$metric_key[blank])
+  if (any(blank)) met$label[blank] <- .metric_short_label(met$metric_key[blank], v11 = v11)
   met
+}
+
+# which component names a release publishes: its `release_method` row `components_labels`
+# (workflows/score_share_metrics.qmd writes "v10" or "v11" from COMPONENTS_V11). A release with no
+# such row (v1-v10) keeps the v1-v10 names.
+.release_components_v11 <- function(con) {
+  if (!"release_method" %in% DBI::dbListTables(con)) return(FALSE)
+  if (!all(c("method_key", "value") %in% DBI::dbListFields(con, "release_method"))) return(FALSE)
+  d <- DBI::dbGetQuery(con, "SELECT value FROM release_method WHERE method_key = 'components_labels'")
+  NROW(d) > 0 && identical(trimws(as.character(d$value[1])), "v11")
 }
 
 #' Backfill blank metric short labels on a manifest
@@ -971,6 +981,8 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 #' @param m a manifest list (from [manifest_build()], or
 #'   `jsonlite::fromJSON(simplifyVector = TRUE)` of a published `manifest.json`)
 #'   whose `$metrics` is a data.frame with at least `metric_key`
+#' @param v11 logical; backfill with the v11 component names (`Flora`, `Productivity`;
+#'   [component_label()]) instead of the v1-v10 ones; default `FALSE`
 #' @return the same manifest, with `$metrics$label` backfilled. Returned unchanged
 #'   if `m` carries no `metrics`, or an empty one.
 #' @examples
@@ -979,9 +991,9 @@ app_boot <- function(con, ver, manifest, tables = list(), geom_keys = list(),
 #' manifest_labels_backfill(m)$metrics$label
 #' @export
 #' @concept version
-manifest_labels_backfill <- function(m) {
+manifest_labels_backfill <- function(m, v11 = FALSE) {
   if (is.null(m$metrics) || !NROW(m$metrics)) return(m)
-  m$metrics <- .metrics_backfill_labels(as.data.frame(m$metrics, stringsAsFactors = FALSE))
+  m$metrics <- .metrics_backfill_labels(as.data.frame(m$metrics, stringsAsFactors = FALSE), v11 = v11)
   m
 }
 

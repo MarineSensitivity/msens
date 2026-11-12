@@ -434,7 +434,9 @@ manifest_build <- function(con, ver, status = "released",
   # ONE implementation (`.metrics_backfill_labels()`, app_bundle.R), shared with the
   # exported manifest_labels_backfill() so a release-side patch of an ALREADY
   # PUBLISHED manifest.json applies the identical rule.
-  met <- .metrics_backfill_labels(met)
+  # the release's own component names: v11 (`release_method` components_labels = "v11") publishes
+  # Flora / Productivity, every earlier release Primary Producers / Primary productivity
+  met <- .metrics_backfill_labels(met, v11 = .release_components_v11(con))
 
   # zone_set_key when the release carries it, so the app can resolve each spatial
   # unit's PMTiles by vintage rather than a hardcoded, unversioned filename

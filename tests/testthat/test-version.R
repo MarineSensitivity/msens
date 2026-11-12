@@ -250,6 +250,35 @@ test_that("manifest_build backfills a human short label, never overwriting a cur
   expect_equal(uncurated$metrics$label, "Seabirds: extinction risk")
 })
 
+test_that("REGRESSION (2026-11-12): a v11 release's manifest names its components Flora / Productivity", {
+  # the v11 manifest published "Primary Producers" / "Primary productivity" although v11 scored with
+  # COMPONENTS_V11 (release_method components_labels = "v11"): manifest_build() always backfilled
+  # with the v1-v10 names, so the Atlas could not show the v11 ones
+  mk <- function(labels = NULL) {
+    con <- mk_rel(env = parent.frame(2))
+    DBI::dbExecute(con, "INSERT INTO metric VALUES (3,'extrisk_primary_producer_ecoregion_rescaled','x'), (4,'primprod_ecoregion_rescaled','x')")
+    DBI::dbExecute(con, "INSERT INTO cell_metric VALUES (1, 3, 5), (1, 4, 5)")
+    if (!is.null(labels)) {
+      DBI::dbExecute(con, "CREATE TABLE release_method (method_key VARCHAR, value VARCHAR, description VARCHAR)")
+      DBI::dbExecute(con, sprintf("INSERT INTO release_method VALUES ('components_labels', '%s', 'x')", labels))
+    }
+    con
+  }
+  lab <- function(m) stats::setNames(m$metrics$label, m$metrics$metric_key)
+  v11 <- lab(manifest_build(mk("v11"), "v11"))
+  expect_equal(v11[["extrisk_primary_producer_ecoregion_rescaled"]], "Flora: extinction risk (ecoregion-rescaled)")
+  expect_equal(v11[["primprod_ecoregion_rescaled"]], "Productivity (ecoregion-rescaled)")
+  # v10 (labels "v10") and any release without the row keep the earlier names
+  for (con in list(mk("v10"), mk())) {
+    l <- lab(manifest_build(con, "v10"))
+    expect_equal(l[["extrisk_primary_producer_ecoregion_rescaled"]], "Primary Producers: extinction risk (ecoregion-rescaled)")
+    expect_equal(l[["primprod_ecoregion_rescaled"]], "Primary productivity (ecoregion-rescaled)")
+  }
+  # the exported patcher takes the same switch
+  pub <- list(metrics = data.frame(metric_key = "primprod", stringsAsFactors = FALSE))
+  expect_equal(manifest_labels_backfill(pub, v11 = TRUE)$metrics$label, "Productivity")
+})
+
 test_that("REGRESSION (E7): manifest_labels_backfill() patches an ALREADY-PUBLISHED manifest", {
   # exported specifically so a release notebook can backfill a published
   # manifest.json (read back with jsonlite::fromJSON(simplifyVector = TRUE)) in
