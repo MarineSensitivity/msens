@@ -22,7 +22,7 @@ implementation, so they cannot drift apart."><script async src="https://www.goog
 
     <a class="navbar-brand me-2" href="../index.html">msens</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.68.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -60,7 +60,7 @@ implementation, so they cannot drift apart.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">manifest_labels_backfill</span><span class="op">(</span><span class="va">m</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">manifest_labels_backfill</span><span class="op">(</span><span class="va">m</span>, v11 <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -71,6 +71,11 @@ implementation, so they cannot drift apart.</p>
 <dd><p>a manifest list (from <code><a href="manifest_build.html">manifest_build()</a></code>, or
 <code>jsonlite::fromJSON(simplifyVector = TRUE)</code> of a published <code>manifest.json</code>)
 whose <code>$metrics</code> is a data.frame with at least <code>metric_key</code></p></dd>
+
+
+<dt id="arg-v-">v11<a class="anchor" aria-label="anchor" href="#arg-v-"></a></dt>
+<dd><p>logical; backfill with the v11 component names (<code>Flora</code>, <code>Productivity</code>;
+<code><a href="component_label.html">component_label()</a></code>) instead of the v1-v10 ones; default <code>FALSE</code></p></dd>
 
 </dl></div>
     <div class="section level2">
